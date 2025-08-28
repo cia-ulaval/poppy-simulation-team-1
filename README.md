@@ -29,8 +29,8 @@ Développer une intelligence artificielle pour apprendre à un robot humanoïde 
 |  **3-4**  | **Hello World** - Familiarisation librairies RL |
 |  **5-6**  | **Simulation** - Prise en main environnements simplifiés |
 |  **7-8**  | **Implémentation** - Développement algorithmes RL |
-|  **9-10** | **Optimisation** - Ajout robustesse, SafeRL, OfflineRL |
-|  **11-14**| **Finalisation** - Tests et préparation transfert réel |
+|  **9-10** | **TODO** |
+|  **11-14**| **TODO** |
 
 ## Technologies & Compétences Visées
 
