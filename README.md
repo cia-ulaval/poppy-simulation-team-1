@@ -46,6 +46,4 @@ Tu vas aimer ce projet si :
 *   Tu souhaites contribuer à faire marcher un vrai robot humanoïde
 
 ## Contact & Liens Utiles
-*   **Contact :** [Email de Baptiste Bonin]
-*   **Mentorat souhaité :** Expert en intelligence robotique et transfert Sim2Real
 *   **Référence :** [Poppy Project](https://www.poppy-project.org/)
