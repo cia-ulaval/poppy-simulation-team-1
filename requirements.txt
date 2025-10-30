@@ -1,0 +1,11 @@
+mujoco>=3.0.0
+gymnasium[mujoco]>=0.29.0
+stable-baselines3>=2.0.0
+tensorboard
+pyyaml
+numpy
+matplotlib
+pandas
+tqdm
+imageio>=2.31.0
+imageio-ffmpeg
