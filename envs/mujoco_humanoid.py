@@ -3,7 +3,6 @@ import numpy as np
 
 
 class MuJoCoHumanoidEnv(gym.Wrapper):
-    # Wrapper for Gymnasium Humanoid-v5 with custom reward shaping
 
     def __init__(self, render_mode=None, terminate_when_unhealthy=True,
                  healthy_z_range=(1.0, 2.0), reset_noise_scale=1e-2,
@@ -49,14 +48,7 @@ class MuJoCoHumanoidEnv(gym.Wrapper):
         return observation, reward, terminated, truncated, info
 
     def _compute_custom_reward(self, observation, action, original_reward, info):
-        """
-        Custom reward function for better humanoid locomotion learning
-
-        Observation structure (376 dims):
-        - [0:2]: z-coordinate and orientation
-        - [22:25]: velocity (x, y, z)
-        - Rest: joint positions, velocities, etc.
-        """
+        # pour changer la recompense en fonction des cas
 
         # 1. Forward velocity reward (encourage moving forward)
         forward_velocity = observation[22]  # x-velocity
