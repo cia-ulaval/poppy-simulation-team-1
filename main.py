@@ -1,12 +1,12 @@
 # Poppy RL - Main entry point
-# Usage: python main.py train | evaluate MODEL.zip | visualize MODEL.zip | compare MODEL.zip
+# Usage: python main.py train | evaluate MODEL.zip | visualize MODEL.zip | visualize-best MODEL.zip | compare MODEL.zip
 
 import argparse
 import sys
 import time
 
 from config import Config
-from utils import train, evaluate, compare_with_baseline, visualize
+from utils import train, evaluate, compare_with_baseline, visualize, visualize_best_episodes
 
 
 def print_banner():
@@ -98,6 +98,34 @@ def cmd_visualize(args):
     )
 
 
+def cmd_visualize_best(args):
+    if not args.model:
+        print("[ERROR] --model required for visualize-best")
+        print("   Example: python main.py visualize-best models/ppo_humanoid_final.zip")
+        sys.exit(1)
+
+    print("\n" + "=" * 60)
+    print("MODE: BEST EPISODES VISUALIZATION")
+    print("=" * 60 + "\n")
+
+    n_total = args.total if args.total else 100
+    n_best = args.best if args.best else 10
+
+    print(f"Model: {args.model}")
+    print(f"Total episodes to evaluate: {n_total}")
+    print(f"Best episodes to show: {n_best}")
+    print(f"Video: {'YES' if args.video else 'NO'}\n")
+
+    visualize_best_episodes(
+        model_path=args.model,
+        n_total_episodes=n_total,
+        n_show_best=n_best,
+        deterministic=True,
+        save_video=args.video,
+        video_folder="./videos/best"
+    )
+
+
 def cmd_compare(args):
     if not args.model:
         print("[ERROR] --model required for compare")
@@ -131,6 +159,7 @@ Examples:
   python main.py train --steps 100000 --envs 4
   python main.py evaluate models/ppo_humanoid_final.zip
   python main.py visualize models/ppo_humanoid_final.zip --video
+  python main.py visualize-best models/ppo_humanoid_final.zip --total 100 --best 10
   python main.py compare models/ppo_humanoid_final.zip
         """
     )
@@ -160,6 +189,14 @@ Examples:
     viz_parser.add_argument('--video', action='store_true', help='Record video')
     viz_parser.add_argument('--no-render', action='store_true', help='Disable visualization')
 
+    # Visualize Best
+    viz_best_parser = subparsers.add_parser('visualize-best', help='Visualize best episodes')
+    viz_best_parser.add_argument('model', type=str, nargs='?', help='Path to model .zip')
+    viz_best_parser.add_argument('--model', type=str, dest='model_flag', help='Path to model .zip')
+    viz_best_parser.add_argument('--total', type=int, help='Total episodes to evaluate (default: 100)')
+    viz_best_parser.add_argument('--best', type=int, help='Number of best to show (default: 10)')
+    viz_best_parser.add_argument('--video', action='store_true', help='Record video')
+
     # Compare
     comp_parser = subparsers.add_parser('compare', help='Compare with baseline')
     comp_parser.add_argument('model', type=str, nargs='?', help='Path to model .zip')
@@ -176,7 +213,7 @@ Examples:
     if not args.command:
         parser.print_help()
         print("\n[ERROR] No command specified")
-        print("   Use: train, evaluate, visualize, or compare\n")
+        print("   Use: train, evaluate, visualize, visualize-best, or compare\n")
         sys.exit(1)
 
     try:
@@ -186,6 +223,8 @@ Examples:
             cmd_evaluate(args)
         elif args.command == 'visualize':
             cmd_visualize(args)
+        elif args.command == 'visualize-best':
+            cmd_visualize_best(args)
         elif args.command == 'compare':
             cmd_compare(args)
 

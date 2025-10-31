@@ -119,6 +119,9 @@ python main.py visualize models/ppo_humanoid_final.zip --video
 
 # Visualiser checkpoint intermédiaire
 python main.py visualize models/ppo_humanoid_2000000_steps.zip --episodes 3 --video
+# Visualiser checkpoint intermédiaire des meilleurs épisodes (5 meilleurs sur 200)
+python main.py visualize-best configs/models/ppo_humanoid_final.zip --total 200 --best 5
+
 ```
 
 ### Vidéos
