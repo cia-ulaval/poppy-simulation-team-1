@@ -19,7 +19,7 @@ network:
 
 training:
   total_timesteps: 10_000_000
-  n_envs: 8  # Avec une 4080, tu peux monter à 16
+  n_envs: 8
   eval_freq: 10000
   save_freq: 50000
   log_interval: 1
