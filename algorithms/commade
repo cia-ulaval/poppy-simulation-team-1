@@ -1,0 +1,23 @@
+# === ÉTAPE 1: BACKUP ===
+cp configs/models/ppo_humanoid_night.zip configs/models/ppo_humanoid_night_BACKUP.zip
+
+# === ÉTAPE 2: Remplacer mujoco_humanoid.py ===
+# (Fait manuellement - voir instructions ci-dessus)
+
+# === ÉTAPE 3: ÉVALUATION AVANT ===
+python main.py evaluate configs/models/ppo_humanoid_night.zip --episodes 10 --no-render
+
+# === ÉTAPE 4: VISUALISATION AVANT ===
+python main.py visualize configs/models/ppo_humanoid_night.zip --episodes 3
+
+# === ÉTAPE 5: FINE-TUNING (20 MIN) ===
+python main.py train --resume configs/models/ppo_humanoid_night.zip --steps 100000 --envs 2 --name ppo_humanoid_balanced_test
+
+# === ÉTAPE 6: ÉVALUATION APRÈS ===
+python main.py evaluate configs/models/ppo_humanoid_balanced_test.zip --episodes 10 --no-render
+
+# === ÉTAPE 7: VISUALISATION APRÈS ===
+python main.py visualize configs/models/ppo_humanoid_balanced_test.zip --episodes 3
+
+# === ÉTAPE 8: COMPARAISON (OPTIONNEL) ===
+python main.py compare configs/models/ppo_humanoid_balanced_test.zip --episodes 20
