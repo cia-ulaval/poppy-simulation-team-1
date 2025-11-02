@@ -23,11 +23,11 @@ class MuJoCoHumanoidEnv(gym.Wrapper):
 
         # Default reward weights (can be tuned)
         self.reward_weights = reward_weights or {
-            'forward': 1.0,        # Encourage forward movement
-            'upright': 0.5,        # Encourage staying upright
-            'energy': 0.01,        # Penalize energy consumption
-            'smooth': 0.05,        # Penalize jerky movements
-            'alive': 1.0,          # Reward for staying alive
+            'forward': 1.5,        # Encourage forward movement
+            'upright': 5.0,        # Encourage staying upright
+            'energy': 0.05,        # Penalize energy consumption
+            'smooth': 0.15,        # Penalize jerky movements
+            'alive': 3.0,          # Reward for staying alive
         }
 
         # Track previous action for smoothness penalty
@@ -56,9 +56,21 @@ class MuJoCoHumanoidEnv(gym.Wrapper):
 
         # 2. Upright reward (encourage staying upright)
         # z-position should be in healthy range (1.0 to 2.0)
-        z_pos = observation[0]
-        upright_deviation = abs(z_pos - 1.5)  # Target center of healthy range
-        r_upright = self.reward_weights['upright'] * np.exp(-upright_deviation)
+        z_pos = observation[0]  # Hauteur du centre de masse
+        orientation = observation[1]  # Orientation du torse
+
+        # Récompense pour hauteur correcte (entre 1.0 et 2.0)
+        z_target = 1.5  # Centre de la plage saine
+        z_deviation = abs(z_pos - z_target)
+        r_z_height = np.exp(-2.0 * z_deviation)  # Pénalité si trop haut/bas
+
+        # Récompense pour orientation verticale (pas penché)
+        # orientation devrait être proche de 0 (vertical)
+        orientation_penalty = abs(orientation)
+        r_orientation = np.exp(-5.0 * orientation_penalty)  # Forte pénalité si penché!
+
+        # Combiner les deux
+        r_upright = self.reward_weights['upright'] * (r_z_height + r_orientation) / 2.0
 
         # 3. Energy penalty (discourage excessive joint torques)
         energy_cost = np.sum(np.square(action))
