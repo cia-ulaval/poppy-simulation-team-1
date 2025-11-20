@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="EditMigrationStateService">
+    <option name="migrationStatus" value="IN_PROGRESS" />
+    <option name="pendingSessionIds">
+      <option value="ca479407-a40b-4c11-94ef-ba7c5b018988" />
+    </option>
+    <option name="pendingTurns">
+      <map>
+        <entry key="7bfe2be5-5597-4b64-8e58-914ffa6ee9f2">
+          <value>
+            <set>
+              <option value="a531890e-9fa7-49b0-b7ad-74842013ce31" />
+            </set>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <pendingWorkingSetItems>
+      <entry key="7bfe2be5-5597-4b64-8e58-914ffa6ee9f2" />
+    </pendingWorkingSetItems>
+  </component>
+</project>

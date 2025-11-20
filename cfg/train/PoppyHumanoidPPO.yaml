@@ -1,0 +1,79 @@
+# PPO Training Configuration for Poppy Humanoid
+
+params:
+  seed: 42
+
+  algo:
+    name: a2c_continuous  # rl_games algorithm name
+
+  model:
+    name: continuous_a2c_logstd  # rl_games model type
+
+  network:
+    name: actor_critic
+    separate: False  # Shared network for actor and critic
+
+    space:
+      continuous:
+        mu_activation: None
+        sigma_activation: None
+        mu_init:
+          name: default
+        sigma_init:
+          name: const_initializer
+          val: 0.0
+        fixed_sigma: True  # Use learnable log_std
+
+    mlp:
+      units: [512, 256, 128]  # Hidden layer sizes
+      activation: elu
+      d2rl: False  # Dense connections (can enable for better performance)
+
+      initializer:
+        name: default
+      regularizer:
+        name: None
+
+  load_checkpoint: False  # Set to True to resume training
+  load_path: ""  # Path to checkpoint if resuming
+
+  config:
+    name: PoppyHumanoid
+    env_name: isaacgym  # rl_games env type
+    multi_gpu: False  # Enable if using multiple GPUs
+    ppo: True
+    mixed_precision: True  # Use mixed precision for faster training
+    normalize_input: True
+    normalize_value: True
+    value_bootstrap: True
+    num_actors: 4096  # Must match numEnvs in task config
+
+    reward_shaper:
+      scale_value: 1.0
+
+    normalize_advantage: True
+    gamma: 0.99  # Discount factor
+    tau: 0.95  # GAE lambda
+
+    learning_rate: 3e-4  # Initial learning rate
+    lr_schedule: adaptive  # Can also use 'linear'
+    kl_threshold: 0.008  # For adaptive LR
+
+    score_to_win: 20000  # Training will stop if this score is reached
+    max_epochs: 10000  # Maximum training epochs
+    save_best_after: 100  # Start saving best checkpoints after this many epochs
+    save_frequency: 100  # Save checkpoint every N epochs
+
+    grad_norm: 1.0  # Gradient clipping
+    entropy_coef: 0.0  # Entropy bonus (encourages exploration)
+    truncate_grads: True
+
+    e_clip: 0.2  # PPO clip parameter
+    horizon_length: 32  # Number of steps before update
+    minibatch_size: 16384  # Minibatch size (num_actors * horizon_length / minibatch_size updates per epoch)
+    mini_epochs: 5  # Number of SGD epochs per PPO update
+
+    critic_coef: 2.0  # Value loss coefficient
+    clip_value: True  # Clip value function updates
+    seq_len: 4  # For RNN (not used with MLP)
+    bounds_loss_coef: 0.0001  # Penalty for actions outside [-1, 1]

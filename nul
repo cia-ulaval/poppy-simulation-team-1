@@ -1,0 +1,13 @@
+
+Envoi d'une requˆte 'Ping'  127.0.0.1 avec 32 octets de donn‚esÿ:
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+R‚ponse de 127.0.0.1ÿ: octets=32 temps<1ms TTL=128
+
+Statistiques Ping pour 127.0.0.1:
+    Paquetsÿ: envoy‚s = 6, re‡us = 6, perdus = 0 (perte 0%),
+Dur‚e approximative des boucles en millisecondes :
+    Minimum = 0ms, Maximum = 0ms, Moyenne = 0ms

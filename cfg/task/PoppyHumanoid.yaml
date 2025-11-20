@@ -1,0 +1,47 @@
+# Poppy Humanoid Task Configuration
+
+name: PoppyHumanoid
+
+env:
+  numEnvs: 4096  # Number of parallel environments (adjust based on GPU memory)
+  envSpacing: 3.0  # Distance between environments
+  episodeLength: 1000  # Max steps per episode
+  controlFrequencyInv: 2  # Number of physics steps per control step
+
+  # Observation space: base_z(1) + up_vec(3) + heading(2) + dof_pos(25) + dof_vel(25) + actions(25) = 81
+  numObservations: 81
+  numActions: 25  # Poppy has 25 actuated joints
+
+  asset:
+    assetRoot: "assets"
+    assetFileName: "urdf/Poppy_Humanoid.URDF"
+
+  learn:
+    # Reward scales for different components
+    rewardScales:
+      forwardVel: 2.0       # Reward for walking forward
+      upright: 0.5          # Reward for staying upright
+      height: 0.3           # Reward for maintaining proper height
+      energy: 0.0002        # Penalty for high torques (energy efficiency)
+      actionRate: 0.01      # Penalty for rapid action changes (smoothness)
+
+    # Early termination
+    terminateOnFall: True
+    fallHeight: 0.5  # Consider fallen if base < this height
+
+sim:
+  dt: 0.0166  # 60 Hz simulation
+  substeps: 2
+  up_axis: "z"
+  use_gpu_pipeline: True
+
+  physx:
+    num_threads: 4
+    solver_type: 1  # TGS solver
+    num_position_iterations: 4
+    num_velocity_iterations: 1
+    contact_offset: 0.01
+    rest_offset: 0.0
+    bounce_threshold_velocity: 0.2
+    max_depenetration_velocity: 1.0
+    default_buffer_size_multiplier: 5.0
