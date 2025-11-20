@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/poppy_isaacgym/eval.py">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/poppy_isaacgym/eval.py" />
+              <option name="updatedContent" value="&quot;&quot;&quot;Script d'évaluation — charge un modèle et évalue l'environnement.&quot;&quot;&quot;&#10;if __name__ == &quot;__main__&quot;:&#10;    # ...existing code...&#10;    print(&quot;Lancer l'évaluation: implémentez le contenu de eval.py&quot;)&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/poppy_isaacgym/requirements.txt">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/poppy_isaacgym/requirements.txt" />
+              <option name="updatedContent" value="# Liste des dépendances (à compléter) :&#10;# torch&gt;=1.10&#10;# numpy&#10;# pyyaml&#10;# gym&#10;# isaacgym (si applicable)&#10;# ...existing code...&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/poppy_isaacgym/train.py">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/poppy_isaacgym/train.py" />
+              <option name="updatedContent" value="&quot;&quot;&quot;Script d'entraînement principal — remplissez la logique d'entraînement.&quot;&quot;&quot;&#10;if __name__ == &quot;__main__&quot;:&#10;    # ...existing code...&#10;    print(&quot;Lancer l'entraînement: implémentez le contenu de train.py&quot;)&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

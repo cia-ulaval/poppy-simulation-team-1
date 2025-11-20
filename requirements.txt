@@ -1,0 +1,22 @@
+# Core dependencies for Poppy Humanoid Isaac Gym training
+
+# PyTorch (install separately based on your CUDA version)
+# torch>=1.13.0
+# torchvision>=0.14.0
+
+# Isaac Gym (install separately from downloaded package)
+# pip install -e isaacgym/python
+
+# RL training
+rl-games==1.6.1
+tensorboard>=2.11.0
+
+# Utilities
+numpy>=1.21.0
+pyyaml>=6.0
+gym>=0.26.0
+matplotlib>=3.5.0
+
+# Optional but recommended
+tqdm>=4.64.0
+pillow>=9.3.0
