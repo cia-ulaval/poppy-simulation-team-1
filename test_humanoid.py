@@ -314,7 +314,7 @@ def evaluate_model(
             
             if render:
                 env.render()
-                time.sleep(0.01)
+                time.sleep(1)
 
         episode_rewards.append(total)
         episode_lengths.append(steps)
@@ -411,23 +411,22 @@ if __name__ == "__main__":
     LOG_DIR = "./ppo_logs"
     
     # LEARNING_RATE = 3e-4
-    # N_STEPS = 512               # Steps per environment per update
-    # BATCH_SIZE = 128            # Minibatch size
-    # N_EPOCHS = 20               # Number of epochs per update
-    GAMMA = 0.99                # Discount factor
-    GAE_LAMBDA = 0.95           # GAE lambda
-    # CLIP_RANGE = 0.2            # PPO clip range
-    # ENT_COEF = 0.01             # Entropy coefficient (exploration)
-    VF_COEF = 0.5               # Value function coefficient
-    MAX_GRAD_NORM = 0.5         # Gradient clipping
+    # N_STEPS = 512             
+    # BATCH_SIZE = 128          
+    # N_EPOCHS = 20             
+    GAMMA = 0.99                
+    GAE_LAMBDA = 0.95           
+    # CLIP_RANGE = 0.2          
+    # ENT_COEF = 0.01           
+    VF_COEF = 0.5               
+    MAX_GRAD_NORM = 0.5         
 
-    # Dans votre section de configuration (ligne ~450)
-    LEARNING_RATE = 1e-4        # Réduit de 3e-4 → plus stable
-    N_STEPS = 2048              # Augmenté de 512 → plus de samples
-    BATCH_SIZE = 64             # Réduit de 128 → updates plus fréquents mais plus petits
-    N_EPOCHS = 10               # Réduit de 20 → moins de sur-optimisation
-    CLIP_RANGE = 0.15           # Réduit de 0.2 → updates plus conservateurs
-    ENT_COEF = 0.02             # Augmenté de 0.01 → plus d'exploration
+    LEARNING_RATE = 1e-4       
+    N_STEPS = 2048         
+    BATCH_SIZE = 64        
+    N_EPOCHS = 10          
+    CLIP_RANGE = 0.15      
+    ENT_COEF = 0.02        
 
     
     
