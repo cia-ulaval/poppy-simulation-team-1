@@ -10,7 +10,7 @@ import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.utils import set_random_seed
 from torch.utils.tensorboard import SummaryWriter
 
@@ -104,30 +104,41 @@ def run_random_baseline(n_episodes=5, render=False, seed=0):
 def train_ppo(
     total_timesteps=int(5e7),
     log_dir="./ppo_logs",
-    n_envs=8,
+    n_envs=16,
     seed=0,
     learning_rate=3e-4,
-    n_steps=512,
-    batch_size=128,
-    n_epochs=20,
+    n_steps=2048,
+    batch_size=512,
+    n_epochs=10,
     gamma=0.99,
     gae_lambda=0.95,
     clip_range=0.2,
-    ent_coef=0.01,
+    ent_coef=0.0,
     vf_coef=0.5,
     max_grad_norm=0.5,
     use_linear_schedule=True,
+    policy_kwargs=None,
 ):
     """
-    Train PPO agent on Humanoid-v5 with advanced features.
+    Train PPO agent on Humanoid-v5 with GPU optimization.
     
-    Key improvements:
-    - Multi-environment parallelization
-    - Observation normalization (but NOT reward normalization to see true performance)
-    - Learning rate scheduling
-    - Deeper network architecture with Tanh activation
+    🚀 OPTIMIZED FOR RTX 4090:
+    - Multi-environment parallelization (16 envs)
+    - Large batch sizes (512)
+    - GPU acceleration
+    - Observation normalization
     - Advanced monitoring with TensorBoard
     """
+    
+    # Vérifier que CUDA est disponible
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\n{'='*60}")
+    print(f"🎮 Using device: {device}")
+    if torch.cuda.is_available():
+        print(f"   GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   CUDA Version: {torch.version.cuda}")
+        print(f"   Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    print(f"{'='*60}\n")
     
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir_full = os.path.join(log_dir, timestamp)
@@ -135,7 +146,7 @@ def train_ppo(
     
     writer = SummaryWriter(os.path.join(log_dir_full, "tensorboard"))
     
-    print(f"\n{'='*60}")
+    print(f"{'='*60}")
     print(f"Training Configuration")
     print(f"{'='*60}")
     print(f"Total timesteps: {total_timesteps:,}")
@@ -153,39 +164,70 @@ def train_ppo(
     print(f"Log directory: {log_dir_full}")
     print(f"{'='*60}\n")
 
+    # Créer les environnements parallèles
     if n_envs > 1:
         vec_env = SubprocVecEnv([make_env(rank=i, seed=seed) for i in range(n_envs)])
     else:
         vec_env = DummyVecEnv([make_env(seed=seed)])
     
+    # Normalisation
     vec_env = VecNormalize(
         vec_env,
         norm_obs=True,      
-        norm_reward=True,    
+        norm_reward=False,   # ✅ Désactivé pour voir les vraies récompenses
         clip_obs=10.0,        
         gamma=gamma,
     )
 
-    policy_kwargs = dict(
-        net_arch=dict(
-            pi=[400, 300],  
-            vf=[400, 300]   
-        ),
-        activation_fn=nn.Tanh,  # TODO TRY RELU
-    )
+    # Architecture du réseau
+    if policy_kwargs is None:
+        policy_kwargs = dict(
+            log_std_init=-2,
+            ortho_init=False,
+            activation_fn=nn.ReLU,
+            net_arch=dict(
+                pi=[256, 256],
+                vf=[256, 256]
+            )
+        )
 
+    # Callback pour sauvegarder les checkpoints
     checkpoint_callback = CheckpointCallback(
-        save_freq=100000,
+        save_freq=max(100000 // n_envs, 1),  # Ajusté pour le nombre d'envs
         save_path=log_dir_full,
         name_prefix="ppo_humanoid",
         save_vecnormalize=True, 
     )
 
+    # Créer l'environnement d'évaluation
+    eval_env = DummyVecEnv([make_env(seed=seed + 1000)])
+    eval_env = VecNormalize(
+        eval_env,
+        norm_obs=True,
+        norm_reward=False,
+        clip_obs=10.0,
+        gamma=gamma,
+        training=False,  # Important: pas d'update des stats en eval
+    )
+
+    # Callback d'évaluation
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=log_dir_full,
+        log_path=log_dir_full,
+        eval_freq=max(10000 // n_envs, 1),
+        n_eval_episodes=5,
+        deterministic=True,
+        render=False,
+    )
+
+    # Créer le modèle PPO
     model = PPO(
         "MlpPolicy",
         vec_env,
         verbose=1,
         seed=seed,
+        device=device,  # 🚀 GPU!
         learning_rate=linear_schedule(learning_rate) if use_linear_schedule else learning_rate,
         n_steps=n_steps,
         batch_size=batch_size,
@@ -201,34 +243,36 @@ def train_ppo(
         tensorboard_log=log_dir_full,
     )
 
-    print("Starting training...")
-    print(f"Expected updates: {total_timesteps // (n_steps * n_envs)}")
-    print(f"Expected training time: ~{(total_timesteps // (n_steps * n_envs)) * 10 / 3600:.1f} hours (rough estimate)\n")
+    print("🚀 Starting training...")
+    print(f"Expected updates: {total_timesteps // (n_steps * n_envs):,}")
+    print(f"Expected training time: ~{(total_timesteps // (n_steps * n_envs)) * 5 / 3600:.1f} hours (rough estimate)\n")
     
     start_time = time.time()
     
     try:
         model.learn(
             total_timesteps=total_timesteps,
-            callback=checkpoint_callback,  
+            callback=[checkpoint_callback, eval_callback],
             tb_log_name="ppo_humanoid",
             progress_bar=True,
         )
     except KeyboardInterrupt:
-        print("\n\nTraining interrupted by user!")
+        print("\n\n⚠️ Training interrupted by user!")
     
     training_time = time.time() - start_time
     
+    # Sauvegarder le modèle final
     model_path = os.path.join(log_dir_full, "ppo_humanoid_final.zip")
     model.save(model_path)
     
+    # Sauvegarder les stats de normalisation
     vec_normalize_path = os.path.join(log_dir_full, "vec_normalize.pkl")
     vec_env.save(vec_normalize_path)
     
     print(f"\n{'='*60}")
-    print(f"Training completed in {training_time/3600:.2f} hours")
-    print(f"Model saved to: {model_path}")
-    print(f"VecNormalize stats saved to: {vec_normalize_path}")
+    print(f"✅ Training completed in {training_time/3600:.2f} hours")
+    print(f"📦 Model saved to: {model_path}")
+    print(f"📊 VecNormalize stats saved to: {vec_normalize_path}")
     print(f"{'='*60}\n")
     
     print("\n=== Observation Normalization Statistics ===")
@@ -236,6 +280,7 @@ def train_ppo(
     print(f"Obs std (first 10 dims): {np.sqrt(vec_env.obs_rms.var[:10])}")
     
     vec_env.close()
+    eval_env.close()
     writer.close()
 
     return model_path, vec_normalize_path
@@ -279,7 +324,7 @@ def evaluate_model(
         print(f"Loading normalization statistics from {vec_normalize_path}")
         env = VecNormalize.load(vec_normalize_path, env)
         env.training = False     
-        env.norm_reward = True  
+        env.norm_reward = False  # ✅ Pour voir les vraies récompenses
         print("✓ Normalization statistics loaded")
     else:
         print("⚠ WARNING: No normalization statistics found!")
@@ -314,7 +359,7 @@ def evaluate_model(
             
             if render:
                 env.render()
-                time.sleep(1)
+                time.sleep(0.01)
 
         episode_rewards.append(total)
         episode_lengths.append(steps)
@@ -358,11 +403,28 @@ def print_comparison_stats(random_rewards, ppo_rewards):
     print(f"{'='*60}\n")
 
 
-def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, out_file="comparison_rewards.png"):
-    """Create visualization comparing random and PPO performance."""
+def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, figs_dir="figs"):
+    """
+    Create visualization comparing random and PPO performance.
+    
+    Args:
+        random_matrix: Matrix of random agent rewards
+        ppo_matrix: Matrix of PPO agent rewards
+        random_rewards: List of random agent episode rewards
+        ppo_rewards: List of PPO agent episode rewards
+        figs_dir: Directory to save figures (default: "figs")
+    """
+    # Créer le dossier figs/ s'il n'existe pas
+    os.makedirs(figs_dir, exist_ok=True)
+    
+    # Générer un nom de fichier avec timestamp
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_file = os.path.join(figs_dir, f"comparison_rewards_{timestamp}.png")
+    
     n_rows = 2
     fig, axes = plt.subplots(n_rows, 2, figsize=(14, 8), gridspec_kw={"height_ratios": [3, 1]}, constrained_layout=True)
 
+    # Heatmap pour Random Agent
     ax_r = axes[0, 0]
     im_r = ax_r.imshow(random_matrix, aspect="auto", interpolation="nearest", cmap="RdYlGn")
     ax_r.set_title("Random Agent - Per-Step Rewards", fontsize=12, fontweight="bold")
@@ -370,6 +432,7 @@ def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, out_
     ax_r.set_xlabel("Step")
     fig.colorbar(im_r, ax=ax_r, orientation="vertical", pad=0.02)
 
+    # Heatmap pour PPO Agent
     ax_p = axes[0, 1]
     im_p = ax_p.imshow(ppo_matrix, aspect="auto", interpolation="nearest", cmap="RdYlGn")
     ax_p.set_title("PPO Agent - Per-Step Rewards", fontsize=12, fontweight="bold")
@@ -377,6 +440,7 @@ def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, out_
     ax_p.set_xlabel("Step")
     fig.colorbar(im_p, ax=ax_p, orientation="vertical", pad=0.02)
 
+    # Ligne de récompenses totales - Random
     ax_r2 = axes[1, 0]
     ax_r2.plot(np.arange(1, len(random_rewards) + 1), random_rewards, marker="o", linewidth=2, markersize=8)
     ax_r2.axhline(np.mean(random_rewards), color='r', linestyle='--', label=f'Mean: {np.mean(random_rewards):.2f}')
@@ -386,6 +450,7 @@ def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, out_
     ax_r2.grid(True, alpha=0.3)
     ax_r2.legend()
 
+    # Ligne de récompenses totales - PPO
     ax_p2 = axes[1, 1]
     ax_p2.plot(np.arange(1, len(ppo_rewards) + 1), ppo_rewards, marker="o", linewidth=2, markersize=8, color='green')
     ax_p2.axhline(np.mean(ppo_rewards), color='r', linestyle='--', label=f'Mean: {np.mean(ppo_rewards):.2f}')
@@ -397,7 +462,13 @@ def plot_comparison(random_matrix, ppo_matrix, random_rewards, ppo_rewards, out_
 
     plt.savefig(out_file, dpi=150, bbox_inches='tight')
     print(f"✓ Plot saved to {out_file}")
-    plt.show()
+    
+    # Aussi sauvegarder une copie "latest" pour accès facile
+    latest_file = os.path.join(figs_dir, "comparison_rewards_latest.png")
+    plt.savefig(latest_file, dpi=150, bbox_inches='tight')
+    print(f"✓ Latest plot saved to {latest_file}")
+    
+    plt.close()
 
 
 if __name__ == "__main__":
@@ -406,32 +477,43 @@ if __name__ == "__main__":
     SEED = 42
     
     TRAIN = True
-    TOTAL_TIMESTEPS = int(1e7)   #TO DO test 5e7
-    N_ENVS = 8                  
+    
+    # 🚀 CONFIGURATION PLUS STABLE
+    TOTAL_TIMESTEPS = int(5e7)
+    N_ENVS = 8                  # ✅ Réduire de 16 à 8
     LOG_DIR = "./ppo_logs"
+    FIGS_DIR = "./figs"
     
-    # LEARNING_RATE = 3e-4
-    # N_STEPS = 512             
-    # BATCH_SIZE = 128          
-    # N_EPOCHS = 20             
-    GAMMA = 0.99                
-    GAE_LAMBDA = 0.95           
-    # CLIP_RANGE = 0.2          
-    # ENT_COEF = 0.01           
-    VF_COEF = 0.5               
-    MAX_GRAD_NORM = 0.5         
-
-    LEARNING_RATE = 1e-4       
-    N_STEPS = 2048         
-    BATCH_SIZE = 64        
-    N_EPOCHS = 10          
-    CLIP_RANGE = 0.15      
-    ENT_COEF = 0.02        
-
+    # 🔥 HYPERPARAMÈTRES PLUS CONSERVATEURS
+    LEARNING_RATE = 1e-4        # ✅ Réduire de 3e-4 à 1e-4
+    N_STEPS = 2048              # ✅ Garder
+    BATCH_SIZE = 256            # ✅ Réduire de 512 à 256
+    N_EPOCHS = 10               # ✅ Garder
     
+    GAMMA = 0.99
+    GAE_LAMBDA = 0.95
     
+    CLIP_RANGE = 0.15           # ✅ RÉDUIRE de 0.2 à 0.15 (IMPORTANT!)
+    ENT_COEF = 0.01             # ✅ Ajouter un peu d'exploration
+    VF_COEF = 0.5
+    MAX_GRAD_NORM = 0.5
+    
+    # 🎯 TARGET KL pour early stopping
+    TARGET_KL = 0.015           # ✅ AJOUTER : arrête si changement trop grand
+    
+    # 🎨 ARCHITECTURE DU RÉSEAU
+    POLICY_KWARGS = dict(
+        log_std_init=-2,
+        ortho_init=False,
+        activation_fn=nn.ReLU,
+        net_arch=dict(
+            pi=[256, 256],
+            vf=[256, 256]
+        )
+    )
     print("\n" + "="*80)
-    print(" "*20 + "HUMANOID-V5 PPO TRAINING & EVALUATION")
+    print(" "*15 + "🤖 HUMANOID-V5 PPO TRAINING & EVALUATION 🤖")
+    print(" "*20 + "💪 POWERED BY RTX 4090 💪")
     print("="*80 + "\n")
     
     print("Step 1/3: Running random baseline for comparison...")
@@ -459,6 +541,7 @@ if __name__ == "__main__":
             vf_coef=VF_COEF,
             max_grad_norm=MAX_GRAD_NORM,
             use_linear_schedule=True,
+            policy_kwargs=POLICY_KWARGS,
         )
     else:
         print("\nStep 2/3: Loading existing model...")
@@ -489,12 +572,14 @@ if __name__ == "__main__":
 
     print_comparison_stats(rand_rewards, ppo_rewards)
 
-    plot_comparison(rand_matrix, ppo_matrix, rand_rewards, ppo_rewards)
+    # 📊 Générer et sauvegarder le plot dans figs/
+    plot_comparison(rand_matrix, ppo_matrix, rand_rewards, ppo_rewards, figs_dir=FIGS_DIR)
 
     print("\n" + "="*80)
-    print(" "*30 + "TRAINING COMPLETE!")
+    print(" "*30 + "✅ TRAINING COMPLETE!")
     print("="*80)
-    print(f"\nTo visualize training progress, run:")
+    print(f"\n📊 To visualize training progress, run:")
     print(f"  tensorboard --logdir {LOG_DIR}")
-    print("\nTo render the trained agent, set render=True in evaluate_model()")
+    print(f"\n📈 Comparison plots saved in: {FIGS_DIR}/")
+    print("\n🎬 To render the trained agent, set render=True in evaluate_model()")
     print("="*80 + "\n")
