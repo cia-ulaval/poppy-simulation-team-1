@@ -4,7 +4,7 @@
 
 *   **Type de projet :** Projet Club
 *   **Team Lead :** Baptiste Bonin
-*   **Partenaire Académique/Industriel :** N/A
+*   **Partenaire Académique/Industriel :** Vooban
 *   **Effectif recherché :** 5 membres
 *   **Profils recherchés :** Reinforcement Learning, Computer Vision, Simulation robotique, Développement Python
 
