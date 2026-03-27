@@ -51,6 +51,30 @@ class NetworkConfig:
 
 
 @dataclass(frozen=True)
+class DomainRandomizationConfig:
+    """Floor domain randomization settings for the Poppy Humanoid environment."""
+    enabled: bool = True
+    friction_range: tuple[float, float] = (0.5, 1.5)
+    restitution_range: tuple[float, float] = (0.0, 0.3)
+
+
+@dataclass(frozen=True)
+class PoppyEnvironmentConfig:
+    """Environment configuration for the Poppy Humanoid custom env."""
+    terminate_when_unhealthy: bool = True
+    healthy_z_range: tuple[float, float] = (0.25, 0.70)
+    n_envs: int = 8
+    normalize_obs: bool = True
+    normalize_reward: bool = False
+    clip_obs: float = 10.0
+    gamma: float = 0.99
+    frame_skip: int = 5
+    domain_randomization: DomainRandomizationConfig = field(
+        default_factory=DomainRandomizationConfig
+    )
+
+
+@dataclass(frozen=True)
 class EnvironmentConfig:
     """Environment configuration."""
     env_id: str = "Humanoid-v5"
