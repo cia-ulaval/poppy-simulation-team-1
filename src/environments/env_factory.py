@@ -6,7 +6,8 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNorm
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 
-from src.config.settings import EnvironmentConfig
+from src.config.settings import EnvironmentConfig, PoppyEnvironmentConfig
+from src.environments.poppy_humanoid_env import PoppyHumanoidEnv, register_poppy_env
 
 
 class HumanoidEnvFactory:
@@ -136,6 +137,65 @@ class HumanoidEnvFactory:
         """Create environment for visualization with rendering."""
         return self.create_single_env(seed=seed, render=True)
     
+    @staticmethod
+    def create_poppy_training_env(
+        config: PoppyEnvironmentConfig,
+        n_envs: Optional[int] = None,
+        seed: int = 0,
+        use_subprocess: bool = True,
+    ) -> VecNormalize:
+        """
+        Create a vectorized training environment for the Poppy Humanoid.
+
+        Each sub-environment is a ``PoppyHumanoidEnv`` with floor domain
+        randomization enabled according to ``config.domain_randomization``.
+
+        Args:
+            config: Poppy-specific environment configuration.
+            n_envs: Number of parallel environments (defaults to config.n_envs).
+            seed: Random seed.
+            use_subprocess: Use SubprocVecEnv for true parallelism.
+
+        Returns:
+            VecNormalize-wrapped vectorized environment.
+        """
+        register_poppy_env()
+
+        dr = config.domain_randomization
+        n = n_envs if n_envs is not None else config.n_envs
+
+        def _make_poppy(rank: int) -> Callable[[], gym.Env]:
+            def _init() -> gym.Env:
+                env = PoppyHumanoidEnv(
+                    floor_noise=dr.enabled,
+                    friction_range=dr.friction_range,
+                    restitution_range=dr.restitution_range,
+                    healthy_z_range=config.healthy_z_range,
+                    terminate_when_unhealthy=config.terminate_when_unhealthy,
+                    frame_skip=config.frame_skip,
+                )
+                env = Monitor(env)
+                env.reset(seed=seed + rank)
+                return env
+            set_random_seed(seed)
+            return _init
+
+        env_fns = [_make_poppy(i) for i in range(n)]
+
+        if n > 1 and use_subprocess:
+            vec_env = SubprocVecEnv(env_fns)
+        else:
+            vec_env = DummyVecEnv(env_fns)
+
+        vec_env = VecNormalize(
+            vec_env,
+            norm_obs=config.normalize_obs,
+            norm_reward=config.normalize_reward,
+            clip_obs=config.clip_obs,
+            gamma=config.gamma,
+        )
+        return vec_env
+
     @staticmethod
     def load_normalized_env(
         vec_normalize_path: str,
