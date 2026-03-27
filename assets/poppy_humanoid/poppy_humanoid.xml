@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MuJoCo MJCF model for the Poppy Humanoid robot.
+  Converted from the official URDF:
+  https://github.com/poppy-project/poppy-humanoid/tree/master/hardware/URDF
+  25 revolute joints, 22 links, ~3.5 kg, ~83 cm tall.
+-->
+<mujoco model="poppy_humanoid">
+
+  <compiler meshdir="meshes" angle="radian" />
+
+  <option integrator="RK4" timestep="0.002" />
+
+  <default>
+    <joint damping="0.1" armature="0.01" limited="true" />
+    <geom contype="1" conaffinity="1" condim="3" />
+    <motor ctrllimited="true" />
+  </default>
+
+  <asset>
+    <!-- Visual meshes (no collision) -->
+    <mesh name="pelvis_v"            file="pelvis_visual.STL" />
+    <mesh name="r_hip_v"             file="r_hip_visual.STL" />
+    <mesh name="r_hip_motor_v"       file="r_hip_motor_visual.STL" />
+    <mesh name="r_thigh_v"           file="r_thigh_visual.STL" />
+    <mesh name="r_shin_v"            file="r_shin_visual.STL" />
+    <mesh name="r_foot_v"            file="r_foot_visual.STL" />
+    <mesh name="l_hip_v"             file="l_hip_visual.STL" />
+    <mesh name="l_hip_motor_v"       file="l_hip_motor_visual.STL" />
+    <mesh name="l_thigh_v"           file="l_thigh_visual.STL" />
+    <mesh name="l_shin_v"            file="l_shin_visual.STL" />
+    <mesh name="l_foot_v"            file="l_foot_visual.STL" />
+    <mesh name="abs_motors_v"        file="abs_motors_visual.STL" />
+    <mesh name="abdomen_v"           file="abdomen_visual.STL" />
+    <mesh name="spine_v"             file="spine_visual.STL" />
+    <mesh name="bust_motors_v"       file="bust_motors_visual.STL" />
+    <mesh name="chest_v"             file="chest_visual.STL" />
+    <mesh name="neck_v"              file="neck_visual.STL" />
+    <mesh name="head_v"              file="head_visual.STL" />
+    <mesh name="l_shoulder_v"        file="l_shoulder_visual.STL" />
+    <mesh name="l_shoulder_motor_v"  file="l_shoulder_motor_visual.STL" />
+    <mesh name="l_upper_arm_v"       file="l_upper_arm_visual.STL" />
+    <mesh name="l_forearm_v"         file="l_forearm_visual.STL" />
+    <mesh name="r_shoulder_v"        file="r_shoulder_visual.STL" />
+    <mesh name="r_shoulder_motor_v"  file="r_shoulder_motor_visual.STL" />
+    <mesh name="r_upper_arm_v"       file="r_upper_arm_visual.STL" />
+    <mesh name="r_forearm_v"         file="r_forearm_visual.STL" />
+    <!-- Collision meshes -->
+    <mesh name="pelvis_c"            file="pelvis_respondable.STL" />
+    <mesh name="r_hip_c"             file="r_hip_respondable.STL" />
+    <mesh name="r_hip_motor_c"       file="r_hip_motor_respondable.STL" />
+    <mesh name="r_thigh_c"           file="r_thigh_respondable.STL" />
+    <mesh name="r_shin_c"            file="r_shin_respondable.STL" />
+    <mesh name="r_foot_c"            file="r_foot_respondable.STL" />
+    <mesh name="l_hip_c"             file="l_hip_respondable.stl" />
+    <mesh name="l_hip_motor_c"       file="l_hip_motor_respondable.stl" />
+    <mesh name="l_thigh_c"           file="l_thigh_respondable.STL" />
+    <mesh name="l_shin_c"            file="l_shin_respondable.stl" />
+    <mesh name="l_foot_c"            file="l_foot_respondable.stl" />
+    <mesh name="abs_motors_c"        file="abs_motors_respondable.stl" />
+    <mesh name="abdomen_c"           file="abdomen_respondable.STL" />
+    <mesh name="spine_c"             file="spine_respondable.STL" />
+    <mesh name="bust_motors_c"       file="bust_motors_respondable.stl" />
+    <mesh name="chest_c"             file="chest_respondable.STL" />
+    <mesh name="neck_c"              file="neck_respondable.STL" />
+    <mesh name="head_c"              file="head_respondable.stl" />
+    <mesh name="l_shoulder_c"        file="l_shoulder_respondable.stl" />
+    <mesh name="l_shoulder_motor_c"  file="l_shoulder_motor_respondable.stl" />
+    <mesh name="l_upper_arm_c"       file="l_upper_arm_respondable.STL" />
+    <mesh name="l_forearm_c"         file="l_forearm_respondable.stl" />
+    <mesh name="r_shoulder_c"        file="r_shoulder_respondable.STL" />
+    <mesh name="r_shoulder_motor_c"  file="r_shoulder_motor_respondable.STL" />
+    <mesh name="r_upper_arm_c"       file="r_upper_arm_respondable.STL" />
+    <mesh name="r_forearm_c"         file="r_forearm_respondable.STL" />
+  </asset>
+
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1" />
+    <!--
+      Floor geom — friction and restitution are randomized at runtime
+      by PoppyHumanoidEnv.reset_model() for domain randomization.
+    -->
+    <geom name="floor" type="plane" size="0 0 0.05"
+          rgba=".8 .8 .8 1" friction="1.0 0.005 0.0001"
+          condim="3" contype="1" conaffinity="1" />
+
+    <!-- ============================================================
+         ROOT BODY: pelvis
+         Initial height chosen so the feet clear the ground at rest.
+         ============================================================ -->
+    <body name="pelvis" pos="0 0 0.46">
+      <freejoint name="root" />
+      <inertial pos="-0.000135 -0.000399 0.001956" mass="0.185200"
+                fullinertia="1.01804e-4 1.42404e-4 9.38193e-5
+                             3.56589e-8 -1.38613e-5 -3.50683e-6" />
+      <geom type="mesh" mesh="pelvis_v" rgba=".9 .9 .9 1"
+            contype="0" conaffinity="0" />
+      <geom type="mesh" mesh="pelvis_c" />
+
+      <!-- ── Right leg ─────────────────────────────────────────── -->
+      <body name="r_hip" pos="-0.022542 0 0" euler="1.5707963 0 0">
+        <joint name="r_hip_x" axis="0 0 -1" range="-0.497419 0.523599" />
+        <inertial pos="-0.041931 0.019057 -0.004937" mass="0.084384"
+                  fullinertia="2.80785e-5 2.83384e-5 2.15932e-5
+                               -1.23046e-6 6.62396e-7 -1.44609e-6" />
+        <geom type="mesh" mesh="r_hip_v" rgba=".9 .9 .9 1"
+              contype="0" conaffinity="0" />
+        <geom type="mesh" mesh="r_hip_c" />
+
+        <body name="r_hip_motor" pos="-0.043999 0 0.005">
+          <joint name="r_hip_z" axis="0 -1 0" range="-1.570796 0.436332" />
+          <inertial pos="0.000127 -0.022890 -0.013499" mass="0.083171"
+                    fullinertia="2.94088e-5 3.59802e-5 2.29201e-5
+                                 -1.19905e-8 -2.40264e-7 7.97558e-7" />
+          <geom type="mesh" mesh="r_hip_motor_v" rgba=".9 .9 .9 1"
+                contype="0" conaffinity="0" />
+          <geom type="mesh" mesh="r_hip_motor_c" />
+
+          <body name="r_thigh" pos="0 -0.024 0">
+            <joint name="r_hip_y" axis="-1 0 0" range="-1.483530 1.832596" />
+            <inertial pos="0.019250 -0.140974 0.000433" mass="0.116386"
+                      fullinertia="3.57762e-4 5.14620e-5 3.70172e-4
+                                   -4.71321e-5 2.18885e-6 -5.54069e-6" />
+            <geom type="mesh" mesh="r_thigh_v" rgba=".9 .9 .9 1"
+                  contype="0" conaffinity="0" />
+            <geom type="mesh" mesh="r_thigh_c" />
+
+            <body name="r_shin" pos="0 -0.182 0" euler="0 1.5707963 0">
+              <joint name="r_knee_y" axis="0 0 -1" range="-2.338741 0.061087" />
+              <inertial pos="-0.001508 -0.137042 0.022899" mass="0.115582"
+                        fullinertia="3.97225e-4 3.98087e-5 3.93658e-4
+                                     -1.73263e-5 1.32921e-8 -5.89722e-7" />
+              <geom type="mesh" mesh="r_shin_v" rgba=".9 .9 .9 1"
+                    contype="0" conaffinity="0" />
+              <geom type="mesh" mesh="r_shin_c" />
+
+              <body name="r_foot" pos="0 -0.18 0" euler="0 -1.5708 0">
+                <joint name="r_ankle_y" axis="-1 0 0" range="-0.785398 0.785398" />
+                <inertial pos="0.020429 -0.023336 0.026853" mass="0.046788"
+                          fullinertia="8.14404e-5 8.86483e-5 1.79464e-5
+                                       1.79181e-7 -2.42059e-6 -3.23019e-6" />
+                <geom type="mesh" mesh="r_foot_v" rgba=".9 .9 .9 1"
+                      contype="0" conaffinity="0" />
+                <geom type="mesh" mesh="r_foot_c" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <!-- ── Left leg ──────────────────────────────────────────── -->
+      <body name="l_hip" pos="0.022542 0 0" euler="1.5707963 0 0">
+        <joint name="l_hip_x" axis="0 0 -1" range="-0.523599 0.497419" />
+        <inertial pos="0.041931 0.019056 -0.004937" mass="0.084384"
+                  fullinertia="2.80793e-5 2.83406e-5 2.15947e-5
+                               1.23086e-6 -6.62398e-7 -1.44600e-6" />
+        <geom type="mesh" mesh="l_hip_v" rgba=".9 .9 .9 1"
+              contype="0" conaffinity="0" />
+        <geom type="mesh" mesh="l_hip_c" />
+
+        <body name="l_hip_motor" pos="0.043999 0 0.005">
+          <joint name="l_hip_z" axis="0 -1 0" range="-0.436332 1.570796" />
+          <inertial pos="-0.000127 -0.022890 -0.013499" mass="0.083171"
+                    fullinertia="2.94088e-5 3.59802e-5 2.29201e-5
+                                 1.14532e-8 2.40221e-7 7.97561e-7" />
+          <geom type="mesh" mesh="l_hip_motor_v" rgba=".9 .9 .9 1"
+                contype="0" conaffinity="0" />
+          <geom type="mesh" mesh="l_hip_motor_c" />
+
+          <body name="l_thigh" pos="0 -0.024 0">
+            <joint name="l_hip_y" axis="1 0 0" range="-1.815142 1.466077" />
+            <inertial pos="-0.019252 -0.142231 0.000612" mass="0.114854"
+                      fullinertia="3.44974e-4 5.11655e-5 3.57718e-4
+                                   4.73949e-5 -2.20113e-6 -3.39115e-6" />
+            <geom type="mesh" mesh="l_thigh_v" rgba=".9 .9 .9 1"
+                  contype="0" conaffinity="0" />
+            <geom type="mesh" mesh="l_thigh_c" />
+
+            <body name="l_shin" pos="0 -0.182 0" euler="0 1.5707963 0">
+              <joint name="l_knee_y" axis="0 0 -1" range="-0.061087 2.338741" />
+              <inertial pos="-0.001508 -0.137042 -0.022903" mass="0.115582"
+                        fullinertia="3.97225e-4 3.98086e-5 3.93658e-4
+                                     -1.73263e-5 -3.52147e-9 5.50111e-7" />
+              <geom type="mesh" mesh="l_shin_v" rgba=".9 .9 .9 1"
+                    contype="0" conaffinity="0" />
+              <geom type="mesh" mesh="l_shin_c" />
+
+              <body name="l_foot" pos="0 -0.18 0" euler="0 -1.5708 0">
+                <joint name="l_ankle_y" axis="1 0 0" range="-0.785398 0.785398" />
+                <inertial pos="-0.020428 -0.023322 0.026833" mass="0.046826"
+                          fullinertia="8.14635e-5 8.86587e-5 1.79638e-5
+                                       -1.79216e-7 2.42595e-6 -3.23538e-6" />
+                <geom type="mesh" mesh="l_foot_v" rgba=".9 .9 .9 1"
+                      contype="0" conaffinity="0" />
+                <geom type="mesh" mesh="l_foot_c" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <!-- ── Torso ─────────────────────────────────────────────── -->
+      <body name="abs_motors" pos="0 -0.017 0.061" euler="1.5707963 0 0">
+        <joint name="abs_y" axis="-1 0 0" range="-0.872665 0.209440" />
+        <inertial pos="-6.29779e-5 0.013359 -0.019569" mass="0.167667"
+                  fullinertia="1.51721e-4 1.31382e-4 6.52732e-5
+                               -2.41666e-7 -2.06689e-7 -2.13905e-6" />
+        <geom type="mesh" mesh="abs_motors_v" rgba=".9 .9 .9 1"
+              contype="0" conaffinity="0" />
+        <geom type="mesh" mesh="abs_motors_c" />
+
+        <body name="abdomen" pos="0 0 0">
+          <joint name="abs_x" axis="0 0 1" range="-0.785398 0.785398" />
+          <inertial pos="4.70359e-7 0.044531 -0.022296" mass="0.038411"
+                    fullinertia="5.93652e-5 5.98641e-5 2.35988e-5
+                                 -8.25772e-11 -2.55037e-10 3.94818e-7" />
+          <geom type="mesh" mesh="abdomen_v" rgba=".9 .9 .9 1"
+                contype="0" conaffinity="0" />
+          <geom type="mesh" mesh="abdomen_c" />
+
+          <body name="spine" pos="0 0.051637 0">
+            <joint name="abs_z" axis="0 1 0" range="-1.570796 1.570796" />
+            <inertial pos="-2.40412e-7 0.028845 -0.010098" mass="0.092682"
+                      fullinertia="3.84764e-5 2.73205e-5 3.26595e-5
+                                   -1.20593e-9 -2.38589e-10 1.47490e-6" />
+            <geom type="mesh" mesh="spine_v" rgba=".9 .9 .9 1"
+                  contype="0" conaffinity="0" />
+            <geom type="mesh" mesh="spine_c" />
+
+            <body name="bust_motors" pos="0 0.079850 0.002800">
+              <joint name="bust_y" axis="-1 0 0" range="-1.169371 0.471239" />
+              <inertial pos="3.50872e-5 0.010522 -0.017433" mass="0.158876"
+                        fullinertia="1.00954e-4 8.94288e-5 4.26226e-5
+                                     -3.89105e-7 9.71750e-8 -1.31738e-6" />
+              <geom type="mesh" mesh="bust_motors_v" rgba=".9 .9 .9 1"
+                    contype="0" conaffinity="0" />
+              <geom type="mesh" mesh="bust_motors_c" />
+
+              <body name="chest" pos="0 0 0">
+                <joint name="bust_x" axis="0 0 1" range="-0.698132 0.698132" />
+                <inertial pos="2.35256e-6 0.051495 -0.010546" mass="0.262926"
+                          fullinertia="1.54597e-4 7.50953e-4 6.88550e-4
+                                       2.32304e-8 -2.47140e-8 1.53530e-6" />
+                <geom type="mesh" mesh="chest_v" rgba=".9 .9 .9 1"
+                      contype="0" conaffinity="0" />
+                <geom type="mesh" mesh="chest_c" />
+
+                <!-- Head -->
+                <body name="neck" pos="0 0.084 0.005">
+                  <joint name="head_z" axis="0 1 0" range="-1.570796 1.570796" />
+                  <inertial pos="-0.001475 0.009285 2.89601e-6" mass="0.005885"
+                            fullinertia="7.25597e-7 2.33536e-6 2.57395e-6
+                                         -9.29944e-8 2.01438e-10 1.55384e-11" />
+                  <geom type="mesh" mesh="neck_v" rgba=".9 .9 .9 1"
+                        contype="0" conaffinity="0" />
+                  <geom type="mesh" mesh="neck_c" />
+
+                  <body name="head" pos="0 0.020000 0" euler="-0.349066 0 0">
+                    <joint name="head_y" axis="-1 0 0" range="-0.785398 0.104720" />
+                    <inertial pos="0.000558 0.032744 -0.013255" mass="0.188564"
+                              fullinertia="3.53330e-4 3.84587e-4 3.96626e-4
+                                           -2.17595e-7 4.10679e-6 -2.16656e-5" />
+                    <geom type="mesh" mesh="head_v" rgba=".9 .9 .9 1"
+                          contype="0" conaffinity="0" />
+                    <geom type="mesh" mesh="head_c" />
+                  </body>
+                </body>
+
+                <!-- Left arm -->
+                <body name="l_shoulder" pos="0.077100 0.050000 0.004000"
+                      euler="-1.5707963 0 0">
+                  <joint name="l_shoulder_y" axis="1 0 0"
+                         range="-2.094395 2.705260" />
+                  <inertial pos="0.010525 0.001798 -0.009152" mass="0.008436"
+                            fullinertia="3.39607e-6 3.56726e-6 1.84635e-6
+                                         -4.79546e-8 2.95435e-8 1.00382e-8" />
+                  <geom type="mesh" mesh="l_shoulder_v" rgba=".9 .9 .9 1"
+                        contype="0" conaffinity="0" />
+                  <geom type="mesh" mesh="l_shoulder_c" />
+
+                  <body name="l_shoulder_motor" pos="0.028400 0 0"
+                        euler="3.14159265 0 1.5707963">
+                    <joint name="l_shoulder_x" axis="0 0 1"
+                           range="-1.832596 1.919862" />
+                    <inertial pos="2.25562e-7 0.012576 0.008598" mass="0.082814"
+                              fullinertia="2.76486e-5 1.64428e-5 2.26416e-5
+                                           1.32208e-10 6.68898e-10 7.23402e-7" />
+                    <geom type="mesh" mesh="l_shoulder_motor_v" rgba=".9 .9 .9 1"
+                          contype="0" conaffinity="0" />
+                    <geom type="mesh" mesh="l_shoulder_motor_c" />
+
+                    <body name="l_upper_arm" pos="0 0.036250 0.018500">
+                      <joint name="l_arm_z" axis="0 1 0"
+                             range="-1.832596 1.832596" />
+                      <inertial pos="3.30519e-5 0.062826 -0.010638" mass="0.168141"
+                                fullinertia="2.80828e-4 4.23294e-5 2.75916e-4
+                                             6.03219e-7 3.24531e-9 3.11053e-6" />
+                      <geom type="mesh" mesh="l_upper_arm_v" rgba=".9 .9 .9 1"
+                            contype="0" conaffinity="0" />
+                      <geom type="mesh" mesh="l_upper_arm_c" />
+
+                      <body name="l_forearm" pos="0 0.111750 -0.010000">
+                        <joint name="l_elbow_y" axis="1 0 0"
+                               range="-2.583087 0.017453" />
+                        <inertial pos="0.006915 0.107158 0.004990" mass="0.048651"
+                                  fullinertia="1.85804e-4 1.51053e-5 1.82746e-4
+                                               7.31763e-6 -9.00807e-8 -1.35878e-5" />
+                        <geom type="mesh" mesh="l_forearm_v" rgba=".9 .9 .9 1"
+                              contype="0" conaffinity="0" />
+                        <geom type="mesh" mesh="l_forearm_c" />
+                      </body>
+                    </body>
+                  </body>
+                </body>
+
+                <!-- Right arm -->
+                <body name="r_shoulder" pos="-0.077100 0.050000 0.004000"
+                      euler="-1.5707963 0 0">
+                  <joint name="r_shoulder_y" axis="-1 0 0"
+                         range="-2.705260 2.094395" />
+                  <inertial pos="-0.010497 0.001726 -0.009166" mass="0.008482"
+                            fullinertia="3.40574e-6 3.57001e-6 1.85572e-6
+                                         4.48540e-8 -3.01047e-8 1.16020e-8" />
+                  <geom type="mesh" mesh="r_shoulder_v" rgba=".9 .9 .9 1"
+                        contype="0" conaffinity="0" />
+                  <geom type="mesh" mesh="r_shoulder_c" />
+
+                  <body name="r_shoulder_motor" pos="-0.028400 0 0"
+                        euler="3.14159265 0 -1.5707963">
+                    <joint name="r_shoulder_x" axis="0 0 -1"
+                           range="-1.919862 1.832596" />
+                    <inertial pos="2.25562e-7 0.012576 0.008598" mass="0.082814"
+                              fullinertia="2.76486e-5 1.64428e-5 2.26416e-5
+                                           1.32208e-10 6.68898e-10 7.23402e-7" />
+                    <geom type="mesh" mesh="r_shoulder_motor_v" rgba=".9 .9 .9 1"
+                          contype="0" conaffinity="0" />
+                    <geom type="mesh" mesh="r_shoulder_motor_c" />
+
+                    <body name="r_upper_arm" pos="0 0.036250 0.018500">
+                      <joint name="r_arm_z" axis="0 1 0"
+                             range="-1.832596 1.832596" />
+                      <inertial pos="-3.32549e-5 0.062826 -0.010638" mass="0.168141"
+                                fullinertia="2.80828e-4 4.23293e-5 2.75916e-4
+                                             -6.03128e-7 -3.86325e-9 3.11054e-6" />
+                      <geom type="mesh" mesh="r_upper_arm_v" rgba=".9 .9 .9 1"
+                            contype="0" conaffinity="0" />
+                      <geom type="mesh" mesh="r_upper_arm_c" />
+
+                      <body name="r_forearm" pos="0 0.111750 -0.010000">
+                        <joint name="r_elbow_y" axis="-1 0 0"
+                               range="-0.017453 2.583087" />
+                        <inertial pos="-0.006916 0.107158 0.004990" mass="0.048651"
+                                  fullinertia="1.85805e-4 1.51060e-5 1.82749e-4
+                                               -7.32255e-6 9.10153e-8 -1.35866e-5" />
+                        <geom type="mesh" mesh="r_forearm_v" rgba=".9 .9 .9 1"
+                              contype="0" conaffinity="0" />
+                        <geom type="mesh" mesh="r_forearm_c" />
+                      </body>
+                    </body>
+                  </body>
+                </body>
+
+              </body><!-- /chest -->
+            </body><!-- /bust_motors -->
+          </body><!-- /spine -->
+        </body><!-- /abdomen -->
+      </body><!-- /abs_motors -->
+
+    </body><!-- /pelvis -->
+  </worldbody>
+
+  <!-- ============================================================
+       Actuators — one position-controlled motor per joint.
+       ctrlrange mirrors the joint effort limits from the URDF.
+       ============================================================ -->
+  <actuator>
+    <!-- Right leg -->
+    <motor name="r_hip_x"   joint="r_hip_x"   gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_hip_z"   joint="r_hip_z"   gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_hip_y"   joint="r_hip_y"   gear="1" ctrlrange="-7.3 7.3" />
+    <motor name="r_knee_y"  joint="r_knee_y"  gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_ankle_y" joint="r_ankle_y" gear="1" ctrlrange="-3.1 3.1" />
+    <!-- Left leg -->
+    <motor name="l_hip_x"   joint="l_hip_x"   gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_hip_z"   joint="l_hip_z"   gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_hip_y"   joint="l_hip_y"   gear="1" ctrlrange="-7.3 7.3" />
+    <motor name="l_knee_y"  joint="l_knee_y"  gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_ankle_y" joint="l_ankle_y" gear="1" ctrlrange="-3.1 3.1" />
+    <!-- Torso -->
+    <motor name="abs_y"   joint="abs_y"   gear="1" ctrlrange="-7.3 7.3" />
+    <motor name="abs_x"   joint="abs_x"   gear="1" ctrlrange="-7.3 7.3" />
+    <motor name="abs_z"   joint="abs_z"   gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="bust_y"  joint="bust_y"  gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="bust_x"  joint="bust_x"  gear="1" ctrlrange="-3.1 3.1" />
+    <!-- Head -->
+    <motor name="head_z" joint="head_z" gear="1" ctrlrange="-1.8 1.8" />
+    <motor name="head_y" joint="head_y" gear="1" ctrlrange="-1.8 1.8" />
+    <!-- Left arm -->
+    <motor name="l_shoulder_y" joint="l_shoulder_y" gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_shoulder_x" joint="l_shoulder_x" gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_arm_z"      joint="l_arm_z"      gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="l_elbow_y"    joint="l_elbow_y"    gear="1" ctrlrange="-3.1 3.1" />
+    <!-- Right arm -->
+    <motor name="r_shoulder_y" joint="r_shoulder_y" gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_shoulder_x" joint="r_shoulder_x" gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_arm_z"      joint="r_arm_z"      gear="1" ctrlrange="-3.1 3.1" />
+    <motor name="r_elbow_y"    joint="r_elbow_y"    gear="1" ctrlrange="-3.1 3.1" />
+  </actuator>
+
+</mujoco>
