@@ -8,6 +8,8 @@ from src.config.settings import (
     SACConfig,
     A2CConfig,
     ExperimentConfig,
+    DomainRandomizationConfig,
+    PoppyEnvironmentConfig,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "SACConfig",
     "A2CConfig",
     "ExperimentConfig",
+    "DomainRandomizationConfig",
+    "PoppyEnvironmentConfig",
 ]
