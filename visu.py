@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+from pathlib import Path
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
@@ -8,11 +9,14 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
 import time
 
+sys.path.insert(0, str(Path(__file__).parent))
+from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
+
 
 def evaluate_model(
     model_path,
     vec_normalize_path=None,
-    n_episodes=5,
+    n_episodes=150,
     seed=42,
     render=True,
     fps=50,
@@ -43,12 +47,10 @@ def evaluate_model(
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Modèle introuvable: {model_path}")
     
-    # Créer l'environnement
-    env = gym.make(
-        "Humanoid-v5",
+    # Créer l'environnement (sans domain randomization pour la visu)
+    env = PoppyHumanoidEnv(
+        floor_noise=False,
         render_mode="human" if render else None,
-        terminate_when_unhealthy=True,
-        healthy_z_range=(1.0, 2.0),
     )
     env = Monitor(env)
     env.reset(seed=seed)
