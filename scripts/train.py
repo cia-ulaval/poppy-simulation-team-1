@@ -104,6 +104,12 @@ Examples:
         help="Skip generating plots",
     )
     
+    parser.add_argument(
+        "--with_obstacles",
+        action="store_true",
+        help="Use obstacles in the environment",
+    )
+    
     return parser.parse_args()
 
 
@@ -117,9 +123,7 @@ def main() -> int:
     # Create configuration
     config = ExperimentConfig(
         algorithms=algorithms,
-        environment=EnvironmentConfig(
-            n_envs=args.n_envs,
-        ),
+        environment=EnvironmentConfig(n_envs=args.n_envs, with_obstacles=args.with_obstacles),
         training=TrainingConfig(
             total_timesteps=args.timesteps,
             seed=args.seed,
