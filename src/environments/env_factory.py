@@ -1,11 +1,14 @@
+from pathlib import Path
 from typing import Callable, Optional
+import tempfile
+import shutil
 
 import gymnasium as gym
-
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
+from scripts.solidenv_modifier.humanoid_advanced import add_obstacles, duplicate_env
 from src.config.settings import EnvironmentConfig
 
 
@@ -18,6 +21,7 @@ class HumanoidEnvFactory:
     - Vectorization (Dummy or Subprocess)
     - Observation/reward normalization
     - Monitoring
+    - Temporary file management
     
     Benefits:
     - Single Responsibility: Only handles env creation
@@ -27,6 +31,24 @@ class HumanoidEnvFactory:
     
     def __init__(self, config: EnvironmentConfig):
         self.config = config
+        self._temp_dir: Optional[str] = None
+    
+    @property
+    def temp_dir(self) -> str:
+        """Get or create the temporary directory for generated files."""
+        if self._temp_dir is None:
+            self._temp_dir = tempfile.mkdtemp(prefix="humanoid_env_")
+        return self._temp_dir
+    
+    def cleanup(self):
+        """Remove all temporary files created by this factory."""
+        if self._temp_dir is not None and Path(self._temp_dir).exists():
+            shutil.rmtree(self._temp_dir)
+            self._temp_dir = None
+    
+    def __del__(self):
+        """Ensure cleanup on garbage collection."""
+        self.cleanup()
     
     def _make_env_fn(
         self,
@@ -41,8 +63,14 @@ class HumanoidEnvFactory:
         config = self.config
         
         def _init() -> gym.Env:
+            if config.with_obstacles:
+                env_path = duplicate_env("scripts/solidenv_modifier/humanoid.xml", output_dir=self.temp_dir)
+                add_obstacles(n_obstacles=10, source=env_path)
+            else:
+                env_path = None
             env = gym.make(
                 config.env_id,
+                xml_file=str(Path(env_path).absolute()) if env_path else None,
                 render_mode="human" if render else None,
                 terminate_when_unhealthy=config.terminate_when_unhealthy,
                 healthy_z_range=config.healthy_z_range,
