@@ -1,6 +1,7 @@
 from typing import Callable, Optional
 
 import gymnasium as gym
+from gymnasium.wrappers import TimeLimit
 
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
@@ -125,10 +126,10 @@ class HumanoidEnvFactory:
         vec_env = VecNormalize(
             vec_env,
             norm_obs=self.config.normalize_obs,
-            norm_reward=self.config.normalize_reward,
+            norm_reward=False,   # Always show true rewards during eval
             clip_obs=self.config.clip_obs,
             gamma=self.config.gamma,
-            training=False,  #TODO Don't update stats during eval
+            training=False,      # Don't update stats during eval
         )
         
         return vec_env
@@ -174,6 +175,7 @@ class HumanoidEnvFactory:
                     terminate_when_unhealthy=config.terminate_when_unhealthy,
                     frame_skip=config.frame_skip,
                 )
+                env = TimeLimit(env, max_episode_steps=1000)
                 env = Monitor(env)
                 env.reset(seed=seed + rank)
                 return env
