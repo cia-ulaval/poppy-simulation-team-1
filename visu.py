@@ -21,6 +21,7 @@ def evaluate_model(
     seed=42,
     render=True,
     fps=50,
+    baseline=False,
 ):
     """
     Évalue un modèle PPO entraîné avec ou sans visualisation.
@@ -48,12 +49,21 @@ def evaluate_model(
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Modèle introuvable: {model_path}")
     
-    # Créer l'environnement (sans domain randomization pour la visu)
-    env = PoppyHumanoidEnv(
-        floor_noise=False,
-        render_mode="human" if render else None,
-    )
-    env = TimeLimit(env, max_episode_steps=1000)
+    # Créer l'environnement
+    if baseline:
+        import gymnasium as gym_lib
+        env = gym_lib.make(
+            "Humanoid-v5",
+            render_mode="human" if render else None,
+            terminate_when_unhealthy=True,
+            healthy_z_range=(1.0, 2.0),
+        )
+    else:
+        env = PoppyHumanoidEnv(
+            floor_noise=False,
+            render_mode="human" if render else None,
+        )
+        env = TimeLimit(env, max_episode_steps=1000)
     env = Monitor(env)
     env.reset(seed=seed)
 
@@ -204,6 +214,12 @@ Exemples d'utilisation:
         default=50,
         help="Vitesse d'affichage en FPS si --render (défaut: 50, 0 = max speed)"
     )
+
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Utiliser Humanoid-v5 standard au lieu de PoppyHumanoidEnv"
+    )
     
     args = parser.parse_args()
     
@@ -236,7 +252,8 @@ Exemples d'utilisation:
         vec_normalize_path=vec_normalize_path,
         n_episodes=args.episodes,
         seed=args.seed,
-        render=not args.no_render,  # Inverser le flag
+        render=not args.no_render,
+        baseline=args.baseline,
         fps=args.fps,
     )
     
