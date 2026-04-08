@@ -1,0 +1,75 @@
+# ============================================================
+# Poppy Humanoid — Training configuration (robust variant)
+#
+# Usage:
+#   python scripts/train_poppy.py --config configs/poppy_robust.yaml
+#
+# Domain randomization is enabled by default: at every episode
+# reset the floor friction and restitution are re-sampled from
+# the ranges below, forcing the policy to generalise across
+# different surface conditions.
+# ============================================================
+
+# ── Algorithm ────────────────────────────────────────────────
+algorithm: PPO          # PPO | SAC | TD3 | A2C
+
+# ── Training ─────────────────────────────────────────────────
+training:
+  total_timesteps: 10_000_000
+  seed: 42
+  checkpoint_freq: 200_000   # Save a model checkpoint every N steps
+  eval_freq: 10_000          # Evaluate every N steps
+  n_eval_episodes: 5
+  log_dir: ./logs/poppy
+
+# ── Environment ──────────────────────────────────────────────
+environment:
+  n_envs: 64                       # Parallel environments (optimised for 32-core + RTX 4090)
+  frame_skip: 5                    # Sim steps per policy step (dt = 0.002 * 5 = 10 ms)
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.25, 0.70]   # Pelvis height [m] considered healthy
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+
+# ── Domain Randomization (floor) ─────────────────────────────
+domain_randomization:
+  enabled: true
+  friction_range: [0.4, 2.0]       # Slide friction coefficient at reset
+  restitution_range: [0.0, 0.5]    # Bounciness coefficient at reset
+
+# ── PPO hyperparameters ───────────────────────────────────────
+ppo:
+  learning_rate: 2.5e-5
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+
+# ── SAC hyperparameters ───────────────────────────────────────
+sac:
+  learning_rate: 3.0e-4
+  buffer_size: 1_000_000
+  learning_starts: 10_000
+  batch_size: 1024
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+
+# ── Network architecture ──────────────────────────────────────
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2                # Start with small action noise (std≈0.14)
+  ortho_init: false
+
+# ── Output ───────────────────────────────────────────────────
+figs_dir: ./figs/poppy
