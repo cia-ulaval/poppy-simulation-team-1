@@ -9,6 +9,7 @@ Usage:
     python scripts/train_poppy.py --config configs/poppy_robust.yaml --no-floor-noise
 """
 import argparse
+import os
 import sys
 import time
 from datetime import datetime
@@ -22,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from stable_baselines3 import PPO, SAC, TD3, A2C
 from stable_baselines3.common.callbacks import (
+    BaseCallback,
     CheckpointCallback,
     EvalCallback,
     CallbackList,
@@ -32,7 +34,10 @@ import torch.nn as nn
 from src.config import (
     DomainRandomizationConfig,
     PoppyEnvironmentConfig,
+    EnvironmentConfig,
 )
+from stable_baselines3.common.vec_env import VecNormalize, sync_envs_normalization
+
 from src.environments.env_factory import HumanoidEnvFactory
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
 
@@ -112,6 +117,11 @@ Examples:
         help="Disable floor domain randomization",
     )
     parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Use standard Humanoid-v5 instead of Poppy (for pipeline validation)",
+    )
+    parser.add_argument(
         "--log-dir",
         type=Path,
         default=None,
@@ -163,14 +173,21 @@ def make_policy_kwargs(cfg: dict, algo_name: str) -> dict:
     activation = _ACTIVATION_MAP.get(net.get("activation", "relu"), nn.ReLU)
     is_on_policy = algo_name in ("PPO", "A2C")
     if is_on_policy:
-        return {
+        kwargs = {
             "net_arch": {"pi": layers, "vf": layers},
             "activation_fn": activation,
         }
-    return {
-        "net_arch": {"pi": layers, "qf": layers},
-        "activation_fn": activation,
-    }
+    else:
+        kwargs = {
+            "net_arch": {"pi": layers, "qf": layers},
+            "activation_fn": activation,
+        }
+    # Optional policy init params (critical for humanoid tasks)
+    if "log_std_init" in net:
+        kwargs["log_std_init"] = float(net["log_std_init"])
+    if "ortho_init" in net:
+        kwargs["ortho_init"] = bool(net["ortho_init"])
+    return kwargs
 
 
 def make_algo_kwargs(cfg: dict, algo_name: str) -> dict:
@@ -220,31 +237,55 @@ def main() -> int:
     print("=" * 70 + "\n")
 
     # ── Build environments ──────────────────────────────────────────────
-    env_config = make_env_config(cfg)
+    use_baseline = args.baseline
+    env_cfg = cfg.get("environment", {})
+    n_envs = env_cfg.get("n_envs", 16)
 
-    train_env = HumanoidEnvFactory.create_poppy_training_env(
-        config=env_config,
-        seed=seed,
-    )
-
-    # Eval env: floor noise OFF to get clean metrics
-    eval_env_config = PoppyEnvironmentConfig(
-        terminate_when_unhealthy=env_config.terminate_when_unhealthy,
-        healthy_z_range=env_config.healthy_z_range,
-        n_envs=1,
-        normalize_obs=env_config.normalize_obs,
-        normalize_reward=False,
-        clip_obs=env_config.clip_obs,
-        gamma=env_config.gamma,
-        frame_skip=env_config.frame_skip,
-        domain_randomization=DomainRandomizationConfig(enabled=False),
-    )
-    eval_env = HumanoidEnvFactory.create_poppy_training_env(
-        config=eval_env_config,
-        n_envs=1,
-        seed=seed + 1000,
-        use_subprocess=False,
-    )
+    if use_baseline:
+        # Standard Humanoid-v5 (no Poppy XML)
+        base_config = EnvironmentConfig(
+            env_id=env_cfg.get("env_id", "Humanoid-v5"),
+            terminate_when_unhealthy=env_cfg.get("terminate_when_unhealthy", True),
+            healthy_z_range=tuple(env_cfg.get("healthy_z_range", [1.0, 2.0])),
+            n_envs=n_envs,
+            normalize_obs=env_cfg.get("normalize_obs", True),
+            normalize_reward=env_cfg.get("normalize_reward", True),
+            clip_obs=env_cfg.get("clip_obs", 10.0),
+            gamma=env_cfg.get("gamma", 0.99),
+        )
+        factory = HumanoidEnvFactory(base_config)
+        train_env = factory.create_training_env(
+            n_envs=n_envs, seed=seed, use_subprocess=True,
+        )
+        eval_env = factory.create_eval_env(seed=seed + 1000)
+        print(f"  Env               : {base_config.env_id} (baseline)")
+    else:
+        # Custom Poppy Humanoid
+        env_config = make_env_config(cfg)
+        train_env = HumanoidEnvFactory.create_poppy_training_env(
+            config=env_config,
+            seed=seed,
+        )
+        eval_env_config = PoppyEnvironmentConfig(
+            terminate_when_unhealthy=env_config.terminate_when_unhealthy,
+            healthy_z_range=env_config.healthy_z_range,
+            n_envs=1,
+            normalize_obs=env_config.normalize_obs,
+            normalize_reward=False,
+            clip_obs=env_config.clip_obs,
+            gamma=env_config.gamma,
+            frame_skip=env_config.frame_skip,
+            domain_randomization=DomainRandomizationConfig(enabled=False),
+        )
+        eval_env = HumanoidEnvFactory.create_poppy_training_env(
+            config=eval_env_config,
+            n_envs=1,
+            seed=seed + 1000,
+            use_subprocess=False,
+        )
+        eval_env.training = False     # Don't update normalization stats during eval
+        eval_env.norm_reward = False  # Show true rewards
+        print(f"  Env               : PoppyHumanoid-v0")
 
     # ── Build model ─────────────────────────────────────────────────────
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -268,16 +309,38 @@ def main() -> int:
 
     # ── Callbacks ───────────────────────────────────────────────────────
     checkpoint_cb = CheckpointCallback(
-        save_freq=max(ckpt_freq // env_config.n_envs, 1),
+        save_freq=max(ckpt_freq // n_envs, 1),
         save_path=str(log_dir),
         name_prefix=f"poppy_{algo_name.lower()}",
         save_vecnormalize=True,
     )
-    eval_cb = EvalCallback(
+    # Custom EvalCallback that:
+    # 1. Syncs VecNormalize stats from train → eval before each evaluation
+    # 2. Saves VecNormalize with best model
+    class SyncedEvalCallback(EvalCallback):
+        """EvalCallback with VecNormalize sync + save."""
+        def _on_step(self) -> bool:
+            # Sync normalization stats before eval runs
+            if isinstance(self.training_env, VecNormalize) and isinstance(self.eval_env, VecNormalize):
+                sync_envs_normalization(self.training_env, self.eval_env)
+
+            prev_best = self.best_mean_reward
+            result = super()._on_step()
+
+            # Save VecNormalize alongside best model
+            if self.best_mean_reward > prev_best and self.best_model_save_path is not None:
+                vec_norm_path = os.path.join(self.best_model_save_path, "vec_normalize.pkl")
+                if isinstance(self.training_env, VecNormalize):
+                    self.training_env.save(vec_norm_path)
+                    if self.verbose >= 1:
+                        print(f"  Saved VecNormalize → {vec_norm_path}")
+            return result
+
+    eval_cb = SyncedEvalCallback(
         eval_env,
         best_model_save_path=str(log_dir / "best_model"),
         log_path=str(log_dir / "eval"),
-        eval_freq=max(eval_freq // env_config.n_envs, 1),
+        eval_freq=max(eval_freq // n_envs, 1),
         n_eval_episodes=n_eval_ep,
         deterministic=True,
     )
