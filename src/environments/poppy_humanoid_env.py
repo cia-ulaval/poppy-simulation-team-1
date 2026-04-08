@@ -10,15 +10,21 @@ When ``floor_noise=True`` (default), the floor's friction and restitution
 are re-sampled from a configurable range at every ``reset()``.  This makes
 the policy more robust to surface variability encountered on the real robot.
 
-Observation space (70-dim):
-    - qpos[2:]   : 30 values  (z + quat(4) + 25 joints; skip global x,y)
-    - qvel        : 31 values  (6 root + 25 joints)
-    - cinert      : not included (keep obs compact)
-    - total       : 61 values
+Control
+-------
+Actions in [-1, 1] are mapped to **target joint positions** within each
+joint's mechanical limits.  A PD controller converts these targets into
+torques, emulating the real Dynamixel servo behaviour.
+
+Observation space (63-dim):
+    - qpos[2:]        : 30 values  (z + quat(4) + 25 joints; skip global x,y)
+    - qvel            : 31 values  (6 root + 25 joints)
+    - foot_contacts   : 2 values   (left foot, right foot contact force)
+    - total           : 63 values
 
 Action space (25-dim):
-    Torque commands for each of the 25 revolute joints,
-    normalised to [-1, 1] (rescaled to effort limits internally by MuJoCo).
+    Target joint positions for each of the 25 revolute joints,
+    normalised to [-1, 1] (rescaled to joint limits internally).
 """
 
 from __future__ import annotations
@@ -42,17 +48,25 @@ _MODEL_PATH = _ASSETS_DIR / "poppy_humanoid.xml"
 # Number of actuated joints
 _N_JOINTS = 25
 
-_OBS_DIM = 30 + 31  # = 61
+# 30 (qpos[2:]) + 31 (qvel) + 2 (foot contacts) = 63
+_OBS_DIM = 30 + 31 + 2
 
 _DEFAULT_HEALTHY_Z_RANGE = (0.25, 0.70)
 
 _FLOOR_GEOM_NAME = "floor"
 
+# ── PD controller gains ─────────────────────────────────────
+# Tuned so that kp * typical_error ≈ max_torque (3.1 Nm).
+# kd provides damping that replaces what the real Dynamixel
+# servo PID would provide internally.
+_KP = 8.0    # Nm/rad  — proportional gain
+_KD = 0.5    # Nm·s/rad — derivative gain
+
 
 class PoppyHumanoidEnv(MujocoEnv, EzPickle):
     """
     MuJoCo environment for the Poppy Humanoid robot with optional
-    floor domain randomization.
+    floor domain randomization and PD position control.
 
     Parameters
     ----------
@@ -80,8 +94,6 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
     metadata = {
         "render_modes": ["human", "rgb_array", "depth_array"],
-        # render_fps must equal 1 / (timestep * frame_skip)
-        # = 1 / (0.002 * 5) = 100 Hz
         "render_fps": 100,
     }
 
@@ -92,8 +104,8 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         restitution_range: Tuple[float, float] = (0.0, 0.3),
         healthy_z_range: Tuple[float, float] = _DEFAULT_HEALTHY_Z_RANGE,
         terminate_when_unhealthy: bool = True,
-        forward_reward_weight: float = 1.25,
-        healthy_reward: float = 5.0,
+        forward_reward_weight: float = 5.0,
+        healthy_reward: float = 1.0,
         ctrl_cost_weight: float = 0.1,
         render_mode: Optional[str] = None,
         frame_skip: int = 5,
@@ -133,6 +145,26 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             render_mode=render_mode,
         )
 
+        # ── Cache joint limits for action → target position mapping ──
+        # model.jnt_range shape: (n_joints_total, 2).
+        # Index 0 is the free joint (no limits), so we skip it.
+        self._joint_low = self.model.jnt_range[1:, 0].copy()
+        self._joint_high = self.model.jnt_range[1:, 1].copy()
+
+        # action=0 → default standing pose (init_qpos for joints)
+        # action=+1 → upper joint limit, action=-1 → lower joint limit
+        self._joint_init = self.init_qpos[7:].copy()  # skip free-joint (7 values)
+        self._range_up = self._joint_high - self._joint_init    # available range upward
+        self._range_down = self._joint_init - self._joint_low   # available range downward
+
+        # ── Cache actuator torque limits for PD clipping ─────────────
+        self._torque_low = self.model.actuator_ctrlrange[:, 0].copy()
+        self._torque_high = self.model.actuator_ctrlrange[:, 1].copy()
+
+        # ── Cache foot body IDs for contact sensing ──────────────────
+        self._r_foot_id = self.model.body("r_foot").id
+        self._l_foot_id = self.model.body("l_foot").id
+
     @property
     def is_healthy(self) -> bool:
         z = self.data.qpos[2]
@@ -142,11 +174,51 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
     def terminated(self) -> bool:
         return self._terminate_when_unhealthy and not self.is_healthy
 
+    def _action_to_torque(self, action: NDArray) -> NDArray:
+        """
+        Convert normalised action [-1, 1] to PD torque.
+
+        1.  action → target joint position within mechanical limits
+            action=0 → default standing pose (init_qpos)
+            action=+1 → upper joint limit
+            action=-1 → lower joint limit
+        2.  PD:  τ = kp · (target − q) − kd · q̇
+        3.  Clip to actuator force limits
+        """
+        # Map [-1, 1] → joint position (asymmetric around init pose)
+        target = np.where(
+            action >= 0,
+            self._joint_init + action * self._range_up,
+            self._joint_init + action * self._range_down,
+        )
+
+        # Current joint state (skip free-joint: 7 qpos, 6 qvel)
+        q = self.data.qpos[7:]
+        qd = self.data.qvel[6:]
+
+        # PD control
+        torque = _KP * (target - q) - _KD * qd
+
+        # Clip to actuator force limits
+        return np.clip(torque, self._torque_low, self._torque_high)
+
+    def _get_foot_contacts(self) -> NDArray:
+        """Return contact force magnitude for each foot via cfrc_ext.
+
+        cfrc_ext shape is (nbody, 6): [torque(3), force(3)].
+        We take the force magnitude (last 3 components).
+        VecNormalize handles scaling during training.
+        """
+        r_force = np.linalg.norm(self.data.cfrc_ext[self._r_foot_id, 3:])
+        l_force = np.linalg.norm(self.data.cfrc_ext[self._l_foot_id, 3:])
+        return np.array([r_force, l_force], dtype=np.float64)
 
     def step(self, action: NDArray) -> Tuple[NDArray, float, bool, bool, Dict]:
         xy_before = self.data.qpos[:2].copy()
 
-        self.do_simulation(action, self.frame_skip)
+        # PD position control: action [-1,1] → target pos → torque
+        torque = self._action_to_torque(action)
+        self.do_simulation(torque, self.frame_skip)
 
         xy_after = self.data.qpos[:2].copy()
         dt = self.dt
@@ -158,7 +230,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # Alive bonus
         healthy_reward = self._healthy_reward if self.is_healthy else 0.0
 
-        # Control cost
+        # Control cost (penalise large target deviations, not torques)
         ctrl_cost = self._ctrl_cost_weight * np.sum(np.square(action))
 
         reward = forward_reward + healthy_reward - ctrl_cost
@@ -179,9 +251,10 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         return observation, reward, terminated, False, info
 
     def _get_obs(self) -> NDArray:
-        qpos = self.data.qpos[2:].copy()   # shape (30,)
-        qvel = self.data.qvel.copy()        # shape (31,)
-        return np.concatenate([qpos, qvel])
+        qpos = self.data.qpos[2:].copy()       # shape (30,)
+        qvel = self.data.qvel.copy()            # shape (31,)
+        foot_contacts = self._get_foot_contacts()  # shape (2,)
+        return np.concatenate([qpos, qvel, foot_contacts])
 
     def reset_model(self) -> NDArray:
         qpos = self.init_qpos + self.np_random.uniform(
@@ -200,16 +273,6 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
     def _randomize_floor(self) -> None:
         """
         Re-sample floor friction and restitution at every episode reset.
-
-        MuJoCo's geom_friction has shape (ngeom, 3):
-            column 0 → slide friction (tangential)
-            column 1 → spin friction  (torsional)
-            column 2 → roll friction
-
-        We randomize the slide friction uniformly within ``friction_range``
-        and keep spin/roll friction at their default ratios relative to slide.
-        We also randomize the restitution (``geom_solref`` / ``geom_solimp``
-        energy parameter) for the floor geom.
         """
         floor_id = self.model.geom(name=_FLOOR_GEOM_NAME).id
 
