@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+import numpy as np
 import torch.nn as nn
 
 
@@ -61,6 +62,16 @@ class EnvironmentConfig:
     normalize_reward: bool = False
     clip_obs: float = 10.0
     gamma: float = 0.99
+    with_obstacles: bool = False
+
+
+@dataclass(frozen=True)
+class DepthRayConfig:
+    """Configuration for depth ray casting from robot head."""
+    n_rays: int = 64
+    fov: float = np.pi / 2
+    max_distance: float = 10.0
+    head_offset: tuple[float, float, float] = (0.0, 0.0, 0.19)
 
 
 @dataclass(frozen=True)
