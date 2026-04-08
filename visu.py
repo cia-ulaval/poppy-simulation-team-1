@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import numpy as np
 import gymnasium as gym
+from gymnasium.wrappers import TimeLimit
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
@@ -52,9 +53,10 @@ def evaluate_model(
         floor_noise=False,
         render_mode="human" if render else None,
     )
+    env = TimeLimit(env, max_episode_steps=1000)
     env = Monitor(env)
     env.reset(seed=seed)
-    
+
     env = DummyVecEnv([lambda: env])
     
     # Charger les statistiques de normalisation
@@ -206,13 +208,27 @@ Exemples d'utilisation:
     args = parser.parse_args()
     
     # Auto-détection de vec_normalize.pkl
+    # Cherche dans : même dossier, dossier parent (vec_normalize_final.pkl),
+    # puis le checkpoint VecNormalize le plus récent du dossier parent.
     vec_normalize_path = args.vec_normalize
     if vec_normalize_path is None:
-        model_dir = os.path.dirname(args.model_path)
-        potential_path = os.path.join(model_dir, "vec_normalize.pkl")
-        if os.path.exists(potential_path):
-            vec_normalize_path = potential_path
-            print(f"✓ vec_normalize.pkl trouvé automatiquement: {potential_path}\n")
+        model_dir = Path(args.model_path).parent
+        candidates = [
+            model_dir / "vec_normalize.pkl",
+            model_dir / "vec_normalize_final.pkl",
+            model_dir.parent / "vec_normalize_final.pkl",
+        ]
+        # Aussi chercher le checkpoint vecnormalize le plus récent dans le parent
+        parent_dir = model_dir.parent if model_dir.name == "best_model" else model_dir
+        ckpt_pkls = sorted(parent_dir.glob("*_vecnormalize_*_steps.pkl"))
+        if ckpt_pkls:
+            candidates.append(ckpt_pkls[-1])  # Le plus récent
+
+        for candidate in candidates:
+            if candidate.exists():
+                vec_normalize_path = str(candidate)
+                print(f"✓ VecNormalize trouvé automatiquement: {candidate}\n")
+                break
     
     # Lancer l'évaluation
     rewards, lengths = evaluate_model(
