@@ -1,81 +1,69 @@
 import argparse
-import logging
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.robot.robot_config import RobotConfig
-from src.robot.pypot_adapter import PypotAdapter
-from src.robot.action_mapper import ControlMode
-from src.robot.robot_controller import RobotController
+import numpy as np
+from stable_baselines3 import TD3, SAC, PPO, A2C
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from gymnasium.wrappers import TimeLimit
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("run_robot")
+from src.robot.SimulationAdaptater import SimulationAdapter
+from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
+
+MODEL_CLASSES = [TD3, SAC, PPO, A2C]
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Deploy SB3 model on Poppy Humanoid via pypot",
-    )
+def load_model(model_path: Path):
+    for cls in MODEL_CLASSES:
+        try:
+            return cls.load(str(model_path))
+        except Exception:
+            continue
+    raise ValueError(f"Could not load model from {model_path}")
 
-    parser.add_argument("--model", type=Path, required=True, help="Path to trained model (.zip)")
-    # stats de normalisation, généré pendant l'entrainement normalement
-    parser.add_argument("--vec-normalize", type=Path, default=None, help="Path to VecNormalize stats (.pkl)")
-    # déclaration du hardware etc, dans Poppy standard, JSON par défaut dans le package poppy-humanoid
-    parser.add_argument("--config-file", type=str, required=True, help="Path to pypot robot JSON config file")
-    parser.add_argument("--steps", type=int, default=None, help="Number of control steps")
-    parser.add_argument("--duration", type=float, default=None, help="Duration in seconds")
-    parser.add_argument("--freq", type=float, default=50.0, help="Control frequency in Hz (default: 50)")
-    parser.add_argument("--gain", type=float, default=30.0, help="Action gain (default: 30)")
-    parser.add_argument("--mode", choices=["delta", "direct"], default="delta", help="Control mode")
-    # si on disable il va penser toujours être droit 
-    parser.add_argument("--no-imu", action="store_true", help="Disable IMU")
 
-    return parser.parse_args()
+def load_vec_normalize(model_path: Path, vec_path: Path | None) -> VecNormalize | None:
+    path = vec_path or model_path.parent / "vec_normalize.pkl"
+    if not path.exists():
+        return None
+
+    def make_env():
+        env = PoppyHumanoidEnv(floor_noise=False, render_mode=None)
+        return TimeLimit(env, max_episode_steps=1000)
+
+    dummy = DummyVecEnv([make_env])
+    vn = VecNormalize.load(str(path), dummy)
+    vn.training = False
+    vn.norm_reward = False
+    return vn
 
 
 def main() -> int:
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="MuJoCo simulation + ROS publishing")
+    parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--vec-normalize", type=Path, default=None)
+    args = parser.parse_args()
+
+    model = load_model(args.model)
+    vec_normalize = load_vec_normalize(args.model, args.vec_normalize)
+    adapter = SimulationAdapter()
+    obs = adapter.reset()
 
     try:
-        import pypot.robot
-    except ImportError:
-        logger.error("pypot is not installed. Install with: pip install pypot")
-        sys.exit(1)
+        while True:
+            if vec_normalize is not None:
+                obs_input = vec_normalize.normalize_obs(obs.reshape(1, -1)).flatten()
+            else:
+                obs_input = obs
 
-    config = RobotConfig(
-        control_freq_hz=args.freq,
-        action_gain=args.gain,
-        has_imu=not args.no_imu,
-    )
-
-    logger.info("Connecting to robot via %s", args.config_file)
-    robot = pypot.robot.from_json(args.config_file)
-    adapter = PypotAdapter(robot, config=config)
-    logger.info("Robot connected.")
-
-    control_mode = ControlMode.DELTA if args.mode == "delta" else ControlMode.DIRECT
-    logger.info("Loading model from %s", args.model)
-    controller = RobotController.from_checkpoint(
-        model_path=args.model,
-        adapter=adapter,
-        vec_normalize_path=args.vec_normalize,
-        config=config,
-        control_mode=control_mode,
-    )
-
-    # Run the whole controller
-    logger.info("Starting control loop (freq=%.0fHz, mode=%s)", args.freq, args.mode)
-    try:
-        controller.run(n_steps=args.steps, duration_s=args.duration)
+            action, _ = model.predict(obs_input.reshape(1, -1), deterministic=True)
+            obs, _ = adapter.step(action.flatten())
+    except KeyboardInterrupt:
+        print("Stopped.")
     finally:
-        controller.close()
-        logger.info("Done.")
+        adapter.close()
 
     return 0
 
