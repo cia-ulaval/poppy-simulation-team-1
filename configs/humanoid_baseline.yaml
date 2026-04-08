@@ -1,0 +1,51 @@
+# ============================================================
+# Humanoid-v5 baseline — known-good PPO config
+#
+# Based on rl-baselines3-zoo tuned hyperparameters.
+#
+# Usage:
+#   python scripts/train_poppy.py --config configs/humanoid_baseline.yaml --baseline
+# ============================================================
+
+algorithm: PPO
+
+training:
+  total_timesteps: 5_000_000
+  seed: 42
+  checkpoint_freq: 200_000
+  eval_freq: 10_000
+  n_eval_episodes: 5
+  log_dir: ./logs/humanoid_baseline
+
+environment:
+  env_id: "Humanoid-v5"
+  n_envs: 64
+  terminate_when_unhealthy: true
+  healthy_z_range: [1.0, 2.0]
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+
+domain_randomization:
+  enabled: false
+
+ppo:
+  learning_rate: 2.5e-5           # 12x lower than before — critical
+  n_steps: 512                    # 512 * 64 envs = 32K buffer per update
+  batch_size: 256                 # Smaller batches = sharper gradients
+  n_epochs: 20                    # More passes over data
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2                # Start with small action noise (std≈0.14)
+  ortho_init: false
+
+figs_dir: ./figs/humanoid_baseline
