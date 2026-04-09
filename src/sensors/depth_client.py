@@ -9,6 +9,7 @@ import time
 import cv2
 import numpy as np
 import websockets
+import scripts.vision.depthmap_analysis as dmap
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -107,6 +108,9 @@ class DepthClient:
                                 * 255
                             ).astype(np.uint8)
                             cv2.imshow(window_name, depth_normalized)
+                            map=depth_array
+                            split_map=dmap.frame_splitting(map, 10)
+                            depth_map=dmap.splitframe_to_1Ddepthmap(split_map, 3.2)
 
                             if cv2.waitKey(1) & 0xFF == ord("q"):
                                 logger.info("User requested quit")
