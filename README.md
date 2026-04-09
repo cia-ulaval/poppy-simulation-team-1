@@ -47,3 +47,70 @@ Tu vas aimer ce projet si :
 
 ## Contact & Liens Utiles
 *   **Référence :** [Poppy Project](https://www.poppy-project.org/)
+
+## Lancer la Simulation ROS 2
+
+### Build de l'image Docker
+
+À la racine
+```bash
+docker build -t poppy-rolling .
+```
+
+### Lancer `run_robot`
+
+
+```bash
+docker run --rm -it --network host --ipc host \
+  -e ROS_DOMAIN_ID=0 \
+  -e ROS_LOCALHOST_ONLY=0 \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  poppy-rolling \
+  bash -lc 'source /opt/ros/rolling/setup.bash && xvfb-run -a python scripts/run_robot.py --model <best_model_path.zip> --vec-normalize <best_vec_norm_path>'
+```
+
+Par exemple:
+```bash
+docker run --rm -it --network host --ipc host \
+  -e ROS_DOMAIN_ID=0 \
+  -e ROS_LOCALHOST_ONLY=0 \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  poppy-rolling \
+  bash -lc 'source /opt/ros/rolling/setup.bash && xvfb-run -a python scripts/run_robot.py --model logs/poppy/2026-04-08_17-58-25/best_model/best_model.zip --vec-normalize logs/poppy/2026-04-08_17-58-25/best_model/vec_normalize.pkl'
+```
+
+
+### Vérifier le topic ROS
+
+Avec un autre terminal sur la même machine :
+
+Pour lsiter
+```bash
+docker run --rm --network host --ipc host \
+  -e ROS_DOMAIN_ID=0 \
+  -e ROS_LOCALHOST_ONLY=0 \
+  ros:rolling-ros-core \
+  bash -lc 'source /opt/ros/rolling/setup.bash && ros2 topic list | grep /poppy_motor_state'
+```
+
+Pour echo et inspecter le contenu des messages
+```bash
+docker run --rm --network host --ipc host \
+  -e ROS_DOMAIN_ID=0 \
+  -e ROS_LOCALHOST_ONLY=0 \
+  ros:rolling-ros-core \
+  bash -lc 'source /opt/ros/rolling/setup.bash && ros2 topic echo --once /poppy_motor_state'
+```
+
+Depuis une autre machine ROS 2 sur le même réseau :
+> L'autre machine peut être dans un docker tant qu'elle a --network host et que les deux machines sont sur le même réseau, elles devraient découvrir les topics. Firewall UDP ouvert 
+
+```bash
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+source /opt/ros/rolling/setup.bash
+ros2 topic list
+ros2 topic echo /poppy_motor_state
+```
