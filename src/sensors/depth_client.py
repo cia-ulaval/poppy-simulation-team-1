@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class DepthClient:
     def __init__(
         self,
-        host: str = "108.39.26.2",
-        port: int = 46533,
+        host: str = "localhost",
+        port: int = 8000,
         webcam_id: int = 0,
         target_fps: int = 15,
         jpeg_quality: int = 85,
@@ -38,6 +38,8 @@ class DepthClient:
 
     def capture_thread_func(self):
         cap = cv2.VideoCapture(self.webcam_id)
+        self.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         if not cap.isOpened():
             logger.error(f"Failed to open webcam {self.webcam_id}")
             return
@@ -94,11 +96,17 @@ class DepthClient:
                         await websocket.send(frame_bytes)
                         depth_bytes = await websocket.recv()
 
-                        nparr = np.frombuffer(depth_bytes, np.uint8)
-                        depth_frame = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+                        depth_array = np.frombuffer(depth_bytes, np.float16).reshape(
+                            self.frame_height, self.frame_width
+                        )
 
-                        if depth_frame is not None:
-                            cv2.imshow(window_name, depth_frame)
+                        if depth_array is not None:
+                            depth_normalized = (
+                                (depth_array - depth_array.min())
+                                / (depth_array.max() - depth_array.min() + 1e-8)
+                                * 255
+                            ).astype(np.uint8)
+                            cv2.imshow(window_name, depth_normalized)
 
                             if cv2.waitKey(1) & 0xFF == ord("q"):
                                 logger.info("User requested quit")
@@ -133,11 +141,11 @@ def main():
     parser.add_argument(
         "--host",
         type=str,
-        default="108.39.26.2",
+        default="localhost",
         help="Server host (default: localhost)",
     )
     parser.add_argument(
-        "--port", type=int, default=46533, help="Server port (default: 8765)"
+        "--port", type=int, default=8000, help="Server port (default: 8765)"
     )
     parser.add_argument(
         "--webcam", type=int, default=0, help="Webcam device ID (default: 0)"

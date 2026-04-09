@@ -36,15 +36,9 @@ async def handle_client(websocket):
                 outputs = depth_estimator(pil_image)
 
                 depth_array = np.array(outputs["depth"])
-                depth_normalized = (
-                    (depth_array - depth_array.min())
-                    / (depth_array.max() - depth_array.min() + 1e-8)
-                    * 255
-                ).astype(np.uint8)
+                print(depth_array.shape)
 
-                _, encoded_depth = cv2.imencode(".jpg", depth_normalized)
-
-                await websocket.send(encoded_depth.tobytes())
+                await websocket.send(depth_array.astype(np.float16).tobytes())
 
             except Exception as e:
                 logger.error(f"Error processing frame: {e}")
