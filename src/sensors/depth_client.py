@@ -7,12 +7,34 @@ import threading
 import time
 
 import cv2
+import depthmap_analysis as dmap
 import numpy as np
 import websockets
-import scripts.vision.depthmap_analysis as dmap
+from scipy.signal import convolve2d
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def highlight_warning(warning_map, threshold, frame):
+    region_width = frame.shape[1] // len(warning_map)
+    for i, region in enumerate(warning_map):
+        if region < threshold and region > 0:
+            frame[:, i * region_width : (i + 1) * region_width, 0] = 0
+            frame[:, i * region_width : (i + 1) * region_width, 1] = 0
+            frame[:, i * region_width : (i + 1) * region_width, 2] = np.clip(
+                frame[:, i * region_width : (i + 1) * region_width, 2] / 2 + 127, 0, 255
+            )
+
+    return frame
+
+
+def gaussian_kernel(size, sigma=1.0):
+    # Create a 1D Gaussian distribution
+    ax = np.linspace(-(size - 1) / 2.0, (size - 1) / 2.0, size)
+    gauss = np.exp(-0.5 * np.square(ax) / np.square(sigma))
+    kernel = np.outer(gauss, gauss)  # Create 2D kernel from 1D
+    return kernel / np.sum(kernel)  # Normalize to ensure sum is 1
 
 
 class DepthClient:
@@ -24,6 +46,8 @@ class DepthClient:
         target_fps: int = 15,
         jpeg_quality: int = 85,
         queue_size: int = 10,
+        focal_length: float = 3.8,
+        threshold: float = 1.0,
     ):
         self.host = host
         self.port = port
@@ -31,6 +55,8 @@ class DepthClient:
         self.target_fps = target_fps
         self.jpeg_quality = jpeg_quality
         self.queue_size = queue_size
+        self.focal_length = focal_length
+        self.threshold = threshold
 
         self.frame_queue = queue.Queue(maxsize=queue_size)
         self.stop_event = threading.Event()
@@ -39,8 +65,10 @@ class DepthClient:
 
     def capture_thread_func(self):
         cap = cv2.VideoCapture(self.webcam_id)
-        self.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = 470
+        self.frame_width = 630
+        # self.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # self.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         if not cap.isOpened():
             logger.error(f"Failed to open webcam {self.webcam_id}")
             return
@@ -100,17 +128,28 @@ class DepthClient:
                         depth_array = np.frombuffer(depth_bytes, np.float16).reshape(
                             self.frame_height, self.frame_width
                         )
+                        depth_array = depth_array * self.focal_length / 2
 
                         if depth_array is not None:
+                            gaussian = gaussian_kernel(5, sigma=1.0)
+                            map = convolve2d(depth_array, gaussian, mode="same")
+                            # split_map = dmap.frame_splitting(map, 10)
+                            # depth_map = dmap.splitframe_to_1Ddepthmap(split_map, 3.8)
+                            depth_map = dmap.regions_depth(map, 10)
+                            print([float(x) for x in depth_map])
+                            # depth_normalized = (
+                            #     np.clip(depth_array / 2, 0, 1) * 255
+                            # ).astype(np.uint8)
                             depth_normalized = (
                                 (depth_array - depth_array.min())
                                 / (depth_array.max() - depth_array.min() + 1e-8)
                                 * 255
                             ).astype(np.uint8)
-                            cv2.imshow(window_name, depth_normalized)
-                            map=depth_array
-                            split_map=dmap.frame_splitting(map, 10)
-                            depth_map=dmap.splitframe_to_1Ddepthmap(split_map, 3.2)
+                            depth_frame = np.stack([depth_normalized] * 3, axis=-1)
+                            depth_frame = highlight_warning(
+                                depth_map, self.threshold, depth_frame
+                            )
+                            cv2.imshow(window_name, depth_frame)
 
                             if cv2.waitKey(1) & 0xFF == ord("q"):
                                 logger.info("User requested quit")
@@ -145,11 +184,11 @@ def main():
     parser.add_argument(
         "--host",
         type=str,
-        default="localhost",
+        default="96.241.192.5",
         help="Server host (default: localhost)",
     )
     parser.add_argument(
-        "--port", type=int, default=8000, help="Server port (default: 8765)"
+        "--port", type=int, default=45368, help="Server port (default: 8765)"
     )
     parser.add_argument(
         "--webcam", type=int, default=0, help="Webcam device ID (default: 0)"
@@ -163,6 +202,15 @@ def main():
     parser.add_argument(
         "--queue-size", type=int, default=10, help="Frame queue size (default: 10)"
     )
+    parser.add_argument(
+        "--focal", type=float, default=3.8, help="Focal length in mm (default: 3.8)"
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=1.0,
+        help="Threshold for depth estimation (default: 1.0)",
+    )
 
     args = parser.parse_args()
 
@@ -173,6 +221,8 @@ def main():
         target_fps=args.fps,
         jpeg_quality=args.quality,
         queue_size=args.queue_size,
+        focal_length=args.focal,
+        threshold=args.threshold,
     )
 
     try:

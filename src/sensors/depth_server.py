@@ -1,9 +1,12 @@
 import asyncio
 import logging
+import traceback
 
 import cv2
 import numpy as np
+import torch
 import websockets
+from depth_anything_3.api import DepthAnything3
 from PIL import Image
 from transformers import pipeline
 
@@ -13,9 +16,9 @@ logger = logging.getLogger(__name__)
 HOST = "0.0.0.0"
 PORT = 8000
 
-depth_estimator = pipeline(
-    task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf"
-)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = DepthAnything3.from_pretrained("depth-anything/da3metric-large")
+model = model.to(device=device)
 
 
 async def handle_client(websocket):
@@ -30,18 +33,26 @@ async def handle_client(websocket):
                     logger.warning("Failed to decode frame")
                     continue
 
+                print("Decoded frame")
                 frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(frame_rgb)
+                pil_image.save("input.png")
 
-                outputs = depth_estimator(pil_image)
+                print("Running inference")
 
-                depth_array = np.array(outputs["depth"])
+                outputs = model.inference(
+                    "input.png",
+                    export_format="npz",  # Options: glb, npz, ply, mini_npz, gs_ply, gs_video
+                )
+                print("Inference completed")
+
+                depth_array = np.array(outputs["depth"][0])
                 print(depth_array.shape)
 
                 await websocket.send(depth_array.astype(np.float16).tobytes())
 
             except Exception as e:
-                logger.error(f"Error processing frame: {e}")
+                logger.error(f"Error processing frame: {traceback.format_exc()}")
                 continue
 
     except websockets.exceptions.ConnectionClosed:
