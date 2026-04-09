@@ -136,7 +136,6 @@ class DepthClient:
                             # split_map = dmap.frame_splitting(map, 10)
                             # depth_map = dmap.splitframe_to_1Ddepthmap(split_map, 3.8)
                             depth_map = dmap.regions_depth(map, 10)
-                            print([float(x) for x in depth_map])
                             # depth_normalized = (
                             #     np.clip(depth_array / 2, 0, 1) * 255
                             # ).astype(np.uint8)

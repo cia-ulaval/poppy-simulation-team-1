@@ -83,9 +83,7 @@ def loop(frames, n_region, focal):
 
 if __name__ == "__main__":
     splitframe = frame_splitting(Frames[0], 10)
-    # print(splitframe.shape[0]*splitframe.shape[1], splitframe.shape, Frames[0].shape[0]*Frames[0].shape[1], Frames[0].shape)
     regionmap = splitframe_to_1Ddepthmap(splitframe, 3.2)
-    # print(regionmap, len(regionmap))
     warningmap = close_warning(regionmap, 0.2, splitframe, 3.2)
     print(
         warningmap,
