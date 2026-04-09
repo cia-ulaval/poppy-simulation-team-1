@@ -85,12 +85,11 @@
     <geom name="floor" type="plane" size="0 0 0.05"
           rgba=".8 .8 .8 1" friction="1.0 0.005 0.0001"
           condim="3" contype="1" conaffinity="1" />
-
     <!-- ============================================================
          ROOT BODY: pelvis
          Initial height chosen so the feet clear the ground at rest.
          ============================================================ -->
-    <body name="pelvis" pos="0 0 0.46">
+    <body name="pelvis" pos="0 0 0.41">
       <freejoint name="root" />
       <inertial pos="-0.000135 -0.000399 0.001956" mass="0.185200"
                 fullinertia="1.01804e-4 1.42404e-4 9.38193e-5
@@ -119,7 +118,8 @@
           <geom type="mesh" mesh="r_hip_motor_c" />
 
           <body name="r_thigh" pos="0 -0.024 0">
-            <joint name="r_hip_y" axis="-1 0 0" range="-1.483530 1.832596" />
+            <!-- <joint name="r_hip_y" axis="-1 0 0" range="-1.483530 1.832596" /> -->
+            <joint name="r_hip_y" axis="-1 0 0" range="-1.2 1.2" />
             <inertial pos="0.019250 -0.140974 0.000433" mass="0.116386"
                       fullinertia="3.57762e-4 5.14620e-5 3.70172e-4
                                    -4.71321e-5 2.18885e-6 -5.54069e-6" />
@@ -170,7 +170,8 @@
           <geom type="mesh" mesh="l_hip_motor_c" />
 
           <body name="l_thigh" pos="0 -0.024 0">
-            <joint name="l_hip_y" axis="1 0 0" range="-1.815142 1.466077" />
+            <!-- <joint name="l_hip_y" axis="1 0 0" range="-1.815142 1.466077" /> -->
+            <joint name="l_hip_y" axis="1 0 0" range="-1.2 1.2" />
             <inertial pos="-0.019252 -0.142231 0.000612" mass="0.114854"
                       fullinertia="3.44974e-4 5.11655e-5 3.57718e-4
                                    4.73949e-5 -2.20113e-6 -3.39115e-6" />
