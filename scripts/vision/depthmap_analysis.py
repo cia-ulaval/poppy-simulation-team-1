@@ -46,6 +46,26 @@ def splitframe_to_1Ddepthmap(frame, focal):
         dmap.append((focal*min(Region)/300))
     return dmap
 
+def close_warning(dmap, threshold, frame, focal):
+    warning_map=[]
+    region=[]
+    size=frame.size
+    n_regions=len(dmap)
+    length=size[0]
+    lregion=length/n_regions
+    regions=[0+l*lregion for l in range(n_regions)]
+    for i, distance in enumerate(dmap):
+        if distance < threshold:
+            for pixel in splitframe[i]:
+                pixel=(300*distance)/focal
+                region.append(pixel)
+            warning_map.append(region)
+        else:
+            warning_map.append(splitframe[i])
+    return np.array(warning_map)
+
+            
+
 def loop(frames, n_region, focal):
     maps=[]
     splitFrames=[]
@@ -57,7 +77,11 @@ def loop(frames, n_region, focal):
     return maps
 
 
-# splitframe=frame_splitting(Frames[0], 11)
-# print(splitframe.shape[0]*splitframe.shape[1], splitframe.shape, Frames[0].shape[0]*Frames[0].shape[1], Frames[0].shape)
-# regionmap=splitframe_to_1Ddepthmap(splitframe, 300)
+splitframe=frame_splitting(Frames[0], 10)
+#print(splitframe.shape[0]*splitframe.shape[1], splitframe.shape, Frames[0].shape[0]*Frames[0].shape[1], Frames[0].shape)
+regionmap=splitframe_to_1Ddepthmap(splitframe, 3.2)
 # print(regionmap, len(regionmap))
+warningmap=close_warning(regionmap, 0.2, splitframe, 3.2)
+print(warningmap, warningmap.shape, splitframe.shape, Frames[0].shape[0]*Frames[0].shape[1])
+
+
