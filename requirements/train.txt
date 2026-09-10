@@ -1,0 +1,9 @@
+# Entraînement : simulation MuJoCo + suivi d'expériences + figures.
+-r base.txt
+mujoco>=3.0.0
+gymnasium[mujoco]>=0.29.0
+tensorboard
+matplotlib
+pandas
+imageio>=2.31.0
+imageio-ffmpeg

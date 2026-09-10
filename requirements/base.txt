@@ -1,0 +1,8 @@
+# Socle commun à toutes les images : ce que le RL a besoin partout.
+# torch est installé séparément dans le Dockerfile pour choisir l'index
+# (CPU par défaut, CUDA en option) ; il est répété ici pour l'install native.
+numpy
+pyyaml
+tqdm
+torch>=2.0.0
+stable-baselines3>=2.0.0

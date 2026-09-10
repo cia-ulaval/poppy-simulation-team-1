@@ -1,0 +1,26 @@
+# Environnements virtuels et caches : jamais dans le contexte de build.
+.venv/
+venv/
+env/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Git et outillage
+.git/
+.gitignore
+.idea/
+.vscode/
+.claude/
+
+# Sorties d'exécution : ~691 Mo, elles n'ont rien à faire dans une image.
+logs/
+ppo_logs/
+baseline_logs/
+runs/
+figs/
+scenes/
+*.mp4
+
+# Documentation : utile aux humains, inutile au conteneur.
+docs/
