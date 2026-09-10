@@ -128,8 +128,17 @@ docker compose --profile mock run --rm rosbridge bash -lc "source /opt/ros/humbl
 
 ### Pont robot (+ faux robot)
 
+Le service `bridge` a pour commande par défaut `run_robot.py --help` : il
+affiche l'aide et sort. **C'est voulu** — rien ne doit partir vers un robot
+parce que quelqu'un a tapé `up`. Un `docker compose --profile robot up` verra
+donc le pont s'arrêter aussitôt : ce n'est pas une panne.
+
+Pour travailler vraiment, on démarre le faux robot en fond puis on lance le
+pont avec sa commande :
+
 ```bash
-docker compose --profile robot up
+docker compose --profile mock up -d
+docker compose --profile robot run --rm bridge python scripts/run_robot.py --help
 ```
 
 Pour viser le **vrai** robot au lieu du faux, il faudra d'abord câbler
@@ -159,18 +168,24 @@ machines de l'équipe, sans pilote. MuJoCo tourne de toute façon sur CPU ; le
 GPU ne sert qu'au réseau de neurones, et sur des politiques de cette taille le
 gain est modeste.
 
-Quand vous en voulez quand même :
+Quand vous en voulez quand même, on **superpose** `compose.gpu.yaml` au
+fichier principal. Pas de second service à maintenir : même image, même
+volumes, seuls l'index torch et l'accès au matériel changent.
 
 ```bash
-docker compose --profile gpu build train-gpu
-docker compose --profile gpu up
+docker compose -f compose.yaml -f compose.gpu.yaml --profile train build
+docker compose -f compose.yaml -f compose.gpu.yaml --profile train up
 ```
 
 Vérifier que le conteneur voit bien la carte :
 
 ```bash
-docker compose --profile gpu run --rm train-gpu python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+docker compose -f compose.yaml -f compose.gpu.yaml --profile train run --rm train python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
+
+Attention : la même étiquette `poppy-train:latest` sert aux deux variantes.
+Après un build GPU, un build CPU l'écrase, et inversement. Si vous alternez,
+reconstruisez.
 
 Si ça affiche `False`, le problème est dans WSL/NVIDIA Container Toolkit, pas
 dans nos images.

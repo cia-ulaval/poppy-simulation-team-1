@@ -7,3 +7,9 @@
 mujoco>=3.0.0
 gymnasium[mujoco]>=0.29.0
 roslibpy>=1.7.0
+
+# Tiré malgré nous : run_robot.py importe src.robot, ce qui déclenche
+# src/__init__.py -> src.training -> src.visualization.plotter -> matplotlib.
+# Le pont n'a rien à tracer ; c'est le paquet racine qui importe trop.
+# Alléger src/__init__.py permettrait de retirer cette ligne.
+matplotlib
