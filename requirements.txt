@@ -1,16 +1,15 @@
-mujoco>=3.0.0
-gymnasium[mujoco]>=0.29.0
-stable-baselines3>=2.0.0
-tensorboard
-pyyaml
-numpy
-matplotlib
-pandas
-tqdm
-imageio>=2.31.0
-imageio-ffmpeg
-opencv-python>=4.8.0
-pillow>=10.0.0
+# Installation native complète, pour un poste de travail : entraînement,
+# viewer MuJoCo (fenêtre OpenGL), pont robot et client de profondeur.
+#
+# Les images Docker n'utilisent PAS ce fichier. Chacune installe son propre
+# requirements/<cible>.txt. Voir docs/DOCKER.md.
+-r requirements/train.txt
+-r requirements/bridge.txt
+
+# Vision, variante native : opencv en version GUI, parce que
+# src/sensors/depth_client.py ouvre une fenêtre (cv2.imshow).
+# L'image Docker du serveur utilise la variante headless.
 transformers>=4.35.0
-torch>=2.0.0
+pillow>=10.0.0
 websockets>=12.0
+opencv-python>=4.8.0

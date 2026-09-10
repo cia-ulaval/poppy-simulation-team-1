@@ -1,0 +1,9 @@
+# Pont vers le robot réel via rosbridge (websocket) : aucune installation
+# ROS n'est requise côté client, roslibpy suffit.
+#
+# MuJoCo est nécessaire malgré tout : scripts/run_robot.py reconstruit
+# l'environnement pour recharger vec_normalize.pkl (voir load_vec_normalize).
+-r base.txt
+mujoco>=3.0.0
+gymnasium[mujoco]>=0.29.0
+roslibpy>=1.7.0

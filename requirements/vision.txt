@@ -1,0 +1,13 @@
+# Serveur de profondeur (src/sensors/depth_server.py).
+# opencv headless : le serveur n'ouvre aucune fenêtre. Le client
+# (depth_client.py, cv2.imshow) tourne côté hôte, pas ici.
+#
+# MANQUANT : depth_server.py importe `depth_anything_3`, qui n'est pas
+# publié sur PyPI et n'a jamais figuré dans requirements.txt. L'image se
+# construit, mais le serveur ne démarrera pas tant que cette dépendance
+# n'est pas résolue. Voir docs/DOCKER.md § Limites connues.
+-r base.txt
+transformers>=4.35.0
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+websockets>=12.0
