@@ -1,0 +1,131 @@
+# Stack Poppy Simulation.
+#
+# Rien ne démarre par défaut : chaque service est derrière un profil, pour
+# qu'un `docker compose up` distrait ne lance pas un entraînement de 10M pas.
+#
+#   docker compose --profile train  up        entraînement + TensorBoard
+#   docker compose --profile mock   up        faux robot (rosbridge seul)
+#   docker compose --profile robot  up        pont + faux robot
+#   docker compose --profile vision up        serveur de profondeur
+#
+# Voir docs/DOCKER.md pour la liste complète des commandes.
+
+x-build-common: &build-common
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    # CPU par défaut. Pour construire en CUDA :
+    #   TORCH_INDEX=https://download.pytorch.org/whl/cu121 docker compose build
+    TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cpu}
+
+services:
+
+  # --- Entraînement ------------------------------------------------------
+  train:
+    build:
+      <<: *build-common
+      target: train
+    image: poppy-train:latest
+    profiles: ["train"]
+    volumes:
+      # Le code est monté pour itérer sans reconstruire l'image.
+      # Il est aussi copié dedans, pour que l'image reste utilisable seule.
+      - ./src:/workspace/src:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./configs:/workspace/configs:ro
+      - ./assets:/workspace/assets:ro
+      # Les sorties, elles, doivent survivre au conteneur.
+      - ./logs:/workspace/logs
+      - ./figs:/workspace/figs
+    command:
+      - python
+      - scripts/train_poppy.py
+      - --config
+      - configs/poppy_robust.yaml
+
+  # Variante GPU. Même image, mais construite avec l'index CUDA et lancée
+  # avec accès au matériel. Nécessite Docker Desktop en backend WSL 2 et le
+  # NVIDIA Container Toolkit.
+  train-gpu:
+    build:
+      <<: *build-common
+      target: train
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu121
+    image: poppy-train:gpu
+    profiles: ["gpu"]
+    volumes:
+      - ./src:/workspace/src:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./configs:/workspace/configs:ro
+      - ./assets:/workspace/assets:ro
+      - ./logs:/workspace/logs
+      - ./figs:/workspace/figs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+    command:
+      - python
+      - scripts/train_poppy.py
+      - --config
+      - configs/poppy_robust.yaml
+
+  tensorboard:
+    build:
+      <<: *build-common
+      target: train
+    image: poppy-train:latest
+    profiles: ["train", "gpu"]
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./logs:/workspace/logs:ro
+    command: ["tensorboard", "--logdir", "/workspace/logs", "--host", "0.0.0.0", "--port", "6006"]
+
+  # --- Robot réel --------------------------------------------------------
+  bridge:
+    build:
+      <<: *build-common
+      target: bridge
+    image: poppy-bridge:latest
+    profiles: ["robot"]
+    depends_on:
+      - rosbridge
+    volumes:
+      - ./src:/workspace/src:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./configs:/workspace/configs:ro
+      - ./assets:/workspace/assets:ro
+    environment:
+      # Pointe vers le faux robot de cette stack. Pour viser le vrai robot,
+      # mettre son IP ici — mais voir l'avertissement du Dockerfile :
+      # l'adresse est encore codée en dur dans ros_publisher.py.
+      POPPY_ROSBRIDGE_HOST: ${POPPY_ROSBRIDGE_HOST:-rosbridge}
+      POPPY_ROSBRIDGE_PORT: ${POPPY_ROSBRIDGE_PORT:-9090}
+
+  # Faux robot : un rosbridge nu, sans physique. Il sert à vérifier que le
+  # pont se connecte et publie les bons messages, sans mobiliser le matériel.
+  rosbridge:
+    build:
+      <<: *build-common
+      target: rosbridge
+    image: poppy-rosbridge:latest
+    profiles: ["robot", "mock"]
+    ports:
+      - "9090:9090"
+
+  # --- Vision ------------------------------------------------------------
+  vision:
+    build:
+      <<: *build-common
+      target: vision
+    image: poppy-vision:latest
+    profiles: ["vision"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/workspace/src:ro
