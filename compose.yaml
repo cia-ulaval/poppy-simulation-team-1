@@ -43,43 +43,15 @@ services:
       - --config
       - configs/poppy_robust.yaml
 
-  # Variante GPU. Même image, mais construite avec l'index CUDA et lancée
-  # avec accès au matériel. Nécessite Docker Desktop en backend WSL 2 et le
-  # NVIDIA Container Toolkit.
-  train-gpu:
-    build:
-      <<: *build-common
-      target: train
-      args:
-        TORCH_INDEX: https://download.pytorch.org/whl/cu121
-    image: poppy-train:gpu
-    profiles: ["gpu"]
-    volumes:
-      - ./src:/workspace/src:ro
-      - ./scripts:/workspace/scripts:ro
-      - ./configs:/workspace/configs:ro
-      - ./assets:/workspace/assets:ro
-      - ./logs:/workspace/logs
-      - ./figs:/workspace/figs
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: ["gpu"]
-    command:
-      - python
-      - scripts/train_poppy.py
-      - --config
-      - configs/poppy_robust.yaml
-
+  # Réutilise l'image construite par `train` : pas de bloc `build:` ici.
+  # Sinon la surcouche GPU ferait construire deux fois poppy-train:latest,
+  # une fois en CUDA (train) et une fois en CPU (tensorboard), avec un
+  # gagnant imprévisible.
   tensorboard:
-    build:
-      <<: *build-common
-      target: train
     image: poppy-train:latest
-    profiles: ["train", "gpu"]
+    depends_on:
+      - train
+    profiles: ["train"]
     ports:
       - "6006:6006"
     volumes:
@@ -87,6 +59,11 @@ services:
     command: ["tensorboard", "--logdir", "/workspace/logs", "--host", "0.0.0.0", "--port", "6006"]
 
   # --- Robot réel --------------------------------------------------------
+  #
+  # La commande par défaut est `run_robot.py --help` : le conteneur affiche
+  # l'aide et sort. C'est volontaire — rien ne doit partir vers un robot
+  # parce que quelqu'un a tapé `up`. Pour piloter réellement, il faut passer
+  # la commande explicitement (`docker compose run --rm bridge ...`).
   bridge:
     build:
       <<: *build-common

@@ -1,0 +1,23 @@
+# Surcouche GPU.
+#
+# On ne duplique pas le service d'entraînement : on superpose ce fichier au
+# principal. Même nom d'image, même volumes, même commande — seuls l'index
+# torch et l'accès au matériel changent. Une seule image à construire.
+#
+#   docker compose -f compose.yaml -f compose.gpu.yaml --profile train build
+#   docker compose -f compose.yaml -f compose.gpu.yaml --profile train up
+#
+# Prérequis : Docker Desktop en backend WSL 2 + NVIDIA Container Toolkit.
+
+services:
+  train:
+    build:
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu121
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]

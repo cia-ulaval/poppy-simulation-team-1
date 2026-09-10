@@ -20,6 +20,12 @@ baseline_logs/
 runs/
 *.mp4
 
+# figs/ est créé par les conteneurs. On garde le dossier versionné (sinon
+# Docker le crée en root sur un hôte Linux et l'utilisateur du conteneur ne
+# peut pas y écrire), mais pas son contenu.
+figs/*
+!figs/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

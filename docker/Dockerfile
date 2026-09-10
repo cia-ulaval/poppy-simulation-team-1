@@ -108,7 +108,10 @@ COPY --chown=poppy:poppy src/ /workspace/src/
 
 EXPOSE 8000
 USER poppy
-CMD ["python", "-m", "src.sensors.depth_server"]
+# Lancé par chemin de fichier, pas par `python -m`. Passer par le module
+# importerait le paquet `src`, dont les __init__ tirent mujoco, gymnasium et
+# matplotlib — absents de cette image, et sans rapport avec la profondeur.
+CMD ["python", "src/sensors/depth_server.py"]
 
 
 # ---------------------------------------------------------------------------
