@@ -1,0 +1,17 @@
+# Normalisation des fins de ligne.
+#
+# On développe sous Windows, les conteneurs tournent sous Linux. Un fichier
+# livré en CRLF dans une image casse à l'exécution (shebang illisible,
+# `bash\r: not found`). Ces fichiers-là restent donc en LF, quelle que soit
+# la machine qui les édite.
+
+* text=auto
+
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+*.sh            text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+requirements.txt        text eol=lf
+requirements/*.txt      text eol=lf
+.dockerignore   text eol=lf
