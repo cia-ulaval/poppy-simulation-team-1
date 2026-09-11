@@ -35,6 +35,9 @@ from src.config import (
     DomainRandomizationConfig,
     PoppyEnvironmentConfig,
     EnvironmentConfig,
+    as_evaluation_config,
+    load_yaml,
+    make_poppy_env_config,
 )
 from stable_baselines3.common.vec_env import VecNormalize, sync_envs_normalization
 
@@ -55,10 +58,6 @@ _ACTIVATION_MAP = {
     "elu":  nn.ELU,
 }
 
-
-def load_yaml(path: Path) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
 
 
 def parse_args() -> argparse.Namespace:
@@ -147,24 +146,8 @@ def build_config(cfg: dict, args: argparse.Namespace) -> dict:
     return cfg
 
 
-def make_env_config(cfg: dict) -> PoppyEnvironmentConfig:
-    env_cfg = cfg.get("environment", {})
-    dr_cfg  = cfg.get("domain_randomization", {})
-    return PoppyEnvironmentConfig(
-        terminate_when_unhealthy=env_cfg.get("terminate_when_unhealthy", True),
-        healthy_z_range=tuple(env_cfg.get("healthy_z_range", [0.25, 0.70])),
-        n_envs=env_cfg.get("n_envs", 16),
-        normalize_obs=env_cfg.get("normalize_obs", True),
-        normalize_reward=env_cfg.get("normalize_reward", False),
-        clip_obs=env_cfg.get("clip_obs", 10.0),
-        gamma=env_cfg.get("gamma", 0.99),
-        frame_skip=env_cfg.get("frame_skip", 5),
-        domain_randomization=DomainRandomizationConfig(
-            enabled=dr_cfg.get("enabled", True),
-            friction_range=tuple(dr_cfg.get("friction_range", [0.5, 1.5])),
-            restitution_range=tuple(dr_cfg.get("restitution_range", [0.0, 0.3])),
-        ),
-    )
+# La construction de la configuration d'environnement vit dans
+# src/config/loaders.py : l'évaluation doit lire le YAML exactement pareil.
 
 
 def make_policy_kwargs(cfg: dict, algo_name: str) -> dict:
@@ -261,22 +244,14 @@ def main() -> int:
         print(f"  Env               : {base_config.env_id} (baseline)")
     else:
         # Custom Poppy Humanoid
-        env_config = make_env_config(cfg)
+        env_config = make_poppy_env_config(cfg)
         train_env = HumanoidEnvFactory.create_poppy_training_env(
             config=env_config,
             seed=seed,
         )
-        eval_env_config = PoppyEnvironmentConfig(
-            terminate_when_unhealthy=env_config.terminate_when_unhealthy,
-            healthy_z_range=env_config.healthy_z_range,
-            n_envs=1,
-            normalize_obs=env_config.normalize_obs,
-            normalize_reward=False,
-            clip_obs=env_config.clip_obs,
-            gamma=env_config.gamma,
-            frame_skip=env_config.frame_skip,
-            domain_randomization=DomainRandomizationConfig(enabled=False),
-        )
+        # Même dérivation que scripts/evaluate.py : un environnement, pas de
+        # normalisation des récompenses, pas de randomisation du sol.
+        eval_env_config = as_evaluation_config(env_config)
         eval_env = HumanoidEnvFactory.create_poppy_training_env(
             config=eval_env_config,
             n_envs=1,
