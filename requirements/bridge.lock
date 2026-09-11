@@ -1,0 +1,54 @@
+# Versions exactes, relevées dans l'image poppy-bridge construite le 2026-09-11.
+#
+# Généré par : docker run --rm poppy-bridge:latest python -m pip freeze
+# Ne pas éditer à la main. Pour régénérer après un changement de
+# requirements/bridge.txt, voir docs/DOCKER.md § Figer les versions.
+#
+# torch porte un suffixe local (+cpu) absent de PyPI : la ligne
+# --extra-index-url ci-dessous rend ce fichier installable tel quel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+absl-py==2.5.0
+attrs==26.1.0
+autobahn==26.7.1
+Automat==25.4.16
+cbor2==6.1.4
+cffi==2.1.1
+cloudpickle==3.1.2
+constantly==23.10.4
+cryptography==50.0.1
+etils==1.14.0
+Farama-Notifications==0.0.6
+filelock==3.32.3
+fsspec==2026.7.0
+glfw==2.10.2
+gymnasium==1.3.0
+hyperlink==21.0.0
+idna==3.19
+ImageIO==2.37.4
+Incremental==24.11.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+mpmath==1.3.0
+msgpack==1.2.2
+mujoco==3.13.0
+networkx==3.6.1
+numpy==2.4.6
+packaging==26.3
+pillow==12.3.0
+pycparser==3.0
+PyOpenGL==3.1.10
+pyOpenSSL==26.4.0
+PyYAML==6.0.3
+roslibpy==2.1.0
+service-identity==26.1.0
+stable_baselines3==2.9.0
+sympy==1.14.0
+torch==2.14.0+cpu
+tqdm==4.70.1
+Twisted==26.4.0
+txaio==26.6.1
+typing_extensions==4.16.0
+ujson==6.0.0
+zipp==4.1.0
+zope.interface==8.6

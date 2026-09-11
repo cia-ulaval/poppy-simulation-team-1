@@ -18,6 +18,10 @@ x-build-common: &build-common
     # CPU par défaut. Pour construire en CUDA :
     #   TORCH_INDEX=https://download.pytorch.org/whl/cu121 docker compose build
     TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cpu}
+    # txt : plages de versions (défaut, compatible GPU).
+    # lock : versions exactes de requirements/<cible>.lock.
+    #   REQUIREMENTS=lock docker compose build train
+    REQUIREMENTS: ${REQUIREMENTS:-txt}
 
 services:
 

@@ -1,0 +1,55 @@
+# Versions exactes, relevées dans l'image poppy-train construite le 2026-09-11.
+#
+# Généré par : docker run --rm poppy-train:latest python -m pip freeze
+# Ne pas éditer à la main. Pour régénérer après un changement de
+# requirements/train.txt, voir docs/DOCKER.md § Figer les versions.
+#
+# torch porte un suffixe local (+cpu) absent de PyPI : la ligne
+# --extra-index-url ci-dessous rend ce fichier installable tel quel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+absl-py==2.5.0
+cloudpickle==3.1.2
+contourpy==1.3.3
+cycler==0.12.1
+etils==1.14.0
+Farama-Notifications==0.0.6
+filelock==3.32.3
+fonttools==4.65.0
+fsspec==2026.7.0
+glfw==2.10.2
+grpcio==1.83.1
+gymnasium==1.3.0
+imageio-ffmpeg==0.6.0
+ImageIO==2.37.4
+Jinja2==3.1.6
+kiwisolver==1.5.1
+markdown-it-py==4.2.0
+Markdown==3.10.3
+MarkupSafe==3.0.3
+matplotlib==3.11.1
+mdurl==0.1.2
+mpmath==1.3.0
+mujoco==3.13.0
+networkx==3.6.1
+numpy==2.4.6
+packaging==26.3
+pandas==3.0.5
+pillow==12.3.0
+protobuf==7.36.1
+Pygments==2.21.0
+PyOpenGL==3.1.10
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+PyYAML==6.0.3
+rich==15.0.0
+six==1.17.0
+stable_baselines3==2.9.0
+sympy==1.14.0
+tensorboard-data-server==0.7.2
+tensorboard==2.21.0
+torch==2.14.0+cpu
+tqdm==4.70.1
+typing_extensions==4.16.0
+Werkzeug==3.1.8
+zipp==4.1.0

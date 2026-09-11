@@ -14,6 +14,11 @@
 #   vision     serveur d'estimation de profondeur (websocket)
 #   rosbridge  faux robot : un rosbridge en conteneur pour tester sans robot
 #
+# Dépendances : chaque cible installe requirements/<cible>.${REQUIREMENTS}.
+#   txt  (défaut) plages de versions, tolérant, compatible GPU
+#   lock versions exactes relevées dans une image construite
+# REQUIREMENTS=lock docker compose build train  pour une image reproductible.
+#
 # Build : docker compose build   (voir docs/DOCKER.md)
 
 
@@ -58,7 +63,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install -r /tmp/requirements/train.txt
+# txt par défaut : voir l'en-tête du fichier. Le .lock contient la fermeture
+# transitive complète, torch compris ; ce que base a déjà installé y est
+# simplement épinglé à la version exacte, sans nouveau téléchargement.
+ARG REQUIREMENTS=txt
+RUN python -m pip install -r "/tmp/requirements/train.${REQUIREMENTS}"
 
 # osmesa = rendu logiciel : fonctionne sans GPU ni serveur X.
 ENV MUJOCO_GL=osmesa
@@ -77,19 +86,20 @@ CMD ["python", "scripts/train_poppy.py", "--help"]
 # ---------------------------------------------------------------------------
 FROM base AS bridge
 
-RUN python -m pip install -r /tmp/requirements/bridge.txt
+# txt par défaut : voir l'en-tête du fichier. Le .lock contient la fermeture
+# transitive complète, torch compris ; ce que base a déjà installé y est
+# simplement épinglé à la version exacte, sans nouveau téléchargement.
+ARG REQUIREMENTS=txt
+RUN python -m pip install -r "/tmp/requirements/bridge.${REQUIREMENTS}"
 
 COPY --chown=poppy:poppy src/ /workspace/src/
 COPY --chown=poppy:poppy scripts/ /workspace/scripts/
 COPY --chown=poppy:poppy configs/ /workspace/configs/
 COPY --chown=poppy:poppy assets/ /workspace/assets/
 
-# Adresse du rosbridge. Par défaut le faux robot de la stack compose ;
-# à remplacer par l'IP du robot réel le jour où on l'a.
-#
-# ATTENTION : ces variables ne sont pas encore lues par le code.
-# src/robot/ros_publisher.py:26 code l'adresse en dur (10.242.180.129).
-# Les câbler est la première tâche de code à faire — voir docs/DOCKER.md.
+# Adresse du rosbridge, lue par src/robot/ros_publisher.py. Le défaut vise le
+# faux robot de la stack compose — jamais un robot réel, qu'on ne doit
+# atteindre qu'en fournissant explicitement son adresse.
 ENV POPPY_ROSBRIDGE_HOST=rosbridge \
     POPPY_ROSBRIDGE_PORT=9090
 
@@ -102,7 +112,11 @@ CMD ["python", "scripts/run_robot.py", "--help"]
 # ---------------------------------------------------------------------------
 FROM base AS vision
 
-RUN python -m pip install -r /tmp/requirements/vision.txt
+# txt par défaut : voir l'en-tête du fichier. Le .lock contient la fermeture
+# transitive complète, torch compris ; ce que base a déjà installé y est
+# simplement épinglé à la version exacte, sans nouveau téléchargement.
+ARG REQUIREMENTS=txt
+RUN python -m pip install -r "/tmp/requirements/vision.${REQUIREMENTS}"
 
 COPY --chown=poppy:poppy src/ /workspace/src/
 
