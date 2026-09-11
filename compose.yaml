@@ -4,6 +4,7 @@
 # qu'un `docker compose up` distrait ne lance pas un entraînement de 10M pas.
 #
 #   docker compose --profile train  up        entraînement + TensorBoard
+#   docker compose --profile eval   run --rm eval python scripts/evaluate.py --model ...
 #   docker compose --profile mock   up        faux robot (rosbridge seul)
 #   docker compose --profile robot  up        pont + faux robot
 #   docker compose --profile vision up        serveur de profondeur
@@ -42,6 +43,20 @@ services:
       - scripts/train_poppy.py
       - --config
       - configs/poppy_robust.yaml
+
+  # Évaluation d'un modèle déjà entraîné. Même image que `train` : mêmes
+  # dépendances, même MUJOCO_GL=osmesa pour le rendu vidéo hors écran.
+  # logs/ est monté en écriture, l'option --video y dépose son fichier.
+  eval:
+    image: poppy-train:latest
+    profiles: ["eval"]
+    volumes:
+      - ./src:/workspace/src:ro
+      - ./scripts:/workspace/scripts:ro
+      - ./configs:/workspace/configs:ro
+      - ./assets:/workspace/assets:ro
+      - ./logs:/workspace/logs
+    command: ["python", "scripts/evaluate.py", "--help"]
 
   # Réutilise l'image construite par `train` : pas de bloc `build:` ici.
   # Sinon la surcouche GPU ferait construire deux fois poppy-train:latest,
