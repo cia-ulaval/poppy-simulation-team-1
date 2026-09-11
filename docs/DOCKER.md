@@ -38,7 +38,7 @@ fois : pas de dérive possible entre les images.
 `scripts/viewer.py` et `visu.py` ouvrent une fenêtre MuJoCo en OpenGL. Faire
 sortir une fenêtre OpenGL d'un conteneur sous Windows demande un serveur X et
 une demi-journée de réglages, pour zéro bénéfice. **Le viewer se lance en
-natif**, voir § 6.
+natif**, voir § 7.
 
 ---
 
@@ -234,7 +234,50 @@ docker compose --profile train --profile robot --profile vision --profile mock d
 
 ---
 
-## 5. Variante GPU
+## 5. Figer les versions
+
+Les `requirements/*.txt` déclarent des plages (`mujoco>=3.0.0`). Deux personnes
+qui construisent à une semaine d'écart n'obtiennent donc pas les mêmes paquets,
+et un entraînement qui diverge devient impossible à attribuer : votre
+modification, ou une version de MuJoCo qui a bougé ?
+
+Les `requirements/*.lock` sont le relevé exact d'une image construite, fermeture
+transitive comprise. Construire avec :
+
+```bash
+REQUIREMENTS=lock docker compose build train bridge vision
+```
+
+Vérifier qu'une image ne dérive pas de son lock :
+
+```bash
+docker run --rm poppy-bridge:latest python -m pip freeze | grep -viE "^(pip|setuptools|wheel)==" | sort -f > /tmp/actuel.txt
+grep -vE "^#|^--|^$" requirements/bridge.lock | sort -f | diff - /tmp/actuel.txt
+```
+
+Pas de sortie : l'image correspond au lock.
+
+### Régénérer un lock
+
+Après avoir ajouté une dépendance dans un `.txt`, en deux temps — le `.txt` dit
+**ce dont on dépend**, le `.lock` dit **ce qui est installé** :
+
+```bash
+docker compose build bridge
+docker run --rm poppy-bridge:latest python -m pip freeze | grep -viE "^(pip|setuptools|wheel)==" | sort -f
+```
+
+Coller le résultat sous l'en-tête du `.lock` existant, en conservant la ligne
+`--extra-index-url`.
+
+**Pourquoi `txt` reste le défaut.** Un lock épingle `torch==…+cpu`. Construire
+la variante GPU avec ce lock installerait la version CPU sur une machine à GPU.
+Les deux options coexistent donc : `txt` pour développer et pour le GPU, `lock`
+quand on veut qu'une image soit exactement reproductible.
+
+---
+
+## 6. Variante GPU
 
 Par défaut les images installent **torch CPU** : ça marche sur toutes les
 machines de l'équipe, sans pilote. MuJoCo tourne de toute façon sur CPU ; le
@@ -265,7 +308,7 @@ dans nos images.
 
 ---
 
-## 6. Sans Docker (viewer, client vision)
+## 7. Sans Docker (viewer, client vision)
 
 Pour tout ce qui ouvre une fenêtre :
 
@@ -281,7 +324,7 @@ utilisent les fichiers ciblés de `requirements/`.
 
 ---
 
-## 7. Limites connues
+## 8. Limites connues
 
 Ce qui n'est pas encore stabilisé :
 
@@ -307,7 +350,7 @@ des futurs commits, mais l'historique les garde. Décision reportée.
 
 ---
 
-## 8. Dépannage
+## 9. Dépannage
 
 | Symptôme | Cause probable |
 |---|---|
@@ -319,7 +362,7 @@ des futurs commits, mais l'historique les garde. Décision reportée.
 
 ---
 
-## 9. Comment on modifie tout ça
+## 10. Comment on modifie tout ça
 
 Le code est **monté en volume** dans les conteneurs (`./src`, `./scripts`,
 `./configs`). Modifier un fichier Python ne demande donc pas de reconstruire :
