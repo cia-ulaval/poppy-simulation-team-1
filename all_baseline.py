@@ -47,9 +47,9 @@ def linear_schedule(initial_value: float):
     """Linear learning rate schedule with warmup."""
     def func(progress_remaining: float) -> float:
         progress = 1 - progress_remaining
-        if progress < 0.1:  
+        if progress < 0.1:
             return initial_value * (progress / 0.1)
-        else:  
+        else:
             return progress_remaining * initial_value
     return func
 
@@ -613,12 +613,12 @@ def plot_training_curves(training_results, save_dir="./figs"):
             linestyle = '--' if algo_name == 'RANDOM' else '-'
             linewidth = 1.5 if algo_name == 'RANDOM' else 2
 
-            ax.plot(timesteps_smooth, rewards_smooth, 
+            ax.plot(timesteps_smooth, rewards_smooth,
                    label=algo_name, color=colors.get(algo_name, '#95a5a6'),
                    linewidth=linewidth, alpha=0.8, linestyle=linestyle)
 
             # Also plot raw data with transparency for all algorithms
-            ax.plot(timesteps, rewards, 
+            ax.plot(timesteps, rewards,
                    color=colors.get(algo_name, '#95a5a6'),
                    linewidth=0.5, alpha=0.15)
 
@@ -670,7 +670,7 @@ def plot_comparison_all(results, save_dir="./figs"):
     colors_list = ['#95a5a6', '#3498db', '#e74c3c', '#2ecc71', '#f39c12']
     colors = [colors_list[i % len(colors_list)] for i in range(len(algos))]
 
-    bars = ax1.bar(algos, means, yerr=stds, capsize=10, color=colors, 
+    bars = ax1.bar(algos, means, yerr=stds, capsize=10, color=colors,
                    alpha=0.7, edgecolor='black')
     ax1.set_ylabel('Mean Reward', fontsize=12, fontweight='bold')
     ax1.set_title('Algorithm Comparison - Mean Reward', fontsize=14, fontweight='bold')

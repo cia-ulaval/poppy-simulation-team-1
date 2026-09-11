@@ -60,6 +60,11 @@ ignore = [
 "src/training/trainer.py" = ["W293"]
 "src/visualization/*.py" = ["W293"]
 "scripts/train.py" = ["W293", "E402"]
+# Scripts historiques à la racine : mêmes espaces dans des chaînes multilignes
+# (épilogues d'argparse). Ils échappaient au linter jusqu'à l'ajout du service
+# `dev`, seul à monter le dépôt entier.
+"visu.py" = ["W293"]
+"all_baseline.py" = ["W293"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
