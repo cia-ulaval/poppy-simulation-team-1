@@ -43,7 +43,7 @@ def evaluate_model(
     print(f"Model: {model_path}")
     print(f"VecNormalize: {vec_normalize_path if vec_normalize_path else 'None'}")
     print(f"Épisodes: {n_episodes}")
-    print(f"Mode: {'RENDER (FPS={})'.format(fps) if render else 'NO RENDER (max speed)'}")
+    print(f"Mode: {f'RENDER (FPS={fps})' if render else 'NO RENDER (max speed)'}")
     print(f"{'='*60}\n")
 
     if not os.path.exists(model_path):
@@ -159,19 +159,19 @@ if __name__ == "__main__":
 Exemples d'utilisation:
 
   # Évaluation avec visualisation (par défaut)
-  python evaluate_render.py models/ppo_humanoid_final.zip
+  python visu.py models/ppo_humanoid_final.zip
   
   # Évaluation rapide sans visualisation
-  python evaluate_render.py models/ppo_humanoid_final.zip --no-render
+  python visu.py models/ppo_humanoid_final.zip --no-render
   
   # Évaluation avec vec_normalize spécifique
-  python evaluate_render.py models/ppo_humanoid_final.zip --vec-normalize models/vec_normalize.pkl
+  python visu.py models/ppo_humanoid_final.zip --vec-normalize models/vec_normalize.pkl
   
   # Évaluation de 20 épisodes à 30 FPS
-  python evaluate_render.py models/ppo_humanoid_final.zip --episodes 20 --fps 30
+  python visu.py models/ppo_humanoid_final.zip --episodes 20 --fps 30
   
   # Évaluation rapide de 100 épisodes sans visualisation
-  python evaluate_render.py models/ppo_humanoid_final.zip --no-render --episodes 100
+  python visu.py models/ppo_humanoid_final.zip --no-render --episodes 100
         """
     )
 
