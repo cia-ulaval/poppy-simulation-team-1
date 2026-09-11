@@ -64,6 +64,20 @@ services:
       - ./logs:/workspace/logs
     command: ["python", "scripts/evaluate.py", "--help"]
 
+  # Tests et analyse statique. Seul service à monter le dépôt entier en
+  # écriture, et il lui faut les deux :
+  #   - entier, parce que visu.py et all_baseline.py sont à la racine ; les
+  #     montages ciblés de `train` les laissaient hors de portée de ruff,
+  #     donc hors du garde-fou.
+  #   - en écriture, parce que `ruff check --fix` doit pouvoir corriger.
+  # Les exclusions (.venv, logs, assets) sont dans pyproject.toml.
+  dev:
+    image: poppy-train:latest
+    profiles: ["dev"]
+    volumes:
+      - .:/workspace
+    command: ["ruff", "check", "."]
+
   # Réutilise l'image construite par `train` : pas de bloc `build:` ici.
   # Sinon la surcouche GPU ferait construire deux fois poppy-train:latest,
   # une fois en CUDA (train) et une fois en CPU (tensorboard), avec un
