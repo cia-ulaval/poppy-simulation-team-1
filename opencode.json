@@ -1,0 +1,144 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "default_agent": "plan",
+  "small_model": "openrouter/anthropic/claude-haiku-4.5",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "fable-supervisor": {
+          "id": "anthropic/claude-fable-5.1",
+          "name": "Claude Fable 5.1 (supervision)",
+          "limit": {
+            "context": 1000000,
+            "output": 8192
+          }
+        }
+      }
+    }
+  },
+  "permission": {
+    "edit": "ask",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git branch --show-current*": "allow",
+      "git branch --list*": "allow",
+      "git branch -a*": "allow",
+      "git rev-parse*": "allow",
+      "git ls-files*": "allow",
+      "docker compose config*": "allow",
+      "docker compose ps*": "allow",
+      "docker compose logs*": "allow",
+      "docker images*": "allow",
+      "docker info*": "allow",
+      "docker version*": "allow",
+      "git push*": "deny",
+      "git commit*": "deny",
+      "git reset --hard*": "deny",
+      "git checkout -- *": "deny",
+      "git restore*": "deny",
+      "git clean*": "deny",
+      "git rebase*": "deny",
+      "git merge*": "deny",
+      "git branch -D*": "deny",
+      "git branch -d*": "deny",
+      "git branch --delete*": "deny",
+      "docker compose down -v*": "deny",
+      "docker system prune*": "deny",
+      "docker volume rm*": "deny",
+      "rm -rf*": "deny",
+      "Remove-Item -Recurse*": "deny"
+    }
+  },
+  "agent": {
+    "plan": {
+      "description": "Superviseur : cadre un lot, fixe le périmètre et les critères d'acceptation. Lecture seule.",
+      "model": "openrouter/fable-supervisor",
+      "tools": {
+        "bash": false
+      },
+      "permission": {
+        "edit": "deny"
+      }
+    },
+    "build": {
+      "description": "Développeur principal (Kimi via OpenRouter). Implémente le lot cadré, sans commit ni push.",
+      "model": "openrouter/moonshotai/kimi-k2.7-code",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "*": "ask",
+          "python*": "allow",
+          "pytest*": "allow",
+          "docker compose build*": "allow",
+          "docker compose run --rm*": "allow",
+          "docker compose --profile * run --rm*": "allow",
+          "docker compose config*": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "deny",
+          "git stash*": "deny",
+          "git reset --hard*": "deny",
+          "git checkout -- *": "deny",
+          "git restore*": "deny",
+          "git clean*": "deny",
+          "git rebase*": "deny",
+          "git merge*": "deny",
+          "git branch -D*": "deny",
+          "git branch -d*": "deny",
+          "git branch --delete*": "deny"
+        }
+      }
+    },
+    "build-openai": {
+      "description": "Développeur de secours (OpenAI Astra). À utiliser seulement si Kimi est bloqué.",
+      "mode": "primary",
+      "model": "openai/gpt-6-astra",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "*": "ask",
+          "python*": "allow",
+          "pytest*": "allow",
+          "docker compose build*": "allow",
+          "docker compose run --rm*": "allow",
+          "docker compose --profile * run --rm*": "allow",
+          "docker compose config*": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "deny",
+          "git stash*": "deny",
+          "git reset --hard*": "deny",
+          "git checkout -- *": "deny",
+          "git restore*": "deny",
+          "git clean*": "deny",
+          "git rebase*": "deny",
+          "git merge*": "deny",
+          "git branch -D*": "deny",
+          "git branch -d*": "deny",
+          "git branch --delete*": "deny"
+        }
+      }
+    },
+    "reviewer": {
+      "tools": {
+        "bash": false
+      }
+    },
+    "validator": {
+      "tools": {
+        "bash": false
+      }
+    }
+  }
+}
