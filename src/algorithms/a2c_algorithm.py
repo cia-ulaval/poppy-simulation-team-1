@@ -1,9 +1,8 @@
-from typing import Any
 
 from stable_baselines3 import A2C
 
-from src.core.base_algorithm import BaseAlgorithm
 from src.config.settings import AlgorithmType
+from src.core.base_algorithm import BaseAlgorithm
 
 
 class A2CAlgorithm(BaseAlgorithm):
@@ -19,19 +18,19 @@ class A2CAlgorithm(BaseAlgorithm):
     @property
     def name(self) -> str:
         return "A2C"
-    
+
     @property
     def algorithm_type(self) -> AlgorithmType:
         return AlgorithmType.A2C
-    
+
     @property
     def is_on_policy(self) -> bool:
         return True
-    
+
     def _create_model(self) -> A2C:
         """Create A2C model with configured hyperparameters."""
         a2c_config = self.config.a2c
-        
+
         model = A2C(
             policy="MlpPolicy",
             env=self._train_env,
@@ -48,5 +47,5 @@ class A2CAlgorithm(BaseAlgorithm):
             verbose=1,
             seed=self.config.training.seed,
         )
-        
+
         return model

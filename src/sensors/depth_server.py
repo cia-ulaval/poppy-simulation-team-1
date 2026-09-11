@@ -8,7 +8,6 @@ import torch
 import websockets
 from depth_anything_3.api import DepthAnything3
 from PIL import Image
-from transformers import pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

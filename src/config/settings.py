@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, Any, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List
 
 import numpy as np
 import torch.nn as nn
@@ -21,18 +21,18 @@ class NetworkConfig:
     """Neural network architecture configuration."""
     hidden_layers: tuple[int, ...] = (256, 256)
     activation: str = "relu"
-    
+
     def to_policy_kwargs(self, is_on_policy: bool = True) -> Dict[str, Any]:
         """Convert to stable-baselines3 policy_kwargs format."""
-        
+
         activation_map = {
             "relu": nn.ReLU,
             "tanh": nn.Tanh,
             "elu": nn.ELU,
         }
-        
+
         activation_fn = activation_map.get(self.activation.lower(), nn.ReLU)
-        
+
         if is_on_policy:
             return {
                 "net_arch": {
@@ -107,7 +107,7 @@ class TrainingConfig:
     eval_freq: int = 5_000
     n_eval_episodes: int = 5
     log_dir: Path = field(default_factory=lambda: Path("./logs"))
-    
+
     def __post_init__(self):
         # Ensure log_dir is a Path
         if isinstance(self.log_dir, str):
@@ -187,7 +187,7 @@ class ExperimentConfig:
     a2c: A2CConfig = field(default_factory=A2CConfig)
     figs_dir: Path = field(default_factory=lambda: Path("./figs"))
     n_eval_episodes_final: int = 20
-    
+
     def get_algo_config(self, algo_type: AlgorithmType):
         """Get algorithm-specific config."""
         config_map = {

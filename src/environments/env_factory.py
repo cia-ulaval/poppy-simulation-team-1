@@ -1,14 +1,13 @@
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Callable, Optional
-import tempfile
-import shutil
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
-
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
 from scripts.solidenv_modifier.humanoid_advanced import add_obstacles, duplicate_env
 from src.config.settings import EnvironmentConfig, PoppyEnvironmentConfig
@@ -31,28 +30,28 @@ class HumanoidEnvFactory:
     - Open/Closed: Easy to extend for new env types
     - Dependency Inversion: Other code depends on factory, not gym details
     """
-    
+
     def __init__(self, config: EnvironmentConfig):
         self.config = config
         self._temp_dir: Optional[str] = None
-    
+
     @property
     def temp_dir(self) -> str:
         """Get or create the temporary directory for generated files."""
         if self._temp_dir is None:
             self._temp_dir = tempfile.mkdtemp(prefix="humanoid_env_")
         return self._temp_dir
-    
+
     def cleanup(self):
         """Remove all temporary files created by this factory."""
         if self._temp_dir is not None and Path(self._temp_dir).exists():
             shutil.rmtree(self._temp_dir)
             self._temp_dir = None
-    
+
     def __del__(self):
         """Ensure cleanup on garbage collection."""
         self.cleanup()
-    
+
     def _make_env_fn(
         self,
         rank: int = 0,
@@ -64,7 +63,7 @@ class HumanoidEnvFactory:
         Required for vectorized environments.
         """
         config = self.config
-        
+
         def _init() -> gym.Env:
             if config.with_obstacles:
                 env_path = duplicate_env("scripts/solidenv_modifier/humanoid.xml", output_dir=self.temp_dir)
@@ -81,10 +80,10 @@ class HumanoidEnvFactory:
             env = Monitor(env)
             env.reset(seed=seed + rank)
             return env
-        
+
         set_random_seed(seed)
         return _init
-    
+
     def create_single_env(
         self,
         seed: int = 0,
@@ -100,7 +99,7 @@ class HumanoidEnvFactory:
         env = Monitor(env)
         env.reset(seed=seed)
         return env
-    
+
     def create_training_env(
         self,
         n_envs: int = 1,
@@ -122,12 +121,12 @@ class HumanoidEnvFactory:
             self._make_env_fn(rank=i, seed=seed)
             for i in range(n_envs)
         ]
-        
+
         if n_envs > 1 and use_subprocess:
             vec_env = SubprocVecEnv(env_fns)
         else:
             vec_env = DummyVecEnv(env_fns)
-        
+
         # Apply normalization
         vec_env = VecNormalize(
             vec_env,
@@ -136,9 +135,9 @@ class HumanoidEnvFactory:
             clip_obs=self.config.clip_obs,
             gamma=self.config.gamma,
         )
-        
+
         return vec_env
-    
+
     def create_eval_env(
         self,
         seed: int = 0,
@@ -151,7 +150,7 @@ class HumanoidEnvFactory:
         - Same normalization settings but training=False
         """
         vec_env = DummyVecEnv([self._make_env_fn(seed=seed)])
-        
+
         vec_env = VecNormalize(
             vec_env,
             norm_obs=self.config.normalize_obs,
@@ -160,13 +159,13 @@ class HumanoidEnvFactory:
             gamma=self.config.gamma,
             training=False,      # Don't update stats during eval
         )
-        
+
         return vec_env
-    
+
     def create_render_env(self, seed: int = 0) -> gym.Env:
         """Create environment for visualization with rendering."""
         return self.create_single_env(seed=seed, render=True)
-    
+
     @staticmethod
     def create_poppy_training_env(
         config: PoppyEnvironmentConfig,

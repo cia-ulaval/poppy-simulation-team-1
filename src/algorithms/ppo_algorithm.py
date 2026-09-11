@@ -1,9 +1,8 @@
-from typing import Any
 
 from stable_baselines3 import PPO
 
-from src.core.base_algorithm import BaseAlgorithm
 from src.config.settings import AlgorithmType
+from src.core.base_algorithm import BaseAlgorithm
 
 
 class PPOAlgorithm(BaseAlgorithm):
@@ -15,23 +14,23 @@ class PPOAlgorithm(BaseAlgorithm):
     - Clips policy updates to prevent destructive large updates
     - Is generally robust and easy to tune
     """
-    
+
     @property
     def name(self) -> str:
         return "PPO"
-    
+
     @property
     def algorithm_type(self) -> AlgorithmType:
         return AlgorithmType.PPO
-    
+
     @property
     def is_on_policy(self) -> bool:
         return True
-    
+
     def _create_model(self) -> PPO:
         """Create PPO model with configured hyperparameters."""
         ppo_config = self.config.ppo
-        
+
         model = PPO(
             policy="MlpPolicy",
             env=self._train_env,
@@ -51,5 +50,5 @@ class PPOAlgorithm(BaseAlgorithm):
             verbose=1,
             seed=self.config.training.seed,
         )
-        
+
         return model

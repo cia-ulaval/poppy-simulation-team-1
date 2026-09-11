@@ -47,7 +47,7 @@ def splitframe_to_1Ddepthmap(frame, focal):
     dmap = []
     for region in frame:
         Region = region.tolist()
-        dmap.append((focal * min(Region) / 300))
+        dmap.append(focal * min(Region) / 300)
     return dmap
 
 

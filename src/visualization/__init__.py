@@ -1,9 +1,9 @@
 from src.visualization.plotter import (
-    TrainingCurvePlotter,
-    ComparisonPlotter,
-    print_comparison_table,
-    PlotStyle,
     AlgorithmColors,
+    ComparisonPlotter,
+    PlotStyle,
+    TrainingCurvePlotter,
+    print_comparison_table,
 )
 from src.visualization.tensorboard_reader import TensorBoardReader
 

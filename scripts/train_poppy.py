@@ -15,35 +15,27 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import yaml
 import torch
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from stable_baselines3 import PPO, SAC, TD3, A2C
+import torch.nn as nn
+from stable_baselines3 import A2C, PPO, SAC, TD3
 from stable_baselines3.common.callbacks import (
-    BaseCallback,
+    CallbackList,
     CheckpointCallback,
     EvalCallback,
-    CallbackList,
 )
-
-import torch.nn as nn
+from stable_baselines3.common.vec_env import VecNormalize, sync_envs_normalization
 
 from src.config import (
-    DomainRandomizationConfig,
-    PoppyEnvironmentConfig,
     EnvironmentConfig,
     as_evaluation_config,
     load_yaml,
     make_poppy_env_config,
 )
-from stable_baselines3.common.vec_env import VecNormalize, sync_envs_normalization
-
 from src.environments.env_factory import HumanoidEnvFactory
-from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
-
 
 _ALGO_MAP = {
     "PPO": PPO,
@@ -260,7 +252,7 @@ def main() -> int:
         )
         eval_env.training = False     # Don't update normalization stats during eval
         eval_env.norm_reward = False  # Show true rewards
-        print(f"  Env               : PoppyHumanoid-v0")
+        print("  Env               : PoppyHumanoid-v0")
 
     # ── Build model ─────────────────────────────────────────────────────
     device = "cuda" if torch.cuda.is_available() else "cpu"
