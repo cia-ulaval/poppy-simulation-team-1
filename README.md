@@ -47,3 +47,23 @@ Tu vas aimer ce projet si :
 
 ## Contact & Liens Utiles
 *   **Référence :** [Poppy Project](https://www.poppy-project.org/)
+
+## Démarrer
+
+Tout passe par Docker. La référence complète est [docs/DOCKER.md](docs/DOCKER.md).
+
+```bash
+docker compose build train
+docker compose --profile train run --rm train python -m pytest
+docker compose --profile train run --rm train ruff check .
+```
+
+Entraîner, puis évaluer le modèle obtenu :
+
+```bash
+docker compose --profile train up
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model logs/poppy/<date>/poppy_ppo_final.zip --episodes 10
+```
+
+Le processus de travail est décrit dans [docs/WORKFLOW.md](docs/WORKFLOW.md),
+les règles de code dans [AGENTS.md](AGENTS.md).

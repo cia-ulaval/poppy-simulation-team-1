@@ -38,7 +38,7 @@ fois : pas de dérive possible entre les images.
 `scripts/viewer.py` et `visu.py` ouvrent une fenêtre MuJoCo en OpenGL. Faire
 sortir une fenêtre OpenGL d'un conteneur sous Windows demande un serveur X et
 une demi-journée de réglages, pour zéro bénéfice. **Le viewer se lance en
-natif**, voir § 7.
+natif**, voir § 8.
 
 ---
 
@@ -234,7 +234,56 @@ docker compose --profile train --profile robot --profile vision --profile mock d
 
 ---
 
-## 5. Figer les versions
+## 5. Tests et analyse statique
+
+L'image `train` sert aussi d'image de développement : c'est la seule à posséder
+MuJoCo, donc la seule où les tests de l'environnement peuvent tourner. `pytest`
+et `ruff` y sont installés.
+
+```bash
+docker compose --profile train run --rm train python -m pytest
+docker compose --profile train run --rm train ruff check .
+```
+
+Attendu : `3 passed, 1 xfailed` et `All checks passed!`.
+
+### Le test en échec attendu
+
+`test_action_space_is_normalised` est marqué `xfail`. Il documente une
+incohérence réelle : `_action_to_torque` (`poppy_humanoid_env.py:230`) calcule
+`target = init + action × range`, ce qui **suppose** des actions dans `[-1, 1]`,
+alors que `action_space` est hérité de `MujocoEnv` et calé sur
+`actuator_ctrlrange` (±3,1 à ±7,3 selon l'articulation).
+
+Stable-Baselines3 borne les actions à `action_space`, pas à `[-1, 1]` : une
+politique peut donc émettre 2,5 et viser 2,5 fois au-delà de la limite
+mécanique. Corriger `action_space` rendra **incompatibles tous les modèles déjà
+entraînés** — c'est une décision d'équipe. Le marqueur est `strict` : le jour où
+quelqu'un corrige l'environnement, le test passe au rouge pour signaler qu'il
+faut retirer le marqueur.
+
+### Ruff est vert, et ça se mérite
+
+554 erreurs au premier passage. 566 corrections mécaniques ont été appliquées
+(espaces, imports inutilisés, tri des imports, f-strings vides). Le reste est
+listé explicitement dans `pyproject.toml` avec sa raison : 102 occurrences de
+modernisation d'annotations reportées à un lot dédié, et 10 cas demandant un
+jugement.
+
+Un linter rouge en permanence est un linter ignoré. Celui-ci est vert, donc il
+sert : il refusera toute nouvelle erreur dans du code neuf.
+
+### Sans Docker
+
+```bash
+pip install -r requirements.txt
+python -m pytest
+ruff check .
+```
+
+---
+
+## 6. Figer les versions
 
 Les `requirements/*.txt` déclarent des plages (`mujoco>=3.0.0`). Deux personnes
 qui construisent à une semaine d'écart n'obtiennent donc pas les mêmes paquets,
@@ -277,7 +326,7 @@ quand on veut qu'une image soit exactement reproductible.
 
 ---
 
-## 6. Variante GPU
+## 7. Variante GPU
 
 Par défaut les images installent **torch CPU** : ça marche sur toutes les
 machines de l'équipe, sans pilote. MuJoCo tourne de toute façon sur CPU ; le
@@ -308,7 +357,7 @@ dans nos images.
 
 ---
 
-## 7. Sans Docker (viewer, client vision)
+## 8. Sans Docker (viewer, client vision)
 
 Pour tout ce qui ouvre une fenêtre :
 
@@ -324,7 +373,7 @@ utilisent les fichiers ciblés de `requirements/`.
 
 ---
 
-## 8. Limites connues
+## 9. Limites connues
 
 Ce qui n'est pas encore stabilisé :
 
@@ -350,7 +399,7 @@ des futurs commits, mais l'historique les garde. Décision reportée.
 
 ---
 
-## 9. Dépannage
+## 10. Dépannage
 
 | Symptôme | Cause probable |
 |---|---|
@@ -362,7 +411,7 @@ des futurs commits, mais l'historique les garde. Décision reportée.
 
 ---
 
-## 10. Comment on modifie tout ça
+## 11. Comment on modifie tout ça
 
 Le code est **monté en volume** dans les conteneurs (`./src`, `./scripts`,
 `./configs`). Modifier un fichier Python ne demande donc pas de reconstruire :

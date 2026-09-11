@@ -166,7 +166,7 @@ résultats à `/validate`.
 
 Les options exactes du critère 7 doivent être confirmées contre `scripts/train_poppy.py --help` : si une option n'existe pas, le critère est **rapporté en échec**, pas adapté à la volée.
 
-Ce que cette liste **ne prouve pas** : que le modèle apprend, que le pont parle au vrai robot, que la vision fonctionne (dépendance `depth_anything_3` manquante, voir `DOCKER.md` §8).
+Ce que cette liste **ne prouve pas** : que le modèle apprend, que le pont parle au vrai robot, que la vision fonctionne (dépendance `depth_anything_3` manquante, voir `DOCKER.md` §9).
 
 ---
 
