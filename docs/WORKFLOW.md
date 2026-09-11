@@ -172,19 +172,34 @@ Ce que cette liste **ne prouve pas** : que le modèle apprend, que le pont parle
 
 ## 5. Lots prévus
 
-| # | Lot | Codeur | Dépend de |
-|---|---|---|---|
-| 0 | Config OpenCode, `AGENTS.md`, ce document | humain, cadré et relu par Fable | — |
-| 1 | Validation du lot Docker commité ; corrections si échec | superviseur, `validator`, puis Kimi (`build`) | Docker Desktop démarré |
-| 2 | `ros_publisher.py` : lire `POPPY_ROSBRIDGE_HOST/PORT`, refuser une cible réelle non explicite, arrêt propre | `build` | 1 |
-| 3 | Évaluation sans écran : recharger modèle + `vec_normalize.pkl`, dérouler un épisode, vidéo `osmesa` | `build` | 1 |
-| 4 | Outillage qualité : `ruff`, `pytest` minimal, `pyproject.toml` | `build` | 1 |
-| 5 | Figer les versions (`requirements/*.lock` depuis `pip freeze` d'une image construite) | `build` | 1 |
-| 6 | GPU (`compose.gpu.yaml`) si une mesure le justifie | `build` | 1, matériel |
-| — | Vision : bloqué tant que `depth_anything_3` n'est pas identifié | — | question à l'ancienne équipe |
-| — | Essai robot réel : lot séparé, humain présent, hors OpenCode | — | 2, réponse sur la ROS du robot |
+| # | Lot | État |
+|---|---|---|
+| 0 | Config OpenCode, `AGENTS.md`, ce document | ✅ fait |
+| 1 | Validation du lot Docker | ✅ fait — 4 images, smoke test d'entraînement, pont validé contre le faux robot |
+| 2 | `ros_publisher.py` configurable | ✅ fait — `POPPY_ROSBRIDGE_HOST/PORT/TIMEOUT_S`, bornes validées, plus d'IP en dur |
+| 3 | Évaluation sans écran | ✅ fait — `scripts/evaluate.py`, service `eval`, vidéo `osmesa` |
+| 4 | Outillage qualité | ✅ fait — `ruff` vert, 3 tests + 1 `xfail`, `pyproject.toml` |
+| 5 | Figer les versions | ✅ fait — `requirements/*.lock`, build via `REQUIREMENTS=lock` |
+| 6 | GPU (`compose.gpu.yaml`) | ⏸️ écrit, jamais testé — à ne faire que si une mesure le justifie |
+| — | Vision | ⏸️ **mise de côté**, décision d'équipe de septembre 2026. `depth_anything_3` introuvable ; la locomotion passe avant |
+| — | ROS du robot | ⏳ **en attente du robot**. La question se tranchera dessus, pas depuis un agent |
+| — | Espace d'action normalisé | ⏳ décision d'équipe : corriger invalidera tous les modèles entraînés |
 
-Question ouverte à poser à l'ancienne équipe avant le lot 2 : **quelle distribution ROS 2 tourne sur le Poppy, et un `rosbridge_server` y est-il installé ?** L'ancienne connexion réussie (`origin/feat/docker`) passait par `rclpy` natif en ROS 2 Rolling avec `--network host`, ce qui n'est pas possible depuis Docker Desktop Windows ; le code actuel passe par websocket (`roslibpy`), ce qui suppose un rosbridge côté robot.
+### Les deux questions ouvertes
+
+**Quelle ROS tourne sur le Poppy ?** Tout le socle suppose un `rosbridge_server`
+en websocket sur le port 9090. L'ancienne connexion réussie
+(`origin/feat/docker`) passait au contraire par `rclpy` natif avec
+`--network host`, impossible depuis Docker Desktop sous Windows. Les deux
+approches sont incompatibles. Réponse le jour où on a le robot :
+
+```bash
+echo $ROS_DISTRO && ros2 pkg list | grep rosbridge
+```
+
+**D'où venait `depth_anything_3` ?** Question suspendue avec le chantier
+vision. Si elle se repose : `git log --all -S "depth_anything"` et l'auteur de
+`src/sensors/` sont les deux pistes.
 
 ---
 

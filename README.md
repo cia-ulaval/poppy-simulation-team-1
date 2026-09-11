@@ -54,8 +54,8 @@ Tout passe par Docker. La référence complète est [docs/DOCKER.md](docs/DOCKER
 
 ```bash
 docker compose build train
-docker compose --profile train run --rm train python -m pytest
-docker compose --profile train run --rm train ruff check .
+docker compose --profile dev run --rm dev python -m pytest
+docker compose --profile dev run --rm dev ruff check .
 ```
 
 Entraîner, puis évaluer le modèle obtenu :
