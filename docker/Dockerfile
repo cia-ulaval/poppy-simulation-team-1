@@ -69,6 +69,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ARG REQUIREMENTS=txt
 RUN python -m pip install -r "/tmp/requirements/train.${REQUIREMENTS}"
 
+# pytest et ruff : l'image train sert aussi d'image de développement, étant la
+# seule à posséder MuJoCo. Une vingtaine de Mo, pour que `docker compose run
+# --rm train pytest` fonctionne sans seconde image à construire.
+RUN python -m pip install -r /tmp/requirements/dev-tools.txt
+
 # osmesa = rendu logiciel : fonctionne sans GPU ni serveur X.
 ENV MUJOCO_GL=osmesa
 
@@ -76,6 +81,10 @@ COPY --chown=poppy:poppy src/ /workspace/src/
 COPY --chown=poppy:poppy scripts/ /workspace/scripts/
 COPY --chown=poppy:poppy configs/ /workspace/configs/
 COPY --chown=poppy:poppy assets/ /workspace/assets/
+# tests/ et pyproject.toml : l'image doit pouvoir lancer pytest seule, sans
+# dépendre des volumes montés par compose.
+COPY --chown=poppy:poppy tests/ /workspace/tests/
+COPY --chown=poppy:poppy pyproject.toml /workspace/pyproject.toml
 
 USER poppy
 CMD ["python", "scripts/train_poppy.py", "--help"]

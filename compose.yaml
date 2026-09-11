@@ -39,6 +39,8 @@ services:
       - ./scripts:/workspace/scripts:ro
       - ./configs:/workspace/configs:ro
       - ./assets:/workspace/assets:ro
+      - ./tests:/workspace/tests:ro
+      - ./pyproject.toml:/workspace/pyproject.toml:ro
       # Les sorties, elles, doivent survivre au conteneur.
       - ./logs:/workspace/logs
       - ./figs:/workspace/figs
