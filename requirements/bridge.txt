@@ -3,13 +3,11 @@
 #
 # MuJoCo est nécessaire malgré tout : scripts/run_robot.py reconstruit
 # l'environnement pour recharger vec_normalize.pkl (voir load_vec_normalize).
+#
+# Cette liste reste courte tant que src/__init__.py n'importe rien. Y remettre
+# des imports de commodité (src.training, src.visualization) ramènerait
+# matplotlib et tensorboard dans le pont, qui n'en a aucun usage.
 -r base.txt
 mujoco>=3.0.0
 gymnasium[mujoco]>=0.29.0
 roslibpy>=1.7.0
-
-# Tiré malgré nous : run_robot.py importe src.robot, ce qui déclenche
-# src/__init__.py -> src.training -> src.visualization.plotter -> matplotlib.
-# Le pont n'a rien à tracer ; c'est le paquet racine qui importe trop.
-# Alléger src/__init__.py permettrait de retirer cette ligne.
-matplotlib
