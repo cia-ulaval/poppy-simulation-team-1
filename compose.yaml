@@ -77,12 +77,17 @@ services:
       - ./scripts:/workspace/scripts:ro
       - ./configs:/workspace/configs:ro
       - ./assets:/workspace/assets:ro
+      # Artefacts d'entraînement (modèles, normalisations) en lecture seule.
+      - ./logs:/workspace/logs:ro
     environment:
-      # Pointe vers le faux robot de cette stack. Pour viser le vrai robot,
-      # mettre son IP ici — mais voir l'avertissement du Dockerfile :
-      # l'adresse est encore codée en dur dans ros_publisher.py.
+      # Cible par défaut : le faux robot de cette stack. ros_publisher.py lit
+      # POPPY_ROSBRIDGE_HOST et POPPY_ROSBRIDGE_PORT ; pour viser un autre
+      # hôte (par exemple le robot réel), redéfinir ces variables à l'exécution.
       POPPY_ROSBRIDGE_HOST: ${POPPY_ROSBRIDGE_HOST:-rosbridge}
       POPPY_ROSBRIDGE_PORT: ${POPPY_ROSBRIDGE_PORT:-9090}
+      # Timeout de connexion au pont (s) et période entre deux commandes (s).
+      POPPY_ROSBRIDGE_TIMEOUT_S: ${POPPY_ROSBRIDGE_TIMEOUT_S:-10.0}
+      POPPY_CONTROL_PERIOD_S: ${POPPY_CONTROL_PERIOD_S:-5.0}
 
   # Faux robot : un rosbridge nu, sans physique. Il sert à vérifier que le
   # pont se connecte et publie les bons messages, sans mobiliser le matériel.
