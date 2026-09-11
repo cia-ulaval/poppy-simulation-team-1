@@ -119,6 +119,37 @@ docker compose --profile train run --rm train python scripts/train_poppy.py --co
 À la fin du run, un sous-dossier horodaté `logs/smoke/YYYY-MM-DD_HH-MM-SS/`
 contient `poppy_ppo_final.zip` et `vec_normalize_final.pkl`.
 
+### Évaluer un modèle entraîné
+
+Répond à « est-ce que ce modèle marche ? » sans écran ni robot :
+
+```bash
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model logs/smoke/<date>/poppy_ppo_final.zip --episodes 10
+```
+
+Les statistiques de normalisation (`vec_normalize_final.pkl`) sont cherchées à
+côté du modèle. **Ne sautez pas cette étape** : un modèle entraîné avec
+normalisation et évalué sans reçoit des observations sur une autre échelle et
+paraît bien pire qu'il n'est, sans qu'aucune erreur ne soit levée.
+
+La sortie donne récompense, durée, distance parcourue, verticalité, pourcentage
+d'épisodes sans chute, puis **la décomposition des huit termes de récompense**.
+C'est cette dernière partie qui sert : une politique qui tient la pose et une
+politique qui marche obtiennent des totaux proches, seul le détail les sépare.
+Si `healthy_reward` et `uprightness` dominent pendant que `gait_reward` reste
+près de zéro, le robot ne marche pas.
+
+Enregistrer une vidéo du premier épisode (rendu logiciel, aucun écran requis) :
+
+```bash
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model logs/smoke/<date>/poppy_ppo_final.zip --episodes 1 --video logs/eval.mp4
+```
+
+Options utiles : `--floor-noise` mesure la robustesse au lieu de la performance
+nominale (et cesse d'être reproductible), `--stochastic` échantillonne les
+actions au lieu de prendre la moyenne, `--algorithm` force la classe si la
+détection automatique échoue.
+
 ### Faux robot seul
 
 Un rosbridge en conteneur, sans physique. Il accepte les connexions et relaie
