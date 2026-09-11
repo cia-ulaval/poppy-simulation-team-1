@@ -110,6 +110,15 @@ Vérification rapide que l'image est saine, sans rien entraîner :
 docker compose --profile train run --rm train python scripts/train_poppy.py --help
 ```
 
+Smoke test concret (2 048 pas, 1 env) :
+
+```bash
+docker compose --profile train run --rm train python scripts/train_poppy.py --config configs/poppy_robust.yaml --timesteps 2048 --n-envs 1 --seed 0 --log-dir logs/smoke
+```
+
+À la fin du run, un sous-dossier horodaté `logs/smoke/YYYY-MM-DD_HH-MM-SS/`
+contient `poppy_ppo_final.zip` et `vec_normalize_final.pkl`.
+
 ### Faux robot seul
 
 Un rosbridge en conteneur, sans physique. Il accepte les connexions et relaie
@@ -120,11 +129,19 @@ mobiliser le vrai robot**.
 docker compose --profile mock up
 ```
 
-Il écoute sur `ws://localhost:9090`. Test depuis l'hôte :
+Il écoute sur `ws://localhost:9090` (`POPPY_ROSBRIDGE_HOST` vaut `rosbridge`,
+`POPPY_ROSBRIDGE_PORT` vaut `9090` dans la stack). Une fois le pont connecté,
+le topic est visible et consommable :
 
 ```bash
-docker compose --profile mock run --rm rosbridge bash -lc "source /opt/ros/humble/setup.bash && ros2 topic list"
+# liste des topics
+docker compose exec rosbridge bash -lc "source /opt/ros/humble/setup.bash && ros2 topic list"
+# lecture des commandes publiées par le pont
+docker compose exec rosbridge bash -lc "source /opt/ros/humble/setup.bash && ros2 topic echo /poppy_motor_state"
 ```
+
+Cette validation a eu lieu contre le faux rosbridge uniquement ; le vrai
+robot n'a pas été connecté.
 
 ### Pont robot (+ faux robot)
 
@@ -133,16 +150,41 @@ affiche l'aide et sort. **C'est voulu** — rien ne doit partir vers un robot
 parce que quelqu'un a tapé `up`. Un `docker compose --profile robot up` verra
 donc le pont s'arrêter aussitôt : ce n'est pas une panne.
 
-Pour travailler vraiment, on démarre le faux robot en fond puis on lance le
-pont avec sa commande :
+L'image lit sa cible dans les variables d'environnement
+`POPPY_ROSBRIDGE_HOST` (défaut `rosbridge`) et `POPPY_ROSBRIDGE_PORT` (défaut
+`9090`), et le port est validé. Deux paramètres optionnels complètent le
+comportement du pont :
+
+- `POPPY_ROSBRIDGE_TIMEOUT_S` (défaut `10.0`) : timeout de connexion au pont
+  rosbridge, en secondes. Doit être strictement positif.
+- `POPPY_CONTROL_PERIOD_S` (défaut `5.0`) : période entre deux envois de
+  commande dans l'adaptateur simulation, en secondes. Peut valoir `0` pour
+  désactiver l'attente.
+
+`./logs` est monté en lecture seule ; le pont recharge un modèle PPO et sa
+normalisation via `--model` et `--vec-normalize`.
+
+Pour valider contre le faux robot, en supposant un smoke test existant :
 
 ```bash
 docker compose --profile mock up -d
-docker compose --profile robot run --rm bridge python scripts/run_robot.py --help
+docker compose --profile robot run --rm bridge python scripts/run_robot.py \
+  --model /workspace/logs/smoke/<horodatage>/poppy_ppo_final.zip \
+  --vec-normalize /workspace/logs/smoke/<horodatage>/vec_normalize_final.pkl
 ```
 
-Pour viser le **vrai** robot au lieu du faux, il faudra d'abord câbler
-l'adresse — voir § 7, ce n'est pas encore fait.
+Où `<horodatage>` correspond au dossier horodaté produit par le smoke test.
+
+Pour viser le **vrai** robot, redéfinir les variables à l'exécution :
+
+```bash
+docker compose --profile robot run --rm --no-deps \
+  -e POPPY_ROSBRIDGE_HOST=<ip> \
+  -e POPPY_ROSBRIDGE_PORT=<port> \
+  bridge python scripts/run_robot.py --model <chemin> [--vec-normalize <chemin>]
+```
+
+Aucun essai sur robot réel n'a eu lieu à ce jour.
 
 ### Serveur de vision
 
@@ -210,23 +252,23 @@ utilisent les fichiers ciblés de `requirements/`.
 
 ## 7. Limites connues
 
-Trois choses sont cassées ou incomplètes. Elles sont listées ici plutôt que
-découvertes une par une :
+Ce qui n'est pas encore stabilisé :
 
-1. **L'adresse du robot est codée en dur.**
-   `src/robot/ros_publisher.py:26` contient `10.242.180.129`. Les variables
-   `POPPY_ROSBRIDGE_HOST` / `POPPY_ROSBRIDGE_PORT` existent dans l'image et
-   dans `compose.yaml`, mais **le code ne les lit pas encore**. C'est la
-   première tâche de code à faire.
-
-2. **Le serveur de vision ne démarre pas.**
+1. **Le serveur de vision ne démarre pas.**
    `src/sensors/depth_server.py:9` importe `depth_anything_3`, qui n'est pas
-   sur PyPI et n'a jamais figuré dans `requirements.txt`. L'image se construit,
-   le serveur plante à l'import. Il faut retrouver d'où venait ce paquet.
+   sur PyPI et n'a jamais figuré dans `requirements.txt`. L'image se construit
+   mais le serveur plante à l'import. Le GPU n'a pas été testé.
 
-3. **`roslibpy` manquait de `requirements.txt`.**
-   Corrigé dans `requirements/bridge.txt`. Mentionné parce que ça explique
-   pourquoi le pont ne s'installait chez personne.
+2. **Le transfert sur robot réel n'a pas été testé.**
+   L'adresse n'est plus codée en dur : `src/robot/ros_publisher.py` lit
+   `POPPY_ROSBRIDGE_HOST` et `POPPY_ROSBRIDGE_PORT`, avec `rosbridge` et
+   `9090` par défaut. Toute la validation du pont a eu lieu contre le faux
+   rosbridge.
+
+3. **Les versions Python ne sont pas encore figées.**
+   Les images construites aujourd'hui passent les tests, mais plusieurs
+   dépendances utilisent encore `>=` ou aucune version. Un lockfile sera produit
+   à partir d'une image validée dans un lot séparé.
 
 Par ailleurs, `logs/`, `ppo_logs/` et `baseline_logs/` pèsent ~691 Mo suivis
 par git. Le `.dockerignore` les tient hors des images, et le `.gitignore` hors
