@@ -2,6 +2,16 @@
 
 Date : 10 septembre 2026. Statut : cadrage uniquement, aucun code ni fichier Docker créé.
 
+> **Document historique.** Il garde le raisonnement qui a mené au socle actuel,
+> mais ses noms de services n'ont pas été retenus. Le `sim` proposé ici est
+> devenu le service `eval`, et le `robot` est devenu `bridge` — le service ne
+> *est* pas le robot, il est le pont vers lui, et sa cible par défaut est un
+> faux robot. Les commandes `docker compose --profile sim` de la §5 ne
+> correspondent à rien d'existant.
+>
+> La référence à jour est [`DOCKER.md`](DOCKER.md) ; l'état d'avancement est
+> dans [`WORKFLOW.md`](WORKFLOW.md) §5.
+
 ## 1. Base Git conservée
 
 - Base : `model-for-presentation`, commit `7583141e0cc499a6c8a4e36adce6a7c4198d65d4`.

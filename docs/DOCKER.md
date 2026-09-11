@@ -241,9 +241,15 @@ MuJoCo, donc la seule où les tests de l'environnement peuvent tourner. `pytest`
 et `ruff` y sont installés.
 
 ```bash
-docker compose --profile train run --rm train python -m pytest
-docker compose --profile train run --rm train ruff check .
+docker compose --profile dev run --rm dev python -m pytest
+docker compose --profile dev run --rm dev ruff check .
+docker compose --profile dev run --rm dev ruff check . --fix
 ```
+
+Le service `dev` est le seul à monter le dépôt **entier en écriture**. Les deux
+lui sont nécessaires : entier parce que `visu.py` et `all_baseline.py` sont à
+la racine et échappaient sinon au linter, en écriture parce que `--fix` doit
+pouvoir corriger.
 
 Attendu : `3 passed, 1 xfailed` et `All checks passed!`.
 
@@ -359,17 +365,31 @@ dans nos images.
 
 ## 8. Sans Docker (viewer, client vision)
 
-Pour tout ce qui ouvre une fenêtre :
+Tout ce qui ouvre une fenêtre se lance en natif. Installation :
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-python scripts/viewer.py
 ```
 
-`requirements.txt` installe l'ensemble complet. Les images Docker, elles,
-utilisent les fichiers ciblés de `requirements/`.
+`requirements.txt` installe l'ensemble complet, outils de développement
+compris. Les images Docker, elles, utilisent les fichiers ciblés de
+`requirements/`.
+
+Deux fenêtres différentes, à ne pas confondre :
+
+```bash
+# Regarder le robot : articulations, limites, pose de départ.
+# Aucun modèle entraîné nécessaire — le bon premier réflexe.
+python scripts/viewer.py
+
+# Regarder une politique entraînée se dérouler.
+python visu.py logs/poppy/<date>/poppy_ppo_final.zip --episodes 5
+```
+
+Pour mesurer plutôt que regarder, l'évaluation tourne sans écran, en
+conteneur : voir § 4.
 
 ---
 
@@ -377,10 +397,16 @@ utilisent les fichiers ciblés de `requirements/`.
 
 Ce qui n'est pas encore stabilisé :
 
-1. **Le serveur de vision ne démarre pas.**
+1. **La vision est mise de côté — décision d'équipe, septembre 2026.**
    `src/sensors/depth_server.py:9` importe `depth_anything_3`, qui n'est pas
    sur PyPI et n'a jamais figuré dans `requirements.txt`. L'image se construit
-   mais le serveur plante à l'import. Le GPU n'a pas été testé.
+   — `torch`, `cv2`, `transformers` et `websockets` y sont — mais le serveur
+   plante à l'import.
+
+   Le chantier est **suspendu**, pas abandonné : la vision est un confort, la
+   locomotion est l'objectif de la session. On le rouvrira quand quelqu'un
+   aura retrouvé d'où venait ce paquet, ou quand on aura décidé de réécrire le
+   serveur autour de `transformers` seul.
 
 2. **Le transfert sur robot réel n'a pas été testé.**
    L'adresse n'est plus codée en dur : `src/robot/ros_publisher.py` lit
@@ -388,10 +414,28 @@ Ce qui n'est pas encore stabilisé :
    `9090` par défaut. Toute la validation du pont a eu lieu contre le faux
    rosbridge.
 
-3. **Les versions Python ne sont pas encore figées.**
-   Les images construites aujourd'hui passent les tests, mais plusieurs
-   dépendances utilisent encore `>=` ou aucune version. Un lockfile sera produit
-   à partir d'une image validée dans un lot séparé.
+   **Question ouverte, à trancher sur le robot lui-même** : quelle
+   distribution ROS 2 y tourne, et `rosbridge_server` y est-il installé ?
+   Tout le socle actuel suppose que oui. Une commande sur le robot répond :
+
+   ```bash
+   echo $ROS_DISTRO && ros2 pkg list | grep rosbridge
+   ```
+
+   Si `rosbridge_server` manque : `sudo apt install ros-$ROS_DISTRO-rosbridge-suite`.
+   Sans accès shell, tester le port depuis le réseau suffit — une réponse
+   `101 Switching Protocols` sur `http://<ip>:9090/` prouve qu'il écoute.
+
+   L'ancienne connexion (`origin/feat/docker`) passait par `rclpy` natif avec
+   `--network host`, impossible depuis Docker Desktop sous Windows. Les deux
+   approches sont incompatibles : celle-ci est un pari tant que la question
+   n'est pas tranchée.
+
+3. **L'espace d'action contredit le contrat annoncé.**
+   `_action_to_torque` (`poppy_humanoid_env.py:230`) suppose des actions dans
+   `[-1, 1]`, alors qu'`action_space` vaut `actuator_ctrlrange` (±3,1 à ±7,3).
+   Documenté par le test `xfail` `test_action_space_is_normalised`, voir § 5.
+   Corriger invaliderait tous les modèles entraînés : décision d'équipe.
 
 Par ailleurs, `logs/`, `ppo_logs/` et `baseline_logs/` pèsent ~691 Mo suivis
 par git. Le `.dockerignore` les tient hors des images, et le `.gitignore` hors
