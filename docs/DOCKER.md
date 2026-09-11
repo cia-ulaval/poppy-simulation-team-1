@@ -98,6 +98,38 @@ docker compose --profile train up
 TensorBoard écoute alors sur <http://localhost:6006>. Les logs sont écrits
 dans `./logs/` sur votre machine, pas dans le conteneur : ils survivent.
 
+Pour ouvrir **seulement** TensorBoard, sans lancer d'entraînement :
+
+```bash
+docker compose --profile train up tensorboard
+```
+
+### Combien d'environnements parallèles
+
+`configs/poppy_robust.yaml` fixe `n_envs: 64`, « optimisé pour 32 cœurs et une
+RTX 4090 ». Sur une machine ordinaire, `SubprocVecEnv` n'arrive pas à lancer
+64 processus MuJoCo et l'entraînement meurt sur un `BrokenPipeError` — une
+trace longue et illisible dont la cause tient en un chiffre.
+
+Le service `train` impose donc `--n-envs 8` par défaut, ce qui passe partout.
+Sur une station de travail, relevez-le :
+
+```bash
+# PowerShell
+$env:POPPY_N_ENVS = "32"; docker compose --profile train up
+
+# bash
+POPPY_N_ENVS=32 docker compose --profile train up
+```
+
+Combien de cœurs voit le conteneur :
+
+```bash
+docker run --rm poppy-train:latest nproc
+```
+
+Restez en dessous : un environnement par cœur est un plafond raisonnable.
+
 Passer des options au script :
 
 ```bash

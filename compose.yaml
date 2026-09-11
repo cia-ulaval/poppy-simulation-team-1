@@ -44,11 +44,18 @@ services:
       # Les sorties, elles, doivent survivre au conteneur.
       - ./logs:/workspace/logs
       - ./figs:/workspace/figs
+    # n_envs vaut 64 dans configs/poppy_robust.yaml, « optimisé pour 32 cœurs
+    # et une RTX 4090 ». Sur une machine ordinaire, SubprocVecEnv n'arrive pas
+    # à lancer 64 processus MuJoCo et l'entraînement meurt sur un
+    # BrokenPipeError. Le défaut est donc prudent ; une station de travail
+    # relève la valeur : POPPY_N_ENVS=64 docker compose --profile train up
     command:
       - python
       - scripts/train_poppy.py
       - --config
       - configs/poppy_robust.yaml
+      - --n-envs
+      - ${POPPY_N_ENVS:-8}
 
   # Évaluation d'un modèle déjà entraîné. Même image que `train` : mêmes
   # dépendances, même MUJOCO_GL=osmesa pour le rendu vidéo hors écran.
@@ -82,10 +89,14 @@ services:
   # Sinon la surcouche GPU ferait construire deux fois poppy-train:latest,
   # une fois en CUDA (train) et une fois en CPU (tensorboard), avec un
   # gagnant imprévisible.
+  #
+  # Pas de `depends_on: train` : cette clause démarrerait le conteneur
+  # d'entraînement, pas seulement l'image. Lancer TensorBoard déclenchait donc
+  # un entraînement de 10 millions de pas en arrière-plan. L'image doit avoir
+  # été construite au préalable (`docker compose build train`) ; sinon le
+  # message d'erreur le dit clairement.
   tensorboard:
     image: poppy-train:latest
-    depends_on:
-      - train
     profiles: ["train"]
     ports:
       - "6006:6006"
