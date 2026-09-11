@@ -1,0 +1,72 @@
+[project]
+name = "poppy-simulation"
+version = "0.1.0"
+description = "Apprentissage de la marche du robot humanoïde Poppy par renforcement"
+requires-python = ">=3.11"
+
+[tool.ruff]
+# 100 caractères, comme AGENTS.md §4. Python 3.11 : celui des images.
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "venv", "logs", "ppo_logs", "baseline_logs", "assets"]
+
+[tool.ruff.lint]
+# Jeu de règles volontairement réduit pour un premier passage. Activer tout
+# Ruff sur un dépôt qui n'a jamais été vérifié produit des centaines d'erreurs
+# que personne ne corrige, et l'outil finit ignoré. On élargira règle par
+# règle, une fois celles-ci au vert.
+select = [
+    "E",   # erreurs de style pycodestyle
+    "F",   # pyflakes : imports inutilisés, variables non définies, f-strings vides
+    "W",   # avertissements pycodestyle
+    "I",   # ordre des imports
+    "UP",  # tournures dépassées pour la version de Python ciblée
+    "B",   # bugbear : pièges courants (mutable par défaut, boucle et closure…)
+]
+ignore = [
+    "E501",  # longueur de ligne : laissée au formateur, pas au linter
+
+    # --- Dette différée, à résorber règle par règle -------------------------
+    # Ces trois-là représentent 102 occurrences de modernisation d'annotations
+    # (typing.List -> list, Optional[X] -> X | None). Purement mécanique, mais
+    # ça toucherait presque tous les fichiers de src/ et noierait les diffs de
+    # travail en cours. À traiter dans un lot dédié, pas au fil de l'eau.
+    "UP006",  # typing.List, typing.Dict… au lieu des génériques natifs
+    "UP045",  # Optional[X] au lieu de X | None
+    "UP035",  # imports depuis typing devenus inutiles
+
+    # Ces quatre-là sont peu nombreuses mais demandent un jugement, pas un
+    # correctif automatique : renommer une variable `l`, décider si une méthode
+    # de classe abstraite doit être @abstractmethod, trancher le strict= d'un
+    # zip dont les longueurs peuvent légitimement différer.
+    "E741",  # nom de variable ambigu (3 occurrences)
+    "B027",  # méthode vide dans une classe abstraite (3)
+    "F841",  # variable assignée jamais utilisée (2)
+    "B905",  # zip() sans strict= (2)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Les scripts insèrent la racine du dépôt dans sys.path avant d'importer src/,
+# ce qui impose des imports après du code exécutable.
+"scripts/*.py" = ["E402"]
+
+# W293 restant : espaces sur des lignes vides à l'intérieur de chaînes
+# multilignes, que Ruff ne peut pas corriger sans risquer d'altérer le texte
+# affiché. 42 occurrences, toutes dans du code antérieur à ce lot.
+"src/algorithms/*.py" = ["W293"]
+"src/core/base_algorithm.py" = ["W293"]
+"src/environments/env_factory.py" = ["W293"]
+"src/evaluation/evaluator.py" = ["W293"]
+"src/training/trainer.py" = ["W293"]
+"src/visualization/*.py" = ["W293"]
+"scripts/train.py" = ["W293", "E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Chemins relatifs à la racine du dépôt : les tests importent src/ sans
+# installation préalable, comme les scripts.
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: test dépassant quelques secondes (désélectionner avec -m 'not slow')",
+]

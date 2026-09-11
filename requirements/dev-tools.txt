@@ -1,0 +1,4 @@
+# Outils seuls, sans les dépendances d'exécution (déjà installées).
+# Séparé de dev.txt pour que le Dockerfile n'ait pas à réinstaller train.txt.
+pytest>=8.0
+ruff>=0.6

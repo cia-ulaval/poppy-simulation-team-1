@@ -4,6 +4,8 @@
 # Ne pas éditer à la main. Pour régénérer après un changement de
 # requirements/train.txt, voir docs/DOCKER.md § Figer les versions.
 #
+# Inclut pytest et ruff : l'image train sert aussi d'image de développement.
+#
 # torch porte un suffixe local (+cpu) absent de PyPI : la ligne
 # --extra-index-url ci-dessous rend ce fichier installable tel quel.
 --extra-index-url https://download.pytorch.org/whl/cpu
@@ -22,6 +24,7 @@ grpcio==1.83.1
 gymnasium==1.3.0
 imageio-ffmpeg==0.6.0
 ImageIO==2.37.4
+iniconfig==2.3.0
 Jinja2==3.1.6
 kiwisolver==1.5.1
 markdown-it-py==4.2.0
@@ -36,13 +39,16 @@ numpy==2.4.6
 packaging==26.3
 pandas==3.0.5
 pillow==12.3.0
+pluggy==1.6.0
 protobuf==7.36.1
 Pygments==2.21.0
 PyOpenGL==3.1.10
 pyparsing==3.3.2
+pytest==9.1.1
 python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 rich==15.0.0
+ruff==0.16.7
 six==1.17.0
 stable_baselines3==2.9.0
 sympy==1.14.0
