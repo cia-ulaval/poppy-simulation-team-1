@@ -7,3 +7,4 @@ matplotlib
 pandas
 imageio>=2.31.0
 imageio-ffmpeg
+rich  # utilisé par Stable-Baselines3 pour progress_bar dans scripts/train_poppy.py
