@@ -1,0 +1,50 @@
+# Versions exactes, relevées dans l'image poppy-vision construite le 2026-09-11.
+#
+# Généré par : docker run --rm poppy-vision:latest python -m pip freeze
+# Ne pas éditer à la main. Pour régénérer après un changement de
+# requirements/vision.txt, voir docs/DOCKER.md § Figer les versions.
+#
+# torch porte un suffixe local (+cpu) absent de PyPI : la ligne
+# --extra-index-url ci-dessous rend ce fichier installable tel quel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+annotated-doc==0.0.5
+anyio==4.15.1
+certifi==2026.7.22
+click==8.5.0
+cloudpickle==3.1.2
+Farama-Notifications==0.0.6
+filelock==3.32.3
+fsspec==2026.7.0
+gymnasium==1.3.0
+h11==0.16.0
+hf-xet==1.6.0
+httpcore==1.0.9
+httpx==0.28.1
+huggingface_hub==1.31.0
+idna==3.19
+Jinja2==3.1.6
+markdown-it-py==4.2.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+mpmath==1.3.0
+networkx==3.6.1
+numpy==2.4.6
+opencv-python-headless==5.0.0.93
+packaging==26.3
+pillow==12.3.0
+Pygments==2.21.0
+PyYAML==6.0.3
+regex==2026.9.10
+rich==15.0.0
+safetensors==0.8.0
+shellingham==1.5.4
+stable_baselines3==2.9.0
+sympy==1.14.0
+tokenizers==0.23.2
+torch==2.14.0+cpu
+tqdm==4.70.0
+transformers==5.17.0
+typer==0.27.2
+typing_extensions==4.16.0
+websockets==17.1
