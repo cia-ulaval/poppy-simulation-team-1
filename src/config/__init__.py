@@ -4,17 +4,17 @@ from src.config.loaders import (
     make_poppy_env_config,
 )
 from src.config.settings import (
-    AlgorithmType,
-    NetworkConfig,
-    EnvironmentConfig,
-    TrainingConfig,
-    PPOConfig,
-    TD3Config,
-    SACConfig,
     A2CConfig,
-    ExperimentConfig,
+    AlgorithmType,
     DomainRandomizationConfig,
+    EnvironmentConfig,
+    ExperimentConfig,
+    NetworkConfig,
     PoppyEnvironmentConfig,
+    PPOConfig,
+    SACConfig,
+    TD3Config,
+    TrainingConfig,
 )
 
 __all__ = [

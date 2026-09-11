@@ -1,3 +1,3 @@
-from src.evaluation.evaluator import ModelEvaluator, BatchEvaluator
+from src.evaluation.evaluator import BatchEvaluator, ModelEvaluator
 
 __all__ = ["ModelEvaluator", "BatchEvaluator"]

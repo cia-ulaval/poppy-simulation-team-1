@@ -1,14 +1,13 @@
-from typing import Dict, Type, Optional, List
+from typing import Dict, List, Optional, Type
 
+from src.algorithms.a2c_algorithm import A2CAlgorithm
+from src.algorithms.ppo_algorithm import PPOAlgorithm
+from src.algorithms.random_algorithm import RandomAlgorithm
+from src.algorithms.sac_algorithm import SACAlgorithm
+from src.algorithms.td3_algorithm import TD3Algorithm
 from src.config.settings import AlgorithmType, ExperimentConfig
 from src.core.base_algorithm import BaseAlgorithm
 from src.core.interfaces import TrainingObserver
-
-from src.algorithms.ppo_algorithm import PPOAlgorithm
-from src.algorithms.td3_algorithm import TD3Algorithm
-from src.algorithms.sac_algorithm import SACAlgorithm
-from src.algorithms.a2c_algorithm import A2CAlgorithm
-from src.algorithms.random_algorithm import RandomAlgorithm
 
 
 class AlgorithmRegistry:
@@ -20,7 +19,7 @@ class AlgorithmRegistry:
     - Easy to add new algorithms
     - Provides a single point of access
     """
-    
+
     _algorithms: Dict[AlgorithmType, Type] = {
         AlgorithmType.PPO: PPOAlgorithm,
         AlgorithmType.TD3: TD3Algorithm,
@@ -28,7 +27,7 @@ class AlgorithmRegistry:
         AlgorithmType.A2C: A2CAlgorithm,
         AlgorithmType.RANDOM: RandomAlgorithm,
     }
-    
+
     @classmethod
     def create(
         cls,
@@ -55,10 +54,10 @@ class AlgorithmRegistry:
                 f"Unknown algorithm: {algorithm_type}. "
                 f"Available: {list(cls._algorithms.keys())}"
             )
-        
+
         algorithm_class = cls._algorithms[algorithm_type]
         return algorithm_class(config=config, observers=observers)
-    
+
     @classmethod
     def register(cls, algorithm_type: AlgorithmType, algorithm_class: Type) -> None:
         """
@@ -67,7 +66,7 @@ class AlgorithmRegistry:
         Allows extending with custom algorithms without modifying this code.
         """
         cls._algorithms[algorithm_type] = algorithm_class
-    
+
     @classmethod
     def available_algorithms(cls) -> List[AlgorithmType]:
         """Return list of available algorithm types."""

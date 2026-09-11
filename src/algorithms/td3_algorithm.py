@@ -1,12 +1,10 @@
-from typing import Any
 
 import numpy as np
-
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
 
-from src.core.base_algorithm import BaseAlgorithm
 from src.config.settings import AlgorithmType
+from src.core.base_algorithm import BaseAlgorithm
 
 
 class TD3Algorithm(BaseAlgorithm):
@@ -18,33 +16,33 @@ class TD3Algorithm(BaseAlgorithm):
     - Delays policy updates for stability
     - Adds noise to target policy for smoothing
     """
-    
+
     @property
     def name(self) -> str:
         return "TD3"
-    
+
     @property
     def algorithm_type(self) -> AlgorithmType:
         return AlgorithmType.TD3
-    
+
     @property
     def is_on_policy(self) -> bool:
         return False
-    
+
     def _create_action_noise(self) -> NormalActionNoise:
         """Create action noise for exploration."""
         n_actions = self._train_env.action_space.shape[-1]
         sigma = self.config.td3.action_noise_sigma
-        
+
         return NormalActionNoise(
             mean=np.zeros(n_actions),
             sigma=sigma * np.ones(n_actions),
         )
-    
+
     def _create_model(self) -> TD3:
         """Create TD3 model with configured hyperparameters."""
         td3_config = self.config.td3
-        
+
         model = TD3(
             policy="MlpPolicy",
             env=self._train_env,
@@ -66,5 +64,5 @@ class TD3Algorithm(BaseAlgorithm):
             verbose=1,
             seed=self.config.training.seed,
         )
-        
+
         return model

@@ -29,18 +29,15 @@ Action space (25-dim):
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
-
-import numpy as np
-from numpy.typing import NDArray
+from typing import Dict, Optional, Tuple
 
 import gymnasium as gym
+import numpy as np
 from gymnasium import spaces
 from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.utils import EzPickle
-
+from numpy.typing import NDArray
 
 _ASSETS_DIR = Path(__file__).parent.parent.parent / "assets" / "poppy_humanoid"
 _MODEL_PATH = _ASSETS_DIR / "poppy_humanoid.xml"

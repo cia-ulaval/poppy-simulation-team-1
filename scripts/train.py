@@ -15,10 +15,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.config import (
-    ExperimentConfig,
     AlgorithmType,
-    TrainingConfig,
     EnvironmentConfig,
+    ExperimentConfig,
+    TrainingConfig,
 )
 from src.training import ExperimentRunner
 
@@ -40,7 +40,7 @@ Examples:
   python scripts/train.py --algorithms RANDOM PPO TD3 SAC A2C --timesteps 10000000
         """,
     )
-    
+
     parser.add_argument(
         "--algorithms",
         nargs="+",
@@ -49,77 +49,77 @@ Examples:
         choices=["RANDOM", "PPO", "TD3", "SAC", "A2C"],
         help="Algorithms to train (default: RANDOM PPO A2C)",
     )
-    
+
     parser.add_argument(
         "--timesteps",
         type=int,
         default=int(1e7),
         help="Total timesteps per algorithm (default: 10M)",
     )
-    
+
     parser.add_argument(
         "--n-envs",
         type=int,
         default=32,
         help="Number of parallel environments (default: 32)",
     )
-    
+
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
         help="Random seed (default: 42)",
     )
-    
+
     parser.add_argument(
         "--log-dir",
         type=Path,
         default=Path("./logs"),
         help="Directory for logs (default: ./logs)",
     )
-    
+
     parser.add_argument(
         "--figs-dir",
         type=Path,
         default=Path("./figs"),
         help="Directory for figures (default: ./figs)",
     )
-    
+
     parser.add_argument(
         "--eval-episodes",
         type=int,
         default=20,
         help="Number of evaluation episodes (default: 20)",
     )
-    
+
     parser.add_argument(
         "--skip-eval",
         action="store_true",
         help="Skip evaluation after training",
     )
-    
+
     parser.add_argument(
         "--skip-plots",
         action="store_true",
         help="Skip generating plots",
     )
-    
+
     parser.add_argument(
         "--with_obstacles",
         action="store_true",
         help="Use obstacles in the environment",
     )
-    
+
     return parser.parse_args()
 
 
 def main() -> int:
     """Main entry point."""
     args = parse_args()
-    
+
     # Convert algorithm names to enum
     algorithms = [AlgorithmType[name] for name in args.algorithms]
-    
+
     # Create configuration
     config = ExperimentConfig(
         algorithms=algorithms,
@@ -132,10 +132,10 @@ def main() -> int:
         figs_dir=args.figs_dir,
         n_eval_episodes_final=args.eval_episodes,
     )
-    
+
     # Create and run experiment
     runner = ExperimentRunner(config)
-    
+
     try:
         if args.skip_eval and args.skip_plots:
             # Only train
@@ -152,9 +152,9 @@ def main() -> int:
         else:
             # Full experiment
             runner.run()
-        
+
         return 0
-        
+
     except KeyboardInterrupt:
         print("\n\n⚠️  Training interrupted by user!")
         return 1

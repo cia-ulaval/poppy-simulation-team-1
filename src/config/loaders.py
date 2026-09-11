@@ -25,7 +25,7 @@ def load_yaml(path: Path) -> dict:
     Returns:
         Le contenu du fichier, ou un dictionnaire vide si le fichier est vide.
     """
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         return yaml.safe_load(handle) or {}
 
 

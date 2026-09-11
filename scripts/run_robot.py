@@ -4,13 +4,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import numpy as np
-from stable_baselines3 import TD3, SAC, PPO, A2C
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from gymnasium.wrappers import TimeLimit
+from stable_baselines3 import A2C, PPO, SAC, TD3
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-from src.robot.SimulationAdaptater import SimulationAdapter
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
+from src.robot.SimulationAdaptater import SimulationAdapter
 
 MODEL_CLASSES = [TD3, SAC, PPO, A2C]
 
