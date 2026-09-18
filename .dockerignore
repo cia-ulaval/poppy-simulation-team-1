@@ -13,14 +13,20 @@ __pycache__/
 .vscode/
 .claude/
 
-# Sorties d'exécution : ~691 Mo, elles n'ont rien à faire dans une image.
+# Sorties d'exécution : elles n'ont rien à faire dans une image.
 logs/
-ppo_logs/
-baseline_logs/
 runs/
 figs/
 scenes/
 *.mp4
+
+# Modèles entraînés (~28 Mo). Ils sont montés en volume quand on en a besoin,
+# pas copiés dans l'image : sinon chaque reconstruction les recopie.
+models/
+
+# Captures de profondeur (~59 Mo). Non couvertes jusqu'ici, elles partaient
+# donc dans les images train et bridge, qui ne les utilisent pas.
+scripts/vision/
 
 # Documentation : utile aux humains, inutile au conteneur.
 docs/
