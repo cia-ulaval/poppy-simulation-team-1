@@ -6,7 +6,7 @@ stabilisée : ajoutez-la plutôt que de la garder dans votre historique shell.
 
 ---
 
-## 1. Pourquoi trois images et pas une
+## 1. Pourquoi plusieurs images et pas une
 
 Le dépôt mélange trois métiers qui n'ont ni les mêmes dépendances, ni la même
 machine cible, ni le même rythme :
@@ -35,7 +35,8 @@ fois : pas de dérive possible entre les images.
 
 ### Ce qu'on ne met pas dans Docker
 
-`scripts/viewer.py` et `visu.py` ouvrent une fenêtre MuJoCo en OpenGL. Faire
+`scripts/viewer.py` et `scripts/visualize.py` ouvrent une fenêtre MuJoCo en
+OpenGL. Faire
 sortir une fenêtre OpenGL d'un conteneur sous Windows demande un serveur X et
 une demi-journée de réglages, pour zéro bénéfice. **Le viewer se lance en
 natif**, voir § 8.
@@ -279,11 +280,10 @@ docker compose --profile dev run --rm dev ruff check . --fix
 ```
 
 Le service `dev` est le seul à monter le dépôt **entier en écriture**. Les deux
-lui sont nécessaires : entier parce que `visu.py` et `all_baseline.py` sont à
-la racine et échappaient sinon au linter, en écriture parce que `--fix` doit
-pouvoir corriger.
+lui sont nécessaires : entier pour que `tests/` et la racine passent aussi sous
+le linter, en écriture parce que `--fix` doit pouvoir corriger.
 
-Attendu : `3 passed, 1 xfailed` et `All checks passed!`.
+Attendu : `11 passed, 1 xfailed` et `All checks passed!`.
 
 ### Le test en échec attendu
 
@@ -417,7 +417,7 @@ Deux fenêtres différentes, à ne pas confondre :
 python scripts/viewer.py
 
 # Regarder une politique entraînée se dérouler.
-python visu.py logs/poppy/<date>/poppy_ppo_final.zip --episodes 5
+python scripts/visualize.py models/2026-04-08_21-29-14/best_model.zip --episodes 5
 ```
 
 Pour mesurer plutôt que regarder, l'évaluation tourne sans écran, en
@@ -469,9 +469,11 @@ Ce qui n'est pas encore stabilisé :
    Documenté par le test `xfail` `test_action_space_is_normalised`, voir § 5.
    Corriger invaliderait tous les modèles entraînés : décision d'équipe.
 
-Par ailleurs, `logs/`, `ppo_logs/` et `baseline_logs/` pèsent ~691 Mo suivis
-par git. Le `.dockerignore` les tient hors des images, et le `.gitignore` hors
-des futurs commits, mais l'historique les garde. Décision reportée.
+Par ailleurs, les 1,2 Go de checkpoints que le dépôt suivait ont été
+désindexés ; `models/` n'en garde que les onze meilleurs (28 Mo). L'historique,
+lui, les contient toujours : un clone pèse encore ~1 Go. La réécriture
+d'historique qui règlerait ça est une décision reportée. Tout reste récupérable
+depuis le tag `archive/avant-clean-2026-09-18`.
 
 ---
 

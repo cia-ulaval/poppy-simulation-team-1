@@ -62,8 +62,10 @@ Entraîner, puis évaluer le modèle obtenu :
 
 ```bash
 docker compose --profile train up
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model logs/poppy/<date>/poppy_ppo_final.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
 ```
 
-Le processus de travail est décrit dans [docs/WORKFLOW.md](docs/WORKFLOW.md),
-les règles de code dans [AGENTS.md](AGENTS.md).
+Le guide technique complet — entraîner, visualiser, évaluer, toutes les commandes —
+est dans [docs/TECHNIQUE.md](docs/TECHNIQUE.md). L'architecture et les diagrammes sont
+dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), les règles de code dans
+[CONTRIBUTING.md](CONTRIBUTING.md).
