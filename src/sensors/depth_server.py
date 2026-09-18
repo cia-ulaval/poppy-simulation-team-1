@@ -50,7 +50,7 @@ async def handle_client(websocket):
 
                 await websocket.send(depth_array.astype(np.float16).tobytes())
 
-            except Exception as e:
+            except Exception:
                 logger.error(f"Error processing frame: {traceback.format_exc()}")
                 continue
 
