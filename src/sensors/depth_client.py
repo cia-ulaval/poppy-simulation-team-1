@@ -7,10 +7,11 @@ import threading
 import time
 
 import cv2
-import depthmap_analysis as dmap
 import numpy as np
 import websockets
 from scipy.signal import convolve2d
+
+from src.sensors import depthmap_analysis as dmap
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
