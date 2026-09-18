@@ -13,6 +13,9 @@ transformers>=4.35.0
 pillow>=10.0.0
 websockets>=12.0
 opencv-python>=4.8.0
+# scipy : depth_client.py importe scipy.signal.convolve2d. Il ne figurait dans
+# aucun requirements, donc le client ne s'importait pas, même en natif.
+scipy>=1.11.0
 
 # Outils de développement : tests et analyse statique.
 -r requirements/dev-tools.txt

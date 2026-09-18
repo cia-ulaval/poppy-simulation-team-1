@@ -1,9 +1,38 @@
-import pathlib
+"""Découpage d'une carte de profondeur en régions, et distance par région.
+
+Attention : ce module est en pause avec le reste de la vision, et deux de ses
+fonctions ne sont pas exécutables en l'état. Voir README.md de ce dossier.
+"""
+
+from pathlib import Path
 
 import numpy as np
 
-source = pathlib.Path("./scripts/vision/frames")
-Frames = [np.load(frame) for frame in source.iterdir()]
+# Captures de profondeur de référence. Elles ne sont plus chargées à l'import :
+# le faire ouvrait 44 fichiers relativement au répertoire courant, ce qui
+# faisait échouer un simple `import` selon l'endroit d'où Python était lancé.
+_FRAMES_DIR = Path(__file__).resolve().parents[2] / "scripts" / "vision" / "frames"
+
+
+def load_frames(source: Path = _FRAMES_DIR) -> list[np.ndarray]:
+    """Charge les captures de profondeur enregistrées.
+
+    Args:
+        source: Dossier contenant les fichiers ``.npy``.
+
+    Returns:
+        Une capture par fichier.
+
+    Raises:
+        FileNotFoundError: Si le dossier n'existe pas. Ces captures ne sont
+            plus suivies par git (59 Mo) : voir README.md de ce dossier.
+    """
+    if not source.is_dir():
+        raise FileNotFoundError(
+            f"Captures de profondeur introuvables : {source}. "
+            f"Elles ne sont plus versionnées ; voir src/sensors/README.md."
+        )
+    return [np.load(frame) for frame in sorted(source.iterdir())]
 
 
 def find_divisors_generator(n):
@@ -81,18 +110,6 @@ def loop(frames, n_region, focal):
     return maps
 
 
-if __name__ == "__main__":
-    splitframe = frame_splitting(Frames[0], 10)
-    regionmap = splitframe_to_1Ddepthmap(splitframe, 3.2)
-    warningmap = close_warning(regionmap, 0.2, splitframe, 3.2)
-    print(
-        warningmap,
-        warningmap.shape,
-        splitframe.shape,
-        Frames[0].shape[0] * Frames[0].shape[1],
-    )
-
-
 def make_regions(frame, nb_regions):
     region_width = frame.shape[1] // nb_regions
     return [
@@ -103,3 +120,10 @@ def make_regions(frame, nb_regions):
 def regions_depth(frame, nb_regions):
     regions = make_regions(frame, nb_regions)
     return np.array([np.min(region) for region in regions])
+
+
+if __name__ == "__main__":
+    frames = load_frames()
+    splitframe = frame_splitting(frames[0], 10)
+    regionmap = splitframe_to_1Ddepthmap(splitframe, 3.2)
+    print(regionmap, splitframe.shape, frames[0].shape)
