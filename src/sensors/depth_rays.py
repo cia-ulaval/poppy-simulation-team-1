@@ -11,8 +11,6 @@ Poppy** — voir le corps ``torso`` ci-dessous. Voir README.md de ce dossier.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import mujoco
 import numpy as np
 from numpy.typing import NDArray
@@ -33,7 +31,7 @@ def cast_horizontal_rays(
     n_rays: int = _N_SECTORS * _RAYS_PER_SECTOR,
     fov: float = np.pi / 2,
     max_distance: float = 10.0,
-    head_offset: Optional[NDArray] = None,
+    head_offset: NDArray | None = None,
     body_name: str = "torso",
 ) -> NDArray:
     """Lance ``n_rays`` rayons horizontaux et renvoie la distance par secteur.

@@ -9,7 +9,7 @@ from stable_baselines3 import A2C, PPO, SAC, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
-from src.robot.SimulationAdaptater import SimulationAdapter
+from src.robot.simulation_adapter import SimulationAdapter
 
 MODEL_CLASSES = [TD3, SAC, PPO, A2C]
 

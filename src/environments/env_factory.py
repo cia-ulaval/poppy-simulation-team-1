@@ -17,7 +17,7 @@ soit levée.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
@@ -82,7 +82,7 @@ def _vectorise(
 
 def make_poppy_env(
     config: PoppyEnvironmentConfig,
-    n_envs: Optional[int] = None,
+    n_envs: int | None = None,
     seed: int = 0,
     use_subprocess: bool = True,
 ) -> VecNormalize:
@@ -138,7 +138,7 @@ def make_poppy_env(
 
 def make_baseline_env(
     config: EnvironmentConfig,
-    n_envs: Optional[int] = None,
+    n_envs: int | None = None,
     seed: int = 0,
     use_subprocess: bool = True,
 ) -> VecNormalize:

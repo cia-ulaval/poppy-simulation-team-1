@@ -10,7 +10,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
 
 
@@ -25,7 +25,7 @@ def evaluate_model(
 ):
     """
     Évalue un modèle PPO entraîné avec ou sans visualisation.
-    
+
     Args:
         model_path: Chemin vers le modèle .zip
         vec_normalize_path: Chemin vers vec_normalize.pkl (optionnel)
@@ -33,7 +33,7 @@ def evaluate_model(
         seed: Seed aléatoire
         render: Si True, affiche la visualisation
         fps: Vitesse d'affichage en FPS (seulement si render=True)
-    
+
     Returns:
         tuple: (episode_rewards, episode_lengths)
     """
@@ -153,25 +153,29 @@ def evaluate_model(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Évaluer un modèle PPO Humanoid-v5 entraîné",
+        description="Dérouler une politique Poppy entraînée dans le viewer MuJoCo",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples d'utilisation:
 
-  # Évaluation avec visualisation (par défaut)
-  python visu.py models/ppo_humanoid_final.zip
-  
-  # Évaluation rapide sans visualisation
-  python visu.py models/ppo_humanoid_final.zip --no-render
-  
-  # Évaluation avec vec_normalize spécifique
-  python visu.py models/ppo_humanoid_final.zip --vec-normalize models/vec_normalize.pkl
-  
-  # Évaluation de 20 épisodes à 30 FPS
-  python visu.py models/ppo_humanoid_final.zip --episodes 20 --fps 30
-  
-  # Évaluation rapide de 100 épisodes sans visualisation
-  python visu.py models/ppo_humanoid_final.zip --no-render --episodes 100
+  # Visualisation (par défaut) : ouvre une fenêtre, nécessite un écran
+  python scripts/visualize.py models/<date>/best_model.zip
+
+  # Sans fenêtre, pour ne mesurer que les récompenses
+  python scripts/visualize.py models/<date>/best_model.zip --no-render
+
+  # Normalisation explicite, si elle n'est pas à côté du modèle
+  python scripts/visualize.py models/<date>/best_model.zip \
+      --vec-normalize models/<date>/vec_normalize.pkl
+
+  # 20 épisodes ralentis à 30 images par seconde
+  python scripts/visualize.py models/<date>/best_model.zip --episodes 20 --fps 30
+
+  # 100 épisodes le plus vite possible
+  python scripts/visualize.py models/<date>/best_model.zip --no-render --episodes 100
+
+Pour regarder le robot SANS politique (aucun modèle requis) :
+  python scripts/viewer.py
         """
     )
 

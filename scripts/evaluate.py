@@ -22,7 +22,7 @@ import argparse
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def find_vec_normalize(model_path: Path, explicit: Optional[Path]) -> Optional[Path]:
+def find_vec_normalize(model_path: Path, explicit: Path | None) -> Path | None:
     """Retrouve les statistiques de normalisation associées à un modèle.
 
     Args:
@@ -170,7 +170,7 @@ def find_vec_normalize(model_path: Path, explicit: Optional[Path]) -> Optional[P
     return None
 
 
-def load_model(model_path: Path, algorithm: Optional[str]) -> Any:
+def load_model(model_path: Path, algorithm: str | None) -> Any:
     """Charge un modèle Stable-Baselines3 en déterminant sa classe.
 
     Args:
@@ -233,7 +233,7 @@ def build_env(
     config_path: Path,
     seed: int,
     floor_noise: bool,
-    vec_normalize_path: Optional[Path],
+    vec_normalize_path: Path | None,
     render: bool,
 ) -> VecNormalize | DummyVecEnv:
     """Construit l'environnement d'évaluation.
@@ -288,7 +288,7 @@ def run_episodes(
     env: Any,
     n_episodes: int,
     deterministic: bool,
-    video_path: Optional[Path],
+    video_path: Path | None,
 ) -> list[dict[str, float]]:
     """Déroule des épisodes complets et collecte leurs métriques.
 
