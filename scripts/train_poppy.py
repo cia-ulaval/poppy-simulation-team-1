@@ -35,7 +35,7 @@ from src.config import (
     load_yaml,
     make_poppy_env_config,
 )
-from src.environments.env_factory import HumanoidEnvFactory
+from src.environments.env_factory import make_baseline_env, make_poppy_env
 
 _ALGO_MAP = {
     "PPO": PPO,
@@ -74,8 +74,9 @@ Examples:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("configs/poppy_robust.yaml"),
-        help="YAML config file (default: configs/poppy_robust.yaml)",
+        default=None,
+        help="YAML config file (default: configs/poppy_robust.yaml, "
+             "or configs/humanoid_baseline.yaml with --baseline)",
     )
     parser.add_argument(
         "--algorithm",
@@ -119,6 +120,22 @@ Examples:
         help="Override log directory from YAML",
     )
     return parser.parse_args()
+
+
+def resolve_config_path(args: argparse.Namespace) -> Path:
+    """Choisit le YAML par défaut selon la cible.
+
+    Sans ce choix, ``--baseline`` chargeait ``configs/poppy_robust.yaml``, dont
+    le ``healthy_z_range`` vaut [0.25, 0.70] m — la hauteur de bassin de Poppy.
+    Le bassin d'Humanoid-v5 est à ~1.4 m : l'épisode se terminait au premier
+    pas, et le « test du pipeline » ne testait rien.
+    """
+    if args.config is not None:
+        return args.config
+    return Path(
+        "configs/humanoid_baseline.yaml" if args.baseline
+        else "configs/poppy_robust.yaml"
+    )
 
 
 def build_config(cfg: dict, args: argparse.Namespace) -> dict:
@@ -178,7 +195,8 @@ def main() -> int:
     args = parse_args()
 
     # Load YAML
-    cfg = load_yaml(args.config)
+    config_path = resolve_config_path(args)
+    cfg = load_yaml(config_path)
     cfg = build_config(cfg, args)
 
     algo_name  = cfg.get("algorithm", "PPO").upper()
@@ -203,6 +221,7 @@ def main() -> int:
     print(f"  Algorithm       : {algo_name}")
     print(f"  Total timesteps : {total_ts:,}")
     print(f"  Seed            : {seed}")
+    print(f"  Config          : {config_path}")
     print(f"  Log dir         : {log_dir}")
     print(f"  Floor noise     : {'ON' if dr_enabled else 'OFF'}")
     if dr_enabled:
@@ -228,23 +247,21 @@ def main() -> int:
             clip_obs=env_cfg.get("clip_obs", 10.0),
             gamma=env_cfg.get("gamma", 0.99),
         )
-        factory = HumanoidEnvFactory(base_config)
-        train_env = factory.create_training_env(
-            n_envs=n_envs, seed=seed, use_subprocess=True,
+        train_env = make_baseline_env(base_config, n_envs=n_envs, seed=seed)
+        eval_env = make_baseline_env(
+            base_config, n_envs=1, seed=seed + 1000, use_subprocess=False,
         )
-        eval_env = factory.create_eval_env(seed=seed + 1000)
+        eval_env.training = False     # Don't update normalization stats during eval
+        eval_env.norm_reward = False  # Show true rewards
         print(f"  Env               : {base_config.env_id} (baseline)")
     else:
         # Custom Poppy Humanoid
         env_config = make_poppy_env_config(cfg)
-        train_env = HumanoidEnvFactory.create_poppy_training_env(
-            config=env_config,
-            seed=seed,
-        )
+        train_env = make_poppy_env(config=env_config, seed=seed)
         # Même dérivation que scripts/evaluate.py : un environnement, pas de
         # normalisation des récompenses, pas de randomisation du sol.
         eval_env_config = as_evaluation_config(env_config)
-        eval_env = HumanoidEnvFactory.create_poppy_training_env(
+        eval_env = make_poppy_env(
             config=eval_env_config,
             n_envs=1,
             seed=seed + 1000,
