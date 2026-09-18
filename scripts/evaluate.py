@@ -10,9 +10,10 @@ comparables ; seul le détail les distingue. Si ``healthy`` domine et que
 
 Exemples
 --------
-    python scripts/evaluate.py --model logs/poppy/<date>/poppy_ppo_final.zip
+    python scripts/evaluate.py --model models/<date>/best_model.zip
     python scripts/evaluate.py --model <modele> --episodes 20 --floor-noise
     python scripts/evaluate.py --model <modele> --video sortie.mp4
+    python scripts/evaluate.py --random --episodes 10
 """
 
 from __future__ import annotations
@@ -63,8 +64,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=Path,
-        required=True,
-        help="Fichier .zip du modèle entraîné",
+        default=None,
+        help="Fichier .zip du modèle entraîné (exclusif avec --random)",
+    )
+    parser.add_argument(
+        "--random",
+        action="store_true",
+        help="Politique aléatoire au lieu d'un modèle : donne le plancher de "
+             "comparaison. Sans ce repère, on ne sait pas si la récompense "
+             "d'un modèle entraîné est bonne.",
     )
     parser.add_argument(
         "--vec-normalize",
@@ -137,10 +145,26 @@ def find_vec_normalize(model_path: Path, explicit: Optional[Path]) -> Optional[P
         return explicit
 
     directory = model_path.parent
-    for candidate in (
+    candidates = []
+
+    # Checkpoint intermédiaire d'abord, parce qu'il est plus spécifique.
+    # CheckpointCallback écrit le modèle <prefixe>_<N>_steps.zip et sa
+    # normalisation <prefixe>_vecnormalize_<N>_steps.pkl, dans le même dossier
+    # que le vec_normalize_final.pkl de fin d'entraînement. Chercher le
+    # générique en premier ferait donc charger, sans le dire, les statistiques
+    # du dernier pas sur un modèle du millionième : mêmes formes, mêmes types,
+    # chiffres faux et aucune erreur levée.
+    stem = model_path.stem
+    if stem.endswith("_steps") and stem.count("_") >= 2:
+        prefix, steps, _ = stem.rsplit("_", 2)
+        candidates.append(directory / f"{prefix}_vecnormalize_{steps}_steps.pkl")
+
+    candidates += [
         directory / "vec_normalize_final.pkl",
         directory / "vec_normalize.pkl",
-    ):
+    ]
+
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     return None
@@ -178,6 +202,31 @@ def load_model(model_path: Path, algorithm: Optional[str]) -> Any:
         f"Tentatives — {', '.join(failures)}. "
         f"Forcer avec --algorithm si l'algorithme est connu."
     )
+
+
+class RandomPolicy:
+    """Politique aléatoire, présentant l'interface ``predict`` de SB3.
+
+    Elle répond à « que vaut un robot qui agite ses membres au hasard ? ».
+    C'est le plancher : une politique entraînée qui ne le dépasse pas n'a rien
+    appris, et sans ce repère une récompense de 2 000 ne veut rien dire.
+
+    Les actions sont tirées uniformément dans ``[-1, 1]``, le contrat annoncé
+    par ``PoppyHumanoidEnv._action_to_torque`` — et non via
+    ``action_space.sample()``, qui produit des valeurs hors contrat tant que
+    ``test_action_space_is_normalised`` reste en échec attendu.
+    """
+
+    def __init__(self, action_dim: int, seed: int) -> None:
+        self._action_dim = action_dim
+        self._rng = np.random.default_rng(seed)
+
+    def predict(
+        self, observation: Any, deterministic: bool = True
+    ) -> tuple[NDArray, None]:
+        """Tire une action au hasard. ``deterministic`` est ignoré."""
+        action = self._rng.uniform(-1.0, 1.0, size=(1, self._action_dim))
+        return action.astype(np.float32), None
 
 
 def build_env(
@@ -327,7 +376,7 @@ def _write_video(frames: list[NDArray], path: Path, env: Any) -> None:
     print(f"Vidéo écrite : {path} ({len(frames)} images, {fps} fps)")
 
 
-def report(episodes: list[dict[str, float]], model_path: Path) -> None:
+def report(episodes: list[dict[str, float]], model: Path | str) -> None:
     """Affiche le bilan de l'évaluation."""
 
     def stat(key: str) -> tuple[float, float]:
@@ -340,7 +389,7 @@ def report(episodes: list[dict[str, float]], model_path: Path) -> None:
     survival = float(np.mean([episode["survived"] for episode in episodes]))
 
     print()
-    print(f"Modèle    : {model_path}")
+    print(f"Modèle    : {model}")
     print(f"Épisodes  : {len(episodes)}")
     print("-" * 62)
     print(f"{'Récompense totale':<28} {reward_mean:>10.1f} ± {reward_std:.1f}")
@@ -366,19 +415,34 @@ def main() -> int:
     """Point d'entrée."""
     args = parse_args()
 
-    vec_normalize_path = find_vec_normalize(args.model, args.vec_normalize)
-    if vec_normalize_path is None:
-        print("Aucune statistique de normalisation trouvée : évaluation brute.")
-    else:
-        print(f"Normalisation : {vec_normalize_path}")
+    if (args.model is None) == (not args.random):
+        raise SystemExit("Fournir --model <fichier.zip> ou --random, pas les deux.")
 
-    model = load_model(args.model, args.algorithm)
+    if args.random:
+        # Pas de modèle, donc pas de statistiques de normalisation : les
+        # récompenses brutes sont précisément ce qu'on veut comme plancher.
+        vec_normalize_path = None
+        label = "politique aléatoire"
+    else:
+        label = args.model
+        vec_normalize_path = find_vec_normalize(args.model, args.vec_normalize)
+        if vec_normalize_path is None:
+            print("Aucune statistique de normalisation trouvée : évaluation brute.")
+        else:
+            print(f"Normalisation : {vec_normalize_path}")
+
     env = build_env(
         config_path=args.config,
         seed=args.seed,
         floor_noise=args.floor_noise,
         vec_normalize_path=vec_normalize_path,
         render=args.video is not None,
+    )
+
+    model = (
+        RandomPolicy(action_dim=env.action_space.shape[0], seed=args.seed)
+        if args.random
+        else load_model(args.model, args.algorithm)
     )
 
     try:
@@ -389,7 +453,7 @@ def main() -> int:
             deterministic=not args.stochastic,
             video_path=args.video,
         )
-        report(episodes, args.model)
+        report(episodes, label)
     finally:
         env.close()
 

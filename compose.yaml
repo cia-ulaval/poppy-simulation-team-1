@@ -68,6 +68,9 @@ services:
       - ./scripts:/workspace/scripts:ro
       - ./configs:/workspace/configs:ro
       - ./assets:/workspace/assets:ro
+      # Les modèles conservés vivent dans models/ depuis qu'ils ont quitté
+      # logs/ : en lecture seule, une évaluation ne doit rien y écrire.
+      - ./models:/workspace/models:ro
       - ./logs:/workspace/logs
     command: ["python", "scripts/evaluate.py", "--help"]
 
@@ -124,6 +127,7 @@ services:
       - ./configs:/workspace/configs:ro
       - ./assets:/workspace/assets:ro
       # Artefacts d'entraînement (modèles, normalisations) en lecture seule.
+      - ./models:/workspace/models:ro
       - ./logs:/workspace/logs:ro
     environment:
       # Cible par défaut : le faux robot de cette stack. ros_publisher.py lit
