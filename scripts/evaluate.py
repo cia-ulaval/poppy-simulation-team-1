@@ -32,7 +32,7 @@ from stable_baselines3 import A2C, PPO, SAC, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from src.config import as_evaluation_config, load_yaml, make_poppy_env_config
-from src.environments.env_factory import HumanoidEnvFactory
+from src.environments.env_factory import load_normalized_env, make_poppy_env
 
 # Ordre d'essai pour retrouver l'algorithme d'un fichier .zip. Stable-Baselines3
 # n'y enregistre pas son nom de façon exploitable : PPO et A2C partagent la même
@@ -256,9 +256,9 @@ def build_env(
     train_config = make_poppy_env_config(load_yaml(config_path))
     eval_config = as_evaluation_config(train_config, floor_noise=floor_noise)
 
-    # create_poppy_training_env renvoie déjà un VecNormalize ; on ne garde que
+    # make_poppy_env renvoie déjà un VecNormalize ; on ne garde que
     # l'environnement de base pour y appliquer les statistiques enregistrées.
-    wrapped = HumanoidEnvFactory.create_poppy_training_env(
+    wrapped = make_poppy_env(
         config=eval_config,
         n_envs=1,
         seed=seed,
@@ -272,9 +272,7 @@ def build_env(
     if vec_normalize_path is None:
         return base_env
 
-    return HumanoidEnvFactory.load_normalized_env(
-        str(vec_normalize_path), base_env, training=False
-    )
+    return load_normalized_env(str(vec_normalize_path), base_env, training=False)
 
 
 def _single_env(vec_env: Any) -> Any:
