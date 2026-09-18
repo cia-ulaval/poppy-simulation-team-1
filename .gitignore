@@ -15,10 +15,14 @@ __pycache__/
 # Sorties d'exécution (jamais versionnées)
 scenes/
 logs/
-ppo_logs/
-baseline_logs/
 runs/
 *.mp4
+
+# Captures de profondeur pour src/sensors/ : 59 Mo de .npy, et leur copie
+# zippée juste à côté. Ce sont des données de test, pas du code. La vision
+# est en pause ; quand elle reprendra, ces fichiers seront à regénérer ou à
+# héberger hors du dépôt. Voir src/sensors/README.md.
+scripts/vision/
 
 # figs/ est créé par les conteneurs. On garde le dossier versionné (sinon
 # Docker le crée en root sur un hôte Linux et l'utilisateur du conteneur ne
