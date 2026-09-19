@@ -14,6 +14,7 @@ docs/DOCKER.md § Sans Docker).
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -26,7 +27,26 @@ _MODEL_PATH = Path(__file__).parent.parent / "assets" / "poppy_humanoid" / "popp
 
 
 def main() -> int:
-    """Charge le modèle Poppy et ouvre le viewer interactif."""
+    """Charge le modèle Poppy et ouvre le viewer interactif.
+
+    Returns:
+        0 si la fenêtre s'est ouverte, 1 si le modèle est introuvable.
+    """
+    argparse.ArgumentParser(
+        description="Ouvre le modèle Poppy dans le viewer MuJoCo, sans politique.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Ne prend aucun argument et ne demande aucun modèle entraîné : c'est le
+premier réflexe utile quand on découvre le projet. Clic gauche glissé pour
+tourner autour, molette pour zoomer.
+
+Nécessite un écran, donc un Python installé en natif — voir
+docs/DEMARRAGE.md étape 2. Impossible depuis un conteneur sous Windows.
+
+Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
+        """,
+    ).parse_args()
+
     if not _MODEL_PATH.exists():
         print(f"Modèle introuvable : {_MODEL_PATH}", file=sys.stderr)
         return 1

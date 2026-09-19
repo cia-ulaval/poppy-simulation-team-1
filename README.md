@@ -65,6 +65,10 @@ docker compose --profile train up
 docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
 ```
 
+**Première fois sur le projet ?** Suivez [docs/DEMARRAGE.md](docs/DEMARRAGE.md) :
+un parcours guidé d'une heure, de la construction de l'image jusqu'à l'entraînement
+de votre premier modèle.
+
 Le guide technique complet — entraîner, visualiser, évaluer, toutes les commandes —
 est dans [docs/TECHNIQUE.md](docs/TECHNIQUE.md). L'architecture et les diagrammes sont
 dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), les règles de code dans

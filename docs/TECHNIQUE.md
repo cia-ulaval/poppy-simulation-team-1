@@ -3,6 +3,9 @@
 Pour faire tourner le projet. Le `README.md` de la racine présente le projet ;
 celui-ci explique comment on s'en sert.
 
+**Vous découvrez le dépôt ?** Commencez par [`DEMARRAGE.md`](DEMARRAGE.md), qui fait
+le tour en pratique. Ce document-ci est la référence, pas le parcours.
+
 - Détail de Docker (GPU, versions figées, dépannage) : [`DOCKER.md`](DOCKER.md)
 - Comment c'est construit, diagrammes C4 : [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Règles de code et de contribution : [`../CONTRIBUTING.md`](../CONTRIBUTING.md)

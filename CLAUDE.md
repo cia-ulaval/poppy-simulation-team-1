@@ -4,6 +4,11 @@ Les règles de fond sont dans [`CONTRIBUTING.md`](CONTRIBUTING.md) — normes Py
 règles Git, configuration, **sécurité robot**. Elles s'appliquent telles quelles. Ce
 fichier n'ajoute que les pièges propres à ce dépôt.
 
+## Pour découvrir le dépôt
+
+[`docs/DEMARRAGE.md`](docs/DEMARRAGE.md) fait le tour en pratique : construire,
+regarder le robot, évaluer un modèle, en entraîner un.
+
 ## Avant de modifier quoi que ce soit
 
 Lire [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), en particulier le contrat

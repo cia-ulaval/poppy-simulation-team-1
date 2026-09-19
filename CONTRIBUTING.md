@@ -2,6 +2,7 @@
 
 Court volontairement. Ce qui n'est pas ici se discute avant d'être codé.
 
+Première prise en main : [`docs/DEMARRAGE.md`](docs/DEMARRAGE.md).
 Pour faire tourner le projet : [`docs/TECHNIQUE.md`](docs/TECHNIQUE.md).
 Pour comprendre comment il est construit : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
