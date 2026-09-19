@@ -1,7 +1,8 @@
 # Modèles entraînés
 
-Onze politiques Poppy, une par entraînement du 8 avril 2026. Chaque dossier contient
-une paire **indissociable** :
+Douze politiques Poppy : onze du 8 avril 2026, une par entraînement, plus celle du
+19 septembre qui est la référence. Chaque dossier contient une paire
+**indissociable** :
 
 ```
 models/<date>/
@@ -16,12 +17,26 @@ seul tant que les deux restent côte à côte.
 
 ## Lequel est « le » modèle du projet
 
-`2026-04-08_23-00-52`, celui que l'équipe avait poussé sur `model-for-presentation`
-par le commit `7583141 add final best model` du 9 avril 2026. Le fichier ici est
-**identique à l'octet près** (blob `e05c62a`), sa normalisation aussi (`42f560f`).
+**`2026-09-19_recompense-corrigee`.** C'est le premier entraîné avec la récompense
+corrigée — les onze autres l'ont été avec une mesure d'avance sur le mauvais axe — et
+il bat tout le reste :
 
-**C'est bien le bon modèle, et il marche.** 5,63 m vers l'avant en 10 s à 0,56 m/s,
-sans jamais tomber, épaules perpendiculaires au trajet, 92 % d'appuis alternés.
+| | 19 septembre | 8 avril (`23-00-52`) |
+|---|---:|---:|
+| Avance | **+6,58 m** | +5,63 m |
+| Vitesse | **0,65 m/s** | 0,56 m/s |
+| Dérive | **−0,38 m** | −0,86 m |
+| Sans chute | 100 % | 100 % |
+| Récompense | 4461 | 4565 |
+
+16 % plus loin, 16 % plus vite, **deux fois moins de dérive**. Sa récompense est
+légèrement inférieure parce qu'il va plus vite que le plafond ne récompense — voir
+« Le plafond de la récompense » plus bas.
+
+`2026-04-08_23-00-52` reste dans le dépôt : c'est celui que l'équipe avait poussé sur
+`model-for-presentation` par le commit `7583141 add final best model` du 9 avril 2026,
+et le fichier est **identique à l'octet près** (blob `e05c62a`, normalisation
+`42f560f`). Il marche aussi, malgré la récompense fausse.
 
 ## Classement
 
@@ -30,7 +45,7 @@ Mesuré le 19 septembre 2026 : 10 épisodes déterministes par modèle, graine 4
 corrigée** (voir plus bas). Reproduire une ligne :
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_23-00-52/best_model.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 10
 ```
 
 **Avance** et **dérive** sont mesurées dans le repère du robot : avancer, c'est aller
@@ -38,7 +53,8 @@ là où il regarde. Une avance négative signifie qu'il recule.
 
 | Modèle | Récompense | Avance (m) | Dérive (m) | Pas | Debout | Verticalité |
 |---|---:|---:|---:|---:|---:|---:|
-| `2026-04-08_23-00-52` | **4565** | **+5,63** | −0,86 | 1000 | **100 %** | 0,998 |
+| `2026-09-19_recompense-corrigee` | 4461 | **+6,58** | **−0,38** | 1000 | **100 %** | 0,997 |
+| `2026-04-08_23-00-52` | **4565** | +5,63 | −0,86 | 1000 | **100 %** | 0,998 |
 | `2026-04-08_21-29-14` | 703 | +0,25 | +1,08 | 319 | 0 % | 0,963 |
 | `2026-04-08_20-41-01` | 489 | +0,04 | +0,67 | 241 | 0 % | 0,961 |
 | `2026-04-08_20-22-11` | 377 | +0,08 | +0,40 | 174 | 0 % | 0,933 |
@@ -53,7 +69,8 @@ là où il regarde. Une avance négative signifie qu'il recule.
 
 Ce que le tableau dit :
 
-- **Un seul modèle marche** : `23-00-52`, avec 22 fois plus d'avance que le suivant.
+- **Deux modèles marchent** : celui du 19 septembre et `23-00-52`. Le troisième du
+  classement avance 26 fois moins.
 - `21-29-14`, `20-41-01` et `20-22-11` **font du pas chassé** : leur dérive dépasse
   leur avance. Ils se déplacent, mais de côté, et ils tombent.
 - `22-42-32` **recule** de 94 cm, sur 209 pas. C'est cohérent : rien ne l'en
@@ -92,11 +109,37 @@ ce qui la rend aussi insensible à la randomisation d'orientation initiale (±15
 `tests/test_heading.py` verrouille cette convention : si le MJCF est un jour
 régénéré avec d'autres axes, les tests le diront.
 
+## Le plafond de la récompense
+
+L'entraînement du 19 septembre a atteint **98 % du maximum atteignable dès 2,8 M de
+pas**, puis a passé 7,2 M de pas à gagner 5 %. Ce n'est pas un échec d'apprentissage,
+c'est une récompense qui n'a plus rien à offrir :
+
+| Terme | Maximum par épisode | Obtenu | % |
+|---|---:|---:|---:|
+| `healthy_reward` | 1000 | 1000,0 | 100 % |
+| `upright_reward` | 1000 | 997,4 | 99,7 % |
+| `gait_reward` | 300 | 286,5 | 95,5 % |
+| `forward_reward` | 2500 | 2446,5 | 97,9 % |
+| **Total positif** | **4800** | **4730** | **98,6 %** |
+
+**`max_forward_vel` vaut 0,5 m/s et le robot marche à 0,65 m/s** : la récompense
+arrête de compter avant qu'il n'arrête d'accélérer. Deux leviers pour débloquer, tous
+deux à trancher en équipe parce qu'ils rendent les modèles incomparables :
+
+1. Monter `max_forward_vel` — le plus direct, le robot dépasse déjà le plafond.
+2. Rééquilibrer : `healthy` + `upright` pèsent 2000 sur 4800, soit 42 % de la
+   récompense pour le seul fait de rester debout.
+
+À noter aussi : 6 % des cent dernières évaluations passent sous 3000, c'est-à-dire
+qu'il tombe encore parfois. La marge de robustesse est mince.
+
 ## Lequel prendre
 
 | Pour | Prendre |
 |---|---|
-| Montrer le projet, tester le pont ROS, repartir pour un entraînement | `23-00-52` — le seul qui marche et ne tombe pas |
+| Tout : démonstration, pont ROS, point de départ d'un entraînement | `2026-09-19_recompense-corrigee` |
+| Comparer à l'avant-correction des axes | `2026-04-08_23-00-52` |
 | Illustrer ce qu'est un pas chassé | `21-29-14` |
 | Illustrer une marche arrière | `22-42-32` |
 
@@ -106,13 +149,14 @@ en biais avec les épaules alignées sur le trajet.
 
 ## Ce qui reste à faire
 
-Ces onze modèles ont été entraînés **avec la récompense fausse**. Ils restent
-chargeables — l'espace d'observation n'a pas changé — et leurs récompenses ci-dessus
-sont mesurées avec la bonne. Mais aucun n'a jamais été *entraîné* avec un signal
-d'avance correct.
+Les onze modèles du 8 avril ont été entraînés **avec la récompense fausse**. Ils
+restent chargeables — l'espace d'observation n'a pas changé — et leurs récompenses
+ci-dessus sont mesurées avec la bonne. Mais aucun n'a été *entraîné* avec un signal
+d'avance correct ; celui du 19 septembre est le premier.
 
-Le prochain entraînement, lui, le sera. Repartir de `23-00-52` plutôt que de zéro
-conserve l'équilibre et la démarche déjà appris, et ne corrige que la direction.
+La suite passe par la récompense, pas par plus de pas : le plafond est atteint. Et
+par l'observation, si l'on veut transférer sur le robot réel — voir
+[`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 
 ## `_humanoid-v5-baseline/`
 
