@@ -165,12 +165,14 @@ côté du modèle. **Ne sautez pas cette étape** : un modèle entraîné avec
 normalisation et évalué sans reçoit des observations sur une autre échelle et
 paraît bien pire qu'il n'est, sans qu'aucune erreur ne soit levée.
 
-La sortie donne récompense, durée, distance parcourue, verticalité, pourcentage
-d'épisodes sans chute, puis **la décomposition des huit termes de récompense**.
-C'est cette dernière partie qui sert : une politique qui tient la pose et une
-politique qui marche obtiennent des totaux proches, seul le détail les sépare.
-Si `healthy_reward` et `uprightness` dominent pendant que `gait_reward` reste
-près de zéro, le robot ne marche pas.
+La sortie donne récompense, durée, **déplacement net** puis sa répartition entre
+x et y, verticalité, pourcentage d'épisodes sans chute, et enfin la décomposition
+des huit termes de récompense.
+
+Lire le déplacement net avant la récompense. La récompense ne mesure l'avance que
+sur l'axe x : un robot qui parcourt 5,70 m dont 5,68 en y s'est bel et bien
+déplacé, mais elle le note comme immobile. Le script signale explicitement ce cas.
+Détail dans [`../models/README.md`](../models/README.md).
 
 Enregistrer une vidéo du premier épisode (rendu logiciel, aucun écran requis) :
 

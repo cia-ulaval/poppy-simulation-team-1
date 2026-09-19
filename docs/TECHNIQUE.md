@@ -180,17 +180,17 @@ hasard. Sans ce repère, une récompense de 2000 ne veut rien dire.
 
 ### Lire le résultat — la seule chose à vraiment comprendre
 
-`evaluate.py` affiche la décomposition des huit termes de récompense. **C'est la
-partie utile.** Une politique qui reste debout sans avancer et une politique qui
-marche obtiennent des totaux comparables ; seul le détail les distingue.
+**Ne jamais juger sur la récompense seule.** Regarder d'abord trois lignes :
+« Déplacement net », « Épisodes sans chute », et la répartition entre x et y.
 
-Si `healthy_reward` domine et que `capped_vel` est proche de zéro, **le robot ne
-marche pas, il tient la pose.** C'est exactement le cas du modèle le mieux noté du
-dépôt — voir [`models/README.md`](../models/README.md), qui détaille pourquoi la plus
-haute récompense n'est pas la meilleure démarche.
+`evaluate.py` sépare délibérément le déplacement total de sa composante en x, parce
+que la récompense ne mesure que x. Un robot qui parcourt 5,70 m dont 5,68 en y **s'est
+déplacé** ; la récompense, elle, le note comme immobile. Le script le dit explicitement
+quand ça se produit.
 
-Deux lignes suffisent souvent : « Épisodes sans chute » et « Vitesse avant ». Un robot
-qui tombe à tous les coups ne marche pas, quelle que soit sa récompense.
+La décomposition des huit termes vient ensuite. Si `healthy_reward` domine, que
+`capped_vel` est proche de zéro **et** que le déplacement net est proche de zéro, alors
+seulement le robot tient la pose sans marcher.
 
 | Option | Effet |
 |---|---|
@@ -248,8 +248,13 @@ entre le contrat annoncé (actions dans `[-1, 1]`) et `action_space`, hérité d
 
 Écrit pour que personne ne perde une journée à le redécouvrir.
 
-**Le robot ne marche pas encore vraiment.** Le meilleur modèle par récompense reste
-debout et glisse latéralement ; le meilleur marcheur tombe au bout de 3 secondes. Voir
+**Le terme d'avance est projeté sur l'axe x du monde, pas sur le cap du robot.**
+Conséquence mesurée : `2026-04-08_23-00-52` marche 5,70 m en 10 s à 0,57 m/s, en ligne
+droite, avec 92 % d'appuis alternés et sans jamais tomber — mais à 98° de son propre
+cap. C'est un pas chassé. La récompense ne voit presque rien de ce déplacement et le
+pénalise même comme dérive latérale. Une politique peut donc marcher sans être
+récompensée. Le seul modèle qui marche *droit*, `2026-04-08_21-29-14`, tombe au bout
+de 3 secondes. Détail et pistes de correction dans
 [`models/README.md`](../models/README.md).
 
 **L'espace d'action ne correspond pas à son contrat.** La documentation de
