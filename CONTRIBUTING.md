@@ -57,7 +57,7 @@ docker compose --profile dev run --rm dev ruff check .
 docker compose --profile dev run --rm dev python -m pytest
 ```
 
-Attendu : `All checks passed!` et `11 passed, 1 xfailed`.
+Attendu : `All checks passed!` et `16 passed, 1 xfailed`.
 
 ## Tests
 

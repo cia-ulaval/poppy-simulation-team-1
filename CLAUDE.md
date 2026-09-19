@@ -17,6 +17,14 @@ Une politique chargée dans un espace différent échoue sur `spaces must have t
 shape`. Ce n'est pas une modification à glisser au passage : c'est une décision
 d'équipe.
 
+**Les axes du robot ne sont pas ceux d'Humanoid-v5.** L'avant de Poppy est son
+**−y local**, sa gauche son **+x**. La récompense projette la vitesse sur le cap lu
+dans l'orientation du bassin, jamais sur un axe du monde — mesurer sur x reviendrait à
+récompenser le pas chassé, ce qui a réellement eu lieu jusqu'en septembre 2026.
+`tests/test_heading.py` verrouille la convention ; si ces tests rougissent, c'est que
+le MJCF a changé de repère et que la récompense, les caméras et le pont sont tous à
+revoir.
+
 **Ne pas « corriger » les défauts connus sans qu'on le demande.** Trois d'entre eux
 changeraient le comportement de l'entraînement et sont listés dans
 [`docs/TECHNIQUE.md` §8](docs/TECHNIQUE.md) : l'espace d'action non normalisé (un
@@ -53,7 +61,7 @@ docker compose --profile dev run --rm dev ruff check .
 docker compose --profile dev run --rm dev python -m pytest
 ```
 
-Attendu : `All checks passed!` et `11 passed, 1 xfailed`. Le `xfailed` est voulu.
+Attendu : `All checks passed!` et `16 passed, 1 xfailed`. Le `xfailed` est voulu.
 
 Preuve que la physique et la récompense n'ont pas bougé :
 

@@ -10,6 +10,21 @@ When ``floor_noise=True`` (default), the floor's friction and restitution
 are re-sampled from a configurable range at every ``reset()``.  This makes
 the policy more robust to surface variability encountered on the real robot.
 
+Axes
+----
+The Poppy URDF puts the robot's **sagittal axis on y**, not on x:
+
+* local **-y** is forward, local **+y** is backward
+* local **+x** is the robot's left, local **-x** its right
+
+Measured, not assumed: the feet sit 13.2 cm apart along x, and flexing a
+knee (negative on the right leg, whose range is [-2.34, +0.06] rad) moves
+the foot along +y and +z, i.e. backward and up.
+
+This differs from Gymnasium's Humanoid-v5, which this environment was
+first modelled on and which faces +x.  Forward progress is therefore
+projected on the robot's own heading, never on a fixed world axis.
+
 Control
 -------
 Actions in [-1, 1] are mapped to **target joint positions** within each
@@ -52,6 +67,14 @@ _OBS_DIM = 30 + 31 + 2
 _DEFAULT_HEALTHY_Z_RANGE = (0.25, 0.70)
 
 _FLOOR_GEOM_NAME = "floor"
+
+# ── Robot heading, in the pelvis frame ──────────────────────
+# See the "Axes" section above.  These are what forward_reward and
+# lateral_cost are projected on; using world x instead rewarded
+# side-stepping and charged genuine walking to the lateral penalty.
+_PELVIS_BODY_ID = 1
+_LOCAL_FORWARD = np.array([0.0, -1.0, 0.0])
+_LOCAL_LEFT = np.array([1.0, 0.0, 0.0])
 
 # ── Natural standing pose corrections ───────────────────────
 # At qpos=0 the URDF shoulder frames cause the arms to cross in
@@ -152,6 +175,24 @@ CAMERAS: Dict[str, Dict[str, Any]] = {
 }
 
 DEFAULT_CAMERA_CONFIG = CAMERAS["suivi"]
+
+
+def _ground_direction(vector: NDArray) -> NDArray:
+    """Project a 3-D direction onto the ground plane and normalise it.
+
+    Args:
+        vector: Direction in world coordinates, shape ``(3,)``.
+
+    Returns:
+        The unit vector of its x-y part, shape ``(2,)``.  Falls back to the
+        default forward direction if the robot is exactly horizontal, rather
+        than dividing by zero in the middle of an episode.
+    """
+    flat = vector[:2]
+    norm = float(np.linalg.norm(flat))
+    if norm < 1e-8:
+        return _LOCAL_FORWARD[:2].copy()
+    return flat / norm
 
 
 class PoppyHumanoidEnv(MujocoEnv, EzPickle):
@@ -341,6 +382,24 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         l_force = np.linalg.norm(self.data.cfrc_ext[self._l_foot_id, 3:])
         return np.array([r_force, l_force], dtype=np.float64)
 
+    def _heading_frame(self) -> Tuple[NDArray, NDArray]:
+        """Return the robot's forward and left directions, in the ground plane.
+
+        Both are taken from the pelvis orientation, so they follow the robot
+        as it turns.  A policy is therefore rewarded for advancing *where it
+        faces*, whatever its heading — which also makes the reward immune to
+        the initial yaw randomisation.
+
+        Returns:
+            ``(forward, left)``, each a unit vector of shape ``(2,)`` in the
+            world x-y plane.
+        """
+        rotation = self.data.xmat[_PELVIS_BODY_ID].reshape(3, 3)
+        return (
+            _ground_direction(rotation @ _LOCAL_FORWARD),
+            _ground_direction(rotation @ _LOCAL_LEFT),
+        )
+
     def _get_uprightness(self) -> float:
         """Return how upright the torso is (1.0 = perfectly vertical).
 
@@ -370,9 +429,16 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         dt = self.dt
 
         # ── Forward velocity reward (CAPPED) ────────────────────
+        # Projected on the robot's own heading, not on world x.  See the
+        # "Axes" section at the top of this module: world x is the robot's
+        # left-right axis, so measuring progress on it rewarded
+        # side-stepping and charged real walking to lateral_cost below.
+        #
         # Cap at max_forward_vel to prevent the policy from
         # learning to take huge strides for extra speed.
-        forward_vel = (xy_after[0] - xy_before[0]) / dt
+        velocity = (xy_after - xy_before) / dt
+        forward_dir, left_dir = self._heading_frame()
+        forward_vel = float(velocity @ forward_dir)
         capped_vel = np.clip(forward_vel, -self._max_forward_vel,
                              self._max_forward_vel)
         forward_reward = self._forward_reward_weight * capped_vel
@@ -400,7 +466,8 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             gait_reward = 0.0
 
         # ── Lateral velocity penalty ────────────────────────────
-        lateral_vel = (xy_after[1] - xy_before[1]) / dt
+        # Sideways relative to the robot, not to the world.
+        lateral_vel = float(velocity @ left_dir)
         lateral_cost = 0.5 * abs(lateral_vel)
 
         # ── Control cost ────────────────────────────────────────

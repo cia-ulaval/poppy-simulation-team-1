@@ -163,6 +163,32 @@ graph TB
 les modèles entraînés : une politique chargée avec un espace d'observation différent
 échoue sur `spaces must have the same shape`.
 
+### Les axes du robot — à lire avant tout le reste
+
+L'URDF de Poppy ne suit **pas** la convention de `Humanoid-v5`, sur lequel cet
+environnement a d'abord été calqué.
+
+| Axe local | Direction |
+|---|---|
+| **−y** | l'avant |
+| +y | l'arrière |
+| +x | la gauche du robot |
+| −x | sa droite |
+
+Mesuré, pas supposé : les pieds sont écartés de 13,2 cm selon **x**, et fléchir un
+genou (côté négatif sur la jambe droite, dont la course est [−2,34 ; +0,06] rad)
+envoie le pied en **+y et +z**, c'est-à-dire vers l'arrière et vers le haut.
+
+Cette différence a coûté cher : jusqu'au 19 septembre 2026, `forward_reward` mesurait
+l'avance sur l'axe **x du monde**, donc sur l'axe gauche-droite du robot. Elle
+récompensait le pas chassé et facturait la vraie marche comme de la dérive. Le
+classement des onze modèles en était inversé. Voir
+[`../models/README.md`](../models/README.md).
+
+La vitesse est désormais projetée sur le **cap du robot**, lu dans l'orientation du
+bassin — donc aussi insensible à la randomisation d'orientation initiale.
+`tests/test_heading.py` verrouille la convention.
+
 ### Observation — 63 dimensions, `float64`
 
 | Indices | Contenu | Unité |
@@ -208,27 +234,19 @@ interne. Une politique entraînée en couple ne se transférerait pas.
 
 | Terme | Signe | Ce que ça encourage |
 |---|:---:|---|
-| `forward_reward` | + | Avancer. Plafonné à 0,5 m/s pour éviter les foulées absurdes. |
+| `forward_reward` | + | Avancer **dans la direction où le robot regarde**. Plafonné à 0,5 m/s pour éviter les foulées absurdes. |
 | `healthy_reward` | + | Rester dans la plage de hauteur (ne pas tomber) |
 | `upright_reward` | + | Garder le buste vertical |
 | `gait_reward` | + | Alterner les appuis : 0,3 si un seul pied touche, 0,1 si les deux |
-| `lateral_cost` | − | Dériver sur le côté |
+| `lateral_cost` | − | Dériver sur le côté, **perpendiculairement à ses épaules** |
 | `ctrl_cost` | − | Actions de grande amplitude |
 | `action_rate_cost` | − | Changements brusques entre deux actions |
 | `joint_vel_cost` | − | Articulations qui tournent vite |
 
-Deux choses à savoir sur ces termes, toutes deux mesurées :
-
-`healthy` et `upright` rapportent chacun jusqu'à 1000 par épisode complet, quand
-`forward` en rapporte quelques dizaines. Rester debout pèse donc bien plus lourd
-qu'avancer.
-
-Surtout, **`forward_reward` est projeté sur l'axe x du monde, pas sur le cap du
-robot** : `forward_vel = (x_apres - x_avant) / dt`. Une politique qui marche
-parfaitement mais orientée à 90° du repère n'est pas récompensée pour son
-déplacement — elle est même pénalisée par `lateral_cost`. C'est exactement ce que
-fait la politique la mieux notée du dépôt : 5,70 m en 10 s, en ligne droite, sans
-tomber, mais de côté. Voir [`../models/README.md`](../models/README.md).
+`healthy` et `upright` rapportent chacun jusqu'à 1000 par épisode complet. Sur le
+meilleur modèle, `forward` en rapporte 485 : rester debout pèse encore plus lourd
+qu'avancer, même après la correction des axes. C'est un déséquilibre à garder en tête
+si une politique se met à privilégier la stabilité sur le déplacement.
 
 ### Randomisation de domaine
 

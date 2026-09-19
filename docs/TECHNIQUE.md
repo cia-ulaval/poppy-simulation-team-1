@@ -183,10 +183,10 @@ hasard. Sans ce repère, une récompense de 2000 ne veut rien dire.
 **Ne jamais juger sur la récompense seule.** Regarder d'abord trois lignes :
 « Déplacement net », « Épisodes sans chute », et la répartition entre x et y.
 
-`evaluate.py` sépare délibérément le déplacement total de sa composante en x, parce
-que la récompense ne mesure que x. Un robot qui parcourt 5,70 m dont 5,68 en y **s'est
-déplacé** ; la récompense, elle, le note comme immobile. Le script le dit explicitement
-quand ça se produit.
+`evaluate.py` sépare le déplacement total en **avance** et **dérive**, mesurées dans
+le repère du robot : avancer, c'est aller là où il regarde. Une avance négative
+signifie qu'il recule. Le script signale explicitement le pas chassé (dérive
+supérieure à l'avance) et la marche arrière.
 
 La décomposition des huit termes vient ensuite. Si `healthy_reward` domine, que
 `capped_vel` est proche de zéro **et** que le déplacement net est proche de zéro, alors
@@ -213,7 +213,7 @@ docker compose --profile dev run --rm dev python -m pytest
 docker compose --profile dev run --rm dev ruff check .
 ```
 
-**Le résultat attendu est `11 passed, 1 xfailed`.** Le `xfailed` n'est pas une panne :
+**Le résultat attendu est `16 passed, 1 xfailed`.** Le `xfailed` n'est pas une panne :
 c'est un test volontairement en échec attendu, qui documente une incohérence connue
 entre le contrat annoncé (actions dans `[-1, 1]`) et `action_space`, hérité de
 `actuator_ctrlrange`. Voir §8. `ruff check . --fix` corrige ce qui est mécanique.
@@ -248,14 +248,13 @@ entre le contrat annoncé (actions dans `[-1, 1]`) et `action_space`, hérité d
 
 Écrit pour que personne ne perde une journée à le redécouvrir.
 
-**Le terme d'avance est projeté sur l'axe x du monde, pas sur le cap du robot.**
-Conséquence mesurée : `2026-04-08_23-00-52` marche 5,70 m en 10 s à 0,57 m/s, en ligne
-droite, avec 92 % d'appuis alternés et sans jamais tomber — mais à 98° de son propre
-cap. C'est un pas chassé. La récompense ne voit presque rien de ce déplacement et le
-pénalise même comme dérive latérale. Une politique peut donc marcher sans être
-récompensée. Le seul modèle qui marche *droit*, `2026-04-08_21-29-14`, tombe au bout
-de 3 secondes. Détail et pistes de correction dans
-[`models/README.md`](../models/README.md).
+**Les onze modèles de `models/` ont été entraînés avec une récompense fausse.**
+Jusqu'au 19 septembre 2026, l'avance était mesurée sur l'axe x du monde, qui est
+l'axe gauche-droite du robot : la récompense récompensait le pas chassé et facturait
+la vraie marche comme de la dérive. C'est **corrigé** — la vitesse est projetée sur le
+cap du robot — mais aucun modèle existant n'a encore été *entraîné* avec le bon
+signal. Le meilleur, `2026-04-08_23-00-52`, marche quand même : 5,63 m vers l'avant en
+10 s, sans tomber. Voir [`models/README.md`](../models/README.md).
 
 **L'espace d'action ne correspond pas à son contrat.** La documentation de
 `PoppyHumanoidEnv` et `_action_to_torque` annoncent des actions dans `[-1, 1]`, mais

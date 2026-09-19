@@ -16,101 +16,103 @@ seul tant que les deux restent côte à côte.
 
 ## Lequel est « le » modèle du projet
 
-`2026-04-08_23-00-52` est celui que l'équipe avait poussé sur la branche
-`model-for-presentation`, par le commit `7583141 add final best model` du
-9 avril 2026. Le fichier ici est **identique à l'octet près** à celui de ce commit
-(`e05c62a`), sa normalisation aussi (`42f560f`). Rien n'a changé en chemin.
+`2026-04-08_23-00-52`, celui que l'équipe avait poussé sur `model-for-presentation`
+par le commit `7583141 add final best model` du 9 avril 2026. Le fichier ici est
+**identique à l'octet près** (blob `e05c62a`), sa normalisation aussi (`42f560f`).
+
+**C'est bien le bon modèle, et il marche.** 5,63 m vers l'avant en 10 s à 0,56 m/s,
+sans jamais tomber, épaules perpendiculaires au trajet, 92 % d'appuis alternés.
 
 ## Classement
 
-Mesuré le 18 septembre 2026 : 10 épisodes déterministes par modèle, graine 42,
-`configs/poppy_robust.yaml`, **randomisation du sol désactivée**. Reproduire une ligne :
+Mesuré le 19 septembre 2026 : 10 épisodes déterministes par modèle, graine 42,
+`configs/poppy_robust.yaml`, randomisation du sol désactivée, **avec la récompense
+corrigée** (voir plus bas). Reproduire une ligne :
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_23-00-52/best_model.zip --episodes 10
 ```
 
-Classé sur le **déplacement réel**, pas sur la récompense. La raison est plus bas.
+**Avance** et **dérive** sont mesurées dans le repère du robot : avancer, c'est aller
+là où il regarde. Une avance négative signifie qu'il recule.
 
-| Modèle | Déplacé (m) | v en x | v en y | Pas | Debout | Écart cap | Appuis alternés | Récompense |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `2026-04-08_23-00-52` | **5,70** | +0,02 | **−0,57** | 1000 | **100 %** | **98°** | 92 % | 2008 |
-| `2026-04-08_21-29-14` | 1,46 | **+0,46** | +0,06 | 319 | 0 % | 16° | 86 % | 1263 |
-| `2026-04-08_20-41-01` | 0,97 | +0,39 | −0,05 | 241 | 0 % | 28° | 88 % | 911 |
-| `2026-04-08_22-42-32` | 0,97 | +0,12 | +0,42 | 209 | 0 % | 90° | 78 % | 502 |
-| `2026-04-08_20-22-11` | 0,45 | +0,23 | −0,12 | 174 | 0 % | 24° | 32 % | 501 |
-| `2026-04-08_18-30-32` | 0,35 | +0,27 | +0,37 | 76 | 0 % | 61° | 89 % | 207 |
-| `2026-04-08_19-49-15` | 0,34 | −0,16 | +0,44 | 74 | 0 % | 57° | 51 % | 61 |
-| *politique aléatoire* | *0,33* | *+0,11* | *+0,02* | *106* | *0 %* | *61°* | *55 %* | *8* |
-| `2026-04-08_18-43-51` | 0,32 | +0,40 | +0,14 | 74 | 0 % | 11° | 82 % | 208 |
-| `2026-04-08_16-45-32` | 0,29 | +0,09 | +0,42 | 66 | 0 % | 50° | 59 % | 119 |
-| `2026-04-08_17-58-25` | 0,21 | +0,41 | +0,08 | 51 | 0 % | 17° | 84 % | 172 |
-| `2026-04-08_18-21-57` | 0,19 | +0,39 | +0,01 | 48 | 0 % | 34° | 79 % | 148 |
+| Modèle | Récompense | Avance (m) | Dérive (m) | Pas | Debout | Verticalité |
+|---|---:|---:|---:|---:|---:|---:|
+| `2026-04-08_23-00-52` | **4565** | **+5,63** | −0,86 | 1000 | **100 %** | 0,998 |
+| `2026-04-08_21-29-14` | 703 | +0,25 | +1,08 | 319 | 0 % | 0,963 |
+| `2026-04-08_20-41-01` | 489 | +0,04 | +0,67 | 241 | 0 % | 0,961 |
+| `2026-04-08_20-22-11` | 377 | +0,08 | +0,40 | 174 | 0 % | 0,933 |
+| `2026-04-08_18-21-57` | 115 | +0,12 | +0,17 | 48 | 0 % | 0,706 |
+| `2026-04-08_17-58-25` | 104 | +0,08 | +0,22 | 51 | 0 % | 0,657 |
+| `2026-04-08_18-43-51` | 41 | −0,04 | +0,33 | 74 | 0 % | 0,516 |
+| `2026-04-08_16-45-32` | 36 | −0,15 | +0,16 | 66 | 0 % | 0,720 |
+| `2026-04-08_19-49-15` | 4 | −0,27 | +0,17 | 74 | 0 % | 0,873 |
+| `2026-04-08_18-30-32` | −5 | −0,31 | +0,16 | 76 | 0 % | 0,832 |
+| `2026-04-08_22-42-32` | −21 | **−0,94** | +0,01 | 209 | 0 % | 0,953 |
+| *politique aléatoire* | *−74* | *−0,05* | *+0,14* | *106* | *0 %* | *0,918* |
 
-- **Déplacé** : distance entre le point de départ et le point d'arrivée, toutes
-  directions confondues.
-- **Écart cap** : angle entre la direction du torse et la direction du déplacement.
-  0° = le robot va là où il regarde. 90° = il se déplace de côté.
-- **Appuis alternés** : part des pas où un seul pied touche le sol. Un chiffre élevé
-  signale une vraie démarche, pas un glissement.
-- *La politique aléatoire est le plancher* : `scripts/evaluate.py --random`. Sans elle,
-  « 2008 » ne veut rien dire.
-- Ne pas lire une vitesse comme une performance sur les modèles qui tombent : une
-  politique qui chute au bout de 0,5 s peut afficher une vitesse instantanée élevée
-  sans aller nulle part. C'est la colonne **Déplacé** qui compte.
+Ce que le tableau dit :
 
-## Ce que le tableau raconte
+- **Un seul modèle marche** : `23-00-52`, avec 22 fois plus d'avance que le suivant.
+- `21-29-14`, `20-41-01` et `20-22-11` **font du pas chassé** : leur dérive dépasse
+  leur avance. Ils se déplacent, mais de côté, et ils tombent.
+- `22-42-32` **recule** de 94 cm, sur 209 pas. C'est cohérent : rien ne l'en
+  empêchait avant la correction.
+- Cinq modèles font **moins bien que la politique aléatoire** ou à peine mieux.
+- Le plancher aléatoire (`--random`) est négatif : agiter les membres au hasard coûte
+  plus que ça ne rapporte.
 
-### `2026-04-08_23-00-52` marche — mais de côté
+## Pourquoi ce classement a changé le 19 septembre
 
-**5,70 m en 10 secondes, à 0,57 m/s, sans jamais tomber, avec 92 % d'appuis alternés.**
-C'est une vraie démarche, en ligne droite : le chemin parcouru (5,63 m) et le
-déplacement net (5,70 m) coïncident, le robot ne titube pas.
+**La récompense mesurait l'avance sur le mauvais axe.**
 
-Le problème est ailleurs : **l'écart entre son cap et sa direction est de 98°.** Il
-avance perpendiculairement à son torse. C'est un pas chassé, pas une marche en avant.
+L'URDF de Poppy place son axe sagittal sur **y** : les pieds sont écartés de 13,2 cm
+selon **x**, et plier un genou déplace le pied selon **y**. L'environnement ayant été
+écrit sur le modèle de `Humanoid-v5` — qui, lui, regarde vers +x — `forward_reward`
+mesurait l'avance sur **x**, c'est-à-dire sur l'axe **gauche-droite** du robot, et
+`lateral_cost` pénalisait **y**, son axe de marche.
 
-La récompense ne mesure l'avance que sur l'axe **x**. Ce robot fait +0,02 m/s en x et
-−0,57 m/s en y. Elle le crédite donc de 28 points d'avance sur un épisode entier, lui
-en facture 568 de dérive latérale, et compense avec `healthy` (1000) et `uprightness`
-(998). Résultat : la meilleure récompense du dépôt, pour un déplacement que la
-fonction ne voit pas.
+**Les deux axes étaient croisés.** La récompense récompensait le pas chassé et
+facturait la vraie marche au titre de la dérive.
 
-> **Attention à ce qu'on en dit.** Ce n'est pas un modèle qui ne marche pas : c'est un
-> modèle qui marche dans une direction que la récompense ne mesure pas. La nuance
-> change complètement la lecture, et ce que ça dit du travail restant.
+Effet sur `23-00-52`, le même modèle, avant et après correction :
 
-Les trois commits qui l'ont produit s'appellent `reverse x`, `update best model`,
-`add final best model`. Quelqu'un se battait déjà avec cette histoire d'axe.
+| | Avant | Après |
+|---|---:|---:|
+| Récompense | 2024 | **4565** |
+| `capped_vel` (avance créditée) | 28 | **485** |
+| `lateral_vel` (dérive facturée) | −568 | **−84** |
+| « Vitesse avant » rapportée | 0,029 m/s | **0,563 m/s** |
 
-### `2026-04-08_21-29-14` marche droit
+Le modèle n'a pas bougé d'un octet : seule la mesure était fausse. Et le classement
+était **inversé** — `21-29-14`, qui arrivait second, fait en réalité du pas chassé.
 
-1,46 m à 0,46 m/s, cap et déplacement à 16° l'un de l'autre : il va là où il regarde.
-Puis il tombe, au pas 319. C'est la seule politique du lot qui fasse une marche en
-avant au sens courant du terme.
+La correction projette la vitesse sur le cap du robot au lieu d'un axe fixe du monde,
+ce qui la rend aussi insensible à la randomisation d'orientation initiale (±15°).
+`tests/test_heading.py` verrouille cette convention : si le MJCF est un jour
+régénéré avec d'autres axes, les tests le diront.
 
-### Lequel prendre
+## Lequel prendre
 
-| Pour | Prendre | Pourquoi |
-|---|---|---|
-| Montrer un robot qui se déplace et ne tombe pas | `23-00-52` | 10 s debout, 5,70 m, jamais au sol |
-| Travailler la marche en avant | `21-29-14` | le seul avec cap et déplacement alignés |
-| Tester le pont ROS | `23-00-52` | il ne tombe pas, la séquence dure |
+| Pour | Prendre |
+|---|---|
+| Montrer le projet, tester le pont ROS, repartir pour un entraînement | `23-00-52` — le seul qui marche et ne tombe pas |
+| Illustrer ce qu'est un pas chassé | `21-29-14` |
+| Illustrer une marche arrière | `22-42-32` |
 
-Vues utiles : `--camera dessus` sur `23-00-52` montre la trajectoire au sol d'un coup
-d'œil, `--camera face` montre qu'il se déplace latéralement.
+Vues utiles : `--camera dessus` montre la trajectoire au sol, `--camera cote` la
+foulée. La trajectoire de `23-00-52` est une ligne droite ; celle de `21-29-14` part
+en biais avec les épaules alignées sur le trajet.
 
-### Ce que ça dit de la fonction de récompense
+## Ce qui reste à faire
 
-Le terme d'avance est projeté sur l'axe **x du monde**, pas sur le cap du robot. Une
-politique peut donc marcher parfaitement sans être récompensée, si elle n'est pas
-orientée comme le repère. Deux pistes, à trancher en équipe :
+Ces onze modèles ont été entraînés **avec la récompense fausse**. Ils restent
+chargeables — l'espace d'observation n'a pas changé — et leurs récompenses ci-dessus
+sont mesurées avec la bonne. Mais aucun n'a jamais été *entraîné* avec un signal
+d'avance correct.
 
-1. Projeter l'avance sur le cap du robot plutôt que sur l'axe x du monde.
-2. Récompenser explicitement l'alignement entre le cap et le déplacement.
-
-Les deux rendent les onze modèles incomparables aux suivants. C'est pour ça que ce
-n'est pas une correction à glisser au passage.
+Le prochain entraînement, lui, le sera. Repartir de `23-00-52` plutôt que de zéro
+conserve l'équilibre et la démarche déjà appris, et ne corrige que la direction.
 
 ## `_humanoid-v5-baseline/`
 
@@ -118,8 +120,8 @@ Ce n'est **pas** une politique Poppy. C'est un entraînement sur `Humanoid-v5`,
 l'humanoïde générique de Gymnasium, servant à valider le pipeline
 (`train_poppy.py --baseline`). Son observation fait 348 dimensions contre 63 : la
 charger dans l'environnement Poppy échoue sur
-`spaces must have the same shape: (348,) != (63,)`. Le préfixe `_` est là pour qu'on ne
-la confonde pas.
+`spaces must have the same shape: (348,) != (63,)`. Le préfixe `_` est là pour qu'on
+ne la confonde pas.
 
 ## Les modèles plus anciens, et pourquoi ils ne sont pas là
 
@@ -129,10 +131,8 @@ branche **avant** le nettoyage de septembre, pas par lui.
 
 Inutile de les ressortir : leur **observation fait 61 dimensions**. Les deux capteurs
 de contact au pied ont été ajoutés après, portant l'observation à 63. Ils ne se
-chargent pas dans l'environnement actuel, et les faire tourner demanderait de revenir
-à l'ancien environnement — donc de ne plus pouvoir les comparer aux onze ci-dessus.
-Même chose pour `configs/models/best_model.zip`, qui est un Humanoid-v5
-(348 dimensions).
+chargent pas dans l'environnement actuel. Même chose pour `configs/models/best_model.zip`,
+qui est un Humanoid-v5 (348 dimensions).
 
 Ils restent récupérables si besoin :
 

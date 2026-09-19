@@ -380,11 +380,17 @@ def _summarise(
         "survived": float(bool(final_info.get("TimeLimit.truncated", False))),
     }
 
-    # Le déplacement réel, toutes directions confondues. La récompense ne
-    # compte que l'avance en x ; une politique qui marche parfaitement mais
-    # perpendiculairement à cet axe y obtient zéro, alors qu'elle se déplace.
+    # Déplacement réel, toutes directions confondues.
     summary["dist_net"] = float(np.hypot(summary["x_final"], summary["y_final"]))
     summary["v_net"] = summary["dist_net"] / (steps * dt) if steps else 0.0
+
+    # Et sa décomposition dans le repère DU ROBOT : forward_vel et
+    # lateral_vel sont projetés sur son cap, pas sur un axe du monde.
+    # Intégrer ces vitesses donne la distance réellement parcourue vers
+    # l'avant, et la dérive de côté — les deux seules qui aient un sens
+    # pour juger une démarche.
+    summary["avance"] = float(np.sum(current["forward_vel"])) * dt
+    summary["derive"] = float(np.sum(current["lateral_vel"])) * dt
     for term in _REWARD_TERMS:
         summary[f"sum_{term}"] = float(np.sum(current[term])) if current[term] else 0.0
     return summary
@@ -420,8 +426,9 @@ def report(episodes: list[dict[str, float]], model: Path | str) -> None:
     print(f"{'Durée (pas)':<28} {steps_mean:>10.0f} ± {steps_std:.0f}")
     print(f"{'Déplacement net (m)':<28} {stat('dist_net')[0]:>10.2f}")
     print(f"{'Vitesse nette (m/s)':<28} {stat('v_net')[0]:>10.3f}")
-    print(f"{'  dont en x (récompensé)':<28} {x_mean:>10.2f} ± {x_std:.2f}")
-    print(f"{'  dont en y (pénalisé)':<28} {stat('y_final')[0]:>10.2f}")
+    print(f"{'  vers l avant (m)':<28} {stat('avance')[0]:>10.2f}")
+    print(f"{'  derive laterale (m)':<28} {stat('derive')[0]:>10.2f}")
+    print(f"{'Position finale x, y (m)':<28} {x_mean:>10.2f}, {stat('y_final')[0]:.2f}")
     print(f"{'Vitesse avant (m/s)':<28} {stat('forward_vel_mean')[0]:>10.3f}")
     print(f"{'Verticalité (0-1)':<28} {stat('uprightness_mean')[0]:>10.3f}")
     print(f"{'Épisodes sans chute':<28} {survival * 100:>9.0f} %")
@@ -434,18 +441,23 @@ def report(episodes: list[dict[str, float]], model: Path | str) -> None:
     if survival == 0.0:
         print("Aucun épisode mené à terme : le robot tombe systématiquement.")
 
-    # Distinguer « ne bouge pas » de « bouge, mais pas dans l'axe mesuré ».
-    # Sans cette distinction, une politique qui marche de côté à 0,57 m/s est
-    # rapportée comme immobile, parce que la récompense ne regarde que x.
-    avance, lateral = abs(x_mean), abs(stat("y_final")[0])
+    # Avance et dérive sont mesurées dans le repère du robot : « de côté »
+    # veut donc dire « perpendiculairement à ses épaules », pas
+    # « perpendiculairement à un axe du monde ».
+    avance, derive = stat("avance")[0], abs(stat("derive")[0])
     if stat("v_net")[0] < 0.05:
         print("Déplacement quasi nul : le modèle tient la pose, il ne marche pas.")
-    elif lateral > 2.0 * max(avance, 1e-9):
+    elif derive > abs(avance):
         print(
-            f"Le robot se déplace de {stat('dist_net')[0]:.2f} m, mais "
-            f"essentiellement de CÔTÉ ({lateral:.2f} m en y contre "
-            f"{avance:.2f} m en x). Il marche ; la récompense, qui ne mesure "
-            f"que l'axe x, ne le voit pas."
+            f"Le robot se déplace de {stat('dist_net')[0]:.2f} m, mais de CÔTÉ : "
+            f"{derive:.2f} m de dérive latérale contre {avance:.2f} m vers "
+            f"l avant. C est un pas chassé, pas une marche."
+        )
+    elif avance < -0.5:
+        print(
+            f"Le robot recule : {abs(avance):.2f} m vers l arrière. La marche "
+            f"arrière est récompensée comme une avance négative, donc c est "
+            f"un comportement que l entraînement devrait décourager."
         )
 
 
