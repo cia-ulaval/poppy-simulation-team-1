@@ -21,8 +21,7 @@ Mesuré le 18 septembre 2026 : 10 épisodes déterministes par modèle, graine 4
 ligne :
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py \
-    --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
 ```
 
 | Modèle | Récompense | Pas | Avance (m) | Dérive (m) | Vitesse (m/s) | Verticalité | Debout |

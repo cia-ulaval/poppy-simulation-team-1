@@ -232,9 +232,7 @@ Pour valider contre le faux robot, en supposant un smoke test existant :
 
 ```bash
 docker compose --profile mock up -d
-docker compose --profile robot run --rm bridge python scripts/run_robot.py \
-  --model /workspace/logs/smoke/<horodatage>/poppy_ppo_final.zip \
-  --vec-normalize /workspace/logs/smoke/<horodatage>/vec_normalize_final.pkl
+docker compose --profile robot run --rm bridge python scripts/run_robot.py --model /workspace/logs/smoke/<horodatage>/poppy_ppo_final.zip --vec-normalize /workspace/logs/smoke/<horodatage>/vec_normalize_final.pkl
 ```
 
 Où `<horodatage>` correspond au dossier horodaté produit par le smoke test.
@@ -242,10 +240,7 @@ Où `<horodatage>` correspond au dossier horodaté produit par le smoke test.
 Pour viser le **vrai** robot, redéfinir les variables à l'exécution :
 
 ```bash
-docker compose --profile robot run --rm --no-deps \
-  -e POPPY_ROSBRIDGE_HOST=<ip> \
-  -e POPPY_ROSBRIDGE_PORT=<port> \
-  bridge python scripts/run_robot.py --model <chemin> [--vec-normalize <chemin>]
+docker compose --profile robot run --rm --no-deps -e POPPY_ROSBRIDGE_HOST=<ip> -e POPPY_ROSBRIDGE_PORT=<port> bridge python scripts/run_robot.py --model <chemin> [--vec-normalize <chemin>]
 ```
 
 Aucun essai sur robot réel n'a eu lieu à ce jour.
