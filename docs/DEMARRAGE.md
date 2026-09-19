@@ -215,11 +215,21 @@ Comparez aux trois repères que vous connaissez maintenant :
 | | Récompense | Avance | Sans chute |
 |---|---:|---:|---:|
 | Politique aléatoire | −74 | −0,05 m | 0 % |
-| **Votre modèle après 500 k** | ? | ? | ? |
+| **Votre modèle après 500 k** | ~470 | ~+0,4 m | 0 % |
 | Le meilleur du dépôt (10 M) | 4565 | +5,63 m | 100 % |
 
-Après 500 000 pas vous serez loin du meilleur — c'est vingt fois moins
-d'entraînement. Ce qui compte, c'est d'être **nettement au-dessus du hasard**.
+Ces chiffres du milieu sont réels, mesurés sur un run de 580 000 pas. Vous serez
+loin du meilleur — c'est vingt fois moins d'entraînement — et le robot tombera
+encore au bout d'une seconde ou deux. Deux choses doivent être vraies :
+
+1. **Nettement au-dessus du hasard.** ~470 contre −74.
+2. **L'avance dépasse la dérive.** ~0,4 m d'avance pour 0,07 m de dérive : il part
+   droit devant. C'est le signe que la récompense mesure le bon axe — dix des onze
+   modèles du dépôt, entraînés avant la correction, font l'inverse.
+
+Ce qui manquera encore à 500 k, c'est `gait_reward` : autour de 20 sur un maximum de
+300, l'alternance des appuis n'est pas installée. C'est ce qui vient ensuite, et
+c'est la partie lente.
 
 ## Étape 9 — Et après
 
