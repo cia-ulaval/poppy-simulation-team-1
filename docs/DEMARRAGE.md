@@ -89,7 +89,7 @@ zoomer. **Aucun modèle entraîné nécessaire.** Regardez les articulations : i
 ## Étape 3 — Regarder le meilleur modèle marcher
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_23-00-52/best_model.zip --episodes 1 --video logs/marche.mp4 --camera suivi
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 1 --video logs/marche.mp4 --camera suivi
 ```
 
 Ouvrez `logs/marche.mp4`. Le robot marche pendant 10 secondes sans tomber. La caméra
@@ -101,13 +101,13 @@ Essayez les autres angles, `--camera` accepte `suivi`, `cote`, `face`, `dessus`,
 Si vous avez fait l'installation de l'étape 2, en interactif :
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/visualize.py models/2026-04-08_23-00-52/best_model.zip --episodes 2
+.\.venv\Scripts\python.exe scripts/visualize.py models/2026-09-19_recompense-corrigee/best_model.zip --episodes 2
 ```
 
 ## Étape 4 — Lire les chiffres
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_23-00-52/best_model.zip --episodes 5
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 5
 ```
 
 Vous devez voir quelque chose comme :

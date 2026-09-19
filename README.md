@@ -62,7 +62,7 @@ Entraîner, puis évaluer le modèle obtenu :
 
 ```bash
 docker compose --profile train up
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 10
 ```
 
 **Première fois sur le projet ?** Suivez [docs/DEMARRAGE.md](docs/DEMARRAGE.md) :

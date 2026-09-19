@@ -103,7 +103,7 @@ C'est le chemin le plus sûr, et le seul qui marche partout : le rendu se fait h
 écran dans le conteneur, en `osmesa`.
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 1 --video logs/marche.mp4
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 1 --video logs/marche.mp4
 ```
 
 **La caméra suit le robot.** C'est `--camera suivi`, le défaut. Sans ce suivi, une
@@ -157,7 +157,7 @@ Le robot seul, sans politique. Articulations, limites, pose de départ. Aucun mo
 entraîné nécessaire : c'est le premier réflexe utile quand on découvre le projet.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts/visualize.py models/2026-04-08_21-29-14/best_model.zip --episodes 5
+.\.venv\Scripts\python.exe scripts/visualize.py models/2026-09-19_recompense-corrigee/best_model.zip --episodes 5
 ```
 
 Une politique qui se déroule, à l'écran. `--camera` choisit le cadrage de départ, la
@@ -171,7 +171,7 @@ fenêtre pour ne mesurer que les récompenses.
 ## 5. Évaluer
 
 ```bash
-docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-04-08_21-29-14/best_model.zip --episodes 10
+docker compose --profile eval run --rm eval python scripts/evaluate.py --model models/2026-09-19_recompense-corrigee/best_model.zip --episodes 10
 ```
 
 ```bash
