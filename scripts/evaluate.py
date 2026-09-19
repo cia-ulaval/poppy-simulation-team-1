@@ -319,6 +319,9 @@ def run_episodes(
         Une entrée par épisode : récompense, durée, distances, vitesses et
         somme de chaque terme de récompense.
     """
+    # Durée d'un pas de politique, en secondes : frame_skip x le pas MuJoCo.
+    dt = 1.0 / float(_single_env(env).metadata.get("render_fps", 100))
+
     episodes: list[dict[str, float]] = []
     frames: list[NDArray] = []
     current: dict[str, list[float]] = defaultdict(list)
@@ -341,7 +344,7 @@ def run_episodes(
             frames.append(_single_env(env).render())
 
         if dones[0]:
-            episodes.append(_summarise(current, steps, info))
+            episodes.append(_summarise(current, steps, info, dt))
             current = defaultdict(list)
             steps = 0
 
@@ -356,6 +359,7 @@ def _summarise(
     current: dict[str, list[float]],
     steps: int,
     final_info: dict[str, Any],
+    dt: float,
 ) -> dict[str, float]:
     """Agrège les relevés d'un épisode terminé.
 
@@ -375,6 +379,12 @@ def _summarise(
         # Monitor place TimeLimit.truncated dans l'info du dernier pas.
         "survived": float(bool(final_info.get("TimeLimit.truncated", False))),
     }
+
+    # Le déplacement réel, toutes directions confondues. La récompense ne
+    # compte que l'avance en x ; une politique qui marche parfaitement mais
+    # perpendiculairement à cet axe y obtient zéro, alors qu'elle se déplace.
+    summary["dist_net"] = float(np.hypot(summary["x_final"], summary["y_final"]))
+    summary["v_net"] = summary["dist_net"] / (steps * dt) if steps else 0.0
     for term in _REWARD_TERMS:
         summary[f"sum_{term}"] = float(np.sum(current[term])) if current[term] else 0.0
     return summary
@@ -408,8 +418,10 @@ def report(episodes: list[dict[str, float]], model: Path | str) -> None:
     print("-" * 62)
     print(f"{'Récompense totale':<28} {reward_mean:>10.1f} ± {reward_std:.1f}")
     print(f"{'Durée (pas)':<28} {steps_mean:>10.0f} ± {steps_std:.0f}")
-    print(f"{'Distance en x (m)':<28} {x_mean:>10.2f} ± {x_std:.2f}")
-    print(f"{'Dérive latérale (m)':<28} {stat('y_final')[0]:>10.2f}")
+    print(f"{'Déplacement net (m)':<28} {stat('dist_net')[0]:>10.2f}")
+    print(f"{'Vitesse nette (m/s)':<28} {stat('v_net')[0]:>10.3f}")
+    print(f"{'  dont en x (récompensé)':<28} {x_mean:>10.2f} ± {x_std:.2f}")
+    print(f"{'  dont en y (pénalisé)':<28} {stat('y_final')[0]:>10.2f}")
     print(f"{'Vitesse avant (m/s)':<28} {stat('forward_vel_mean')[0]:>10.3f}")
     print(f"{'Verticalité (0-1)':<28} {stat('uprightness_mean')[0]:>10.3f}")
     print(f"{'Épisodes sans chute':<28} {survival * 100:>9.0f} %")
@@ -421,8 +433,20 @@ def report(episodes: list[dict[str, float]], model: Path | str) -> None:
 
     if survival == 0.0:
         print("Aucun épisode mené à terme : le robot tombe systématiquement.")
-    elif stat("forward_vel_mean")[0] < 0.05:
-        print("Vitesse quasi nulle : le modèle tient la pose, il ne marche pas.")
+
+    # Distinguer « ne bouge pas » de « bouge, mais pas dans l'axe mesuré ».
+    # Sans cette distinction, une politique qui marche de côté à 0,57 m/s est
+    # rapportée comme immobile, parce que la récompense ne regarde que x.
+    avance, lateral = abs(x_mean), abs(stat("y_final")[0])
+    if stat("v_net")[0] < 0.05:
+        print("Déplacement quasi nul : le modèle tient la pose, il ne marche pas.")
+    elif lateral > 2.0 * max(avance, 1e-9):
+        print(
+            f"Le robot se déplace de {stat('dist_net')[0]:.2f} m, mais "
+            f"essentiellement de CÔTÉ ({lateral:.2f} m en y contre "
+            f"{avance:.2f} m en x). Il marche ; la récompense, qui ne mesure "
+            f"que l'axe x, ne le voit pas."
+        )
 
 
 def main() -> int:

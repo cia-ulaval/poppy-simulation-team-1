@@ -217,10 +217,18 @@ interne. Une politique entraînée en couple ne se transférerait pas.
 | `action_rate_cost` | − | Changements brusques entre deux actions |
 | `joint_vel_cost` | − | Articulations qui tournent vite |
 
+Deux choses à savoir sur ces termes, toutes deux mesurées :
+
 `healthy` et `upright` rapportent chacun jusqu'à 1000 par épisode complet, quand
-`forward` en rapporte quelques dizaines. **Ce déséquilibre a une conséquence
-mesurée** : la politique la mieux notée du dépôt reste debout sans marcher. Voir
-[`../models/README.md`](../models/README.md).
+`forward` en rapporte quelques dizaines. Rester debout pèse donc bien plus lourd
+qu'avancer.
+
+Surtout, **`forward_reward` est projeté sur l'axe x du monde, pas sur le cap du
+robot** : `forward_vel = (x_apres - x_avant) / dt`. Une politique qui marche
+parfaitement mais orientée à 90° du repère n'est pas récompensée pour son
+déplacement — elle est même pénalisée par `lateral_cost`. C'est exactement ce que
+fait la politique la mieux notée du dépôt : 5,70 m en 10 s, en ligne droite, sans
+tomber, mais de côté. Voir [`../models/README.md`](../models/README.md).
 
 ### Randomisation de domaine
 
