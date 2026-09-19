@@ -165,14 +165,13 @@ côté du modèle. **Ne sautez pas cette étape** : un modèle entraîné avec
 normalisation et évalué sans reçoit des observations sur une autre échelle et
 paraît bien pire qu'il n'est, sans qu'aucune erreur ne soit levée.
 
-La sortie donne récompense, durée, **déplacement net** puis sa répartition entre
-x et y, verticalité, pourcentage d'épisodes sans chute, et enfin la décomposition
-des huit termes de récompense.
+La sortie donne récompense, durée, **déplacement net** puis sa répartition en
+avance et dérive **dans le repère du robot**, verticalité, pourcentage d'épisodes
+sans chute, et enfin la décomposition des huit termes de récompense.
 
-Lire le déplacement net avant la récompense. La récompense ne mesure l'avance que
-sur l'axe x : un robot qui parcourt 5,70 m dont 5,68 en y s'est bel et bien
-déplacé, mais elle le note comme immobile. Le script signale explicitement ce cas.
-Détail dans [`../models/README.md`](../models/README.md).
+Lire l'avance et la dérive avant la récompense : une dérive supérieure à l'avance
+signale un pas chassé, une avance négative une marche arrière. Le script le dit
+explicitement. Détail dans [`../models/README.md`](../models/README.md).
 
 Enregistrer une vidéo du premier épisode (rendu logiciel, aucun écran requis) :
 
@@ -280,7 +279,7 @@ Le service `dev` est le seul à monter le dépôt **entier en écriture**. Les d
 lui sont nécessaires : entier pour que `tests/` et la racine passent aussi sous
 le linter, en écriture parce que `--fix` doit pouvoir corriger.
 
-Attendu : `11 passed, 1 xfailed` et `All checks passed!`.
+Attendu : `16 passed, 1 xfailed` et `All checks passed!`.
 
 ### Le test en échec attendu
 
