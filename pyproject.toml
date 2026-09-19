@@ -36,12 +36,12 @@ ignore = [
 # ce qui impose des imports après du code exécutable.
 "scripts/*.py" = ["E402"]
 
-# Modernisation des annotations différée sur ce seul fichier. C'est le cœur de
-# la simulation : le laisser identique à l'octet près rend vérifiable, par un
-# simple diff contre archive/avant-clean-2026-09-18, que le nettoyage n'a
-# touché ni à la physique ni à la récompense. 11 occurrences purement
-# mécaniques, à reprendre dans un lot dédié quand il n'y aura plus rien à
-# prouver.
+# Modernisation des annotations différée sur ce seul fichier : 11 occurrences
+# purement mécaniques, à reprendre dans un lot dédié. Le fichier a depuis reçu
+# les réglages de caméra, donc il n'est plus identique à l'octet près à
+# archive/avant-clean-2026-09-18 ; la physique et la récompense, elles, n'ont
+# pas bougé — un diff contre l'archive ne montre que le bloc CAMERAS, le
+# paramètre default_camera_config et la neutralisation de camera_id.
 "src/environments/poppy_humanoid_env.py" = ["UP006", "UP045", "UP035"]
 
 # Vision en pause. close_warning porte une variable inutilisée et un nom

@@ -11,7 +11,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
+from src.environments.poppy_humanoid_env import CAMERAS, PoppyHumanoidEnv, set_camera
 
 
 def evaluate_model(
@@ -22,6 +22,7 @@ def evaluate_model(
     render=True,
     fps=50,
     baseline=False,
+    camera="suivi",
 ):
     """
     Évalue un modèle PPO entraîné avec ou sans visualisation.
@@ -33,6 +34,8 @@ def evaluate_model(
         seed: Seed aléatoire
         render: Si True, affiche la visualisation
         fps: Vitesse d'affichage en FPS (seulement si render=True)
+        camera: Cadrage de départ, une clé de CAMERAS. La souris reste
+            libre de déplacer la caméra ensuite.
 
     Returns:
         tuple: (episode_rewards, episode_lengths)
@@ -63,6 +66,8 @@ def evaluate_model(
             floor_noise=False,
             render_mode="human" if render else None,
         )
+        if render:
+            set_camera(env, camera)
         env = TimeLimit(env, max_episode_steps=1000)
     env = Monitor(env)
     env.reset(seed=seed)
@@ -225,6 +230,14 @@ Pour regarder le robot SANS politique (aucun modèle requis) :
         help="Utiliser Humanoid-v5 standard au lieu de PoppyHumanoidEnv"
     )
 
+    parser.add_argument(
+        "--camera",
+        choices=sorted(CAMERAS),
+        default="suivi",
+        help="Cadrage de départ (défaut: suivi). La souris reste libre de "
+             "déplacer la caméra pendant la lecture."
+    )
+
     args = parser.parse_args()
 
     # Auto-détection de vec_normalize.pkl
@@ -259,6 +272,7 @@ Pour regarder le robot SANS politique (aucun modèle requis) :
         render=not args.no_render,
         baseline=args.baseline,
         fps=args.fps,
+        camera=args.camera,
     )
 
     print("✓ Évaluation terminée!")

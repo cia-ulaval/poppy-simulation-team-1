@@ -33,6 +33,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from src.config import as_evaluation_config, load_yaml, make_poppy_env_config
 from src.environments.env_factory import load_normalized_env, make_poppy_env
+from src.environments.poppy_humanoid_env import CAMERAS, set_camera
 
 # Ordre d'essai pour retrouver l'algorithme d'un fichier .zip. Stable-Baselines3
 # n'y enregistre pas son nom de façon exploitable : PPO et A2C partagent la même
@@ -121,6 +122,15 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Enregistre le premier épisode dans ce fichier .mp4",
+    )
+    parser.add_argument(
+        "--camera",
+        choices=sorted(CAMERAS),
+        default="suivi",
+        help="Cadrage de la vidéo (défaut: suivi, la caméra accompagne le "
+             "robot). « large » reste fixe et laisse le robot traverser le "
+             "champ ; « cote » montre la foulée ; « face » montre la dérive "
+             "latérale.",
     )
     return parser.parse_args()
 
@@ -235,6 +245,7 @@ def build_env(
     floor_noise: bool,
     vec_normalize_path: Path | None,
     render: bool,
+    camera: str = "suivi",
 ) -> VecNormalize | DummyVecEnv:
     """Construit l'environnement d'évaluation.
 
@@ -248,6 +259,7 @@ def build_env(
         floor_noise: Active la randomisation du sol.
         vec_normalize_path: Statistiques de normalisation, ou ``None``.
         render: Prépare l'environnement pour le rendu hors écran.
+        camera: Cadrage à appliquer, une clé de ``CAMERAS``.
 
     Returns:
         L'environnement vectorisé, enveloppé de ``VecNormalize`` si des
@@ -267,7 +279,11 @@ def build_env(
     base_env = wrapped.venv
 
     if render:
-        _single_env(base_env).unwrapped.render_mode = "rgb_array"
+        single = _single_env(base_env).unwrapped
+        single.render_mode = "rgb_array"
+        # Le moteur de rendu est construit à la demande : la vue doit être
+        # posée avant le premier render().
+        set_camera(single, camera)
 
     if vec_normalize_path is None:
         return base_env
@@ -435,6 +451,7 @@ def main() -> int:
         floor_noise=args.floor_noise,
         vec_normalize_path=vec_normalize_path,
         render=args.video is not None,
+        camera=args.camera,
     )
 
     model = (

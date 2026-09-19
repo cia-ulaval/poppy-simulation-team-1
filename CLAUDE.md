@@ -31,9 +31,20 @@ la réparer. Son état exact, défaut par défaut, est dans
 **Le dépôt a porté 1,2 Go de checkpoints.** Ne rien ajouter de lourd. Indexer par
 chemin explicite, jamais `git add .`.
 
-**Les deux `venv/` locaux sont cassés** (mauvaise version, dépendances absentes). Tout
-passe par Docker. Pour un script Python jetable, `py` fonctionne, mais sans les
-dépendances du projet.
+**La caméra de rendu tient à un détail non évident.** Gymnasium cherche une caméra
+MuJoCo nommée `track` dans le modèle ; le MJCF Poppy n'en a pas, donc
+`OffScreenViewer.render()` remet `cam.type` à `mjCAMERA_FREE` à chaque image et
+annule silencieusement `DEFAULT_CAMERA_CONFIG`. C'est
+`self.mujoco_renderer.camera_id = None`, dans `PoppyHumanoidEnv.__init__`, qui rend le
+suivi possible. Ne pas le retirer en croyant nettoyer.
+
+**Tout passe par Docker**, sauf le viewer interactif. `.venv/` est un Python 3.12
+avec les dépendances de rendu, installé pour `scripts/viewer.py` et
+`scripts/visualize.py` uniquement — voir `docs/TECHNIQUE.md` §4.3. Le dossier `venv/`
+à côté, lui, est un reliquat cassé qui pointe vers un interpréteur disparu ; ne pas
+s'en servir. Sous Windows, `python` tout court est intercepté par un raccourci
+Microsoft Store qui ne fait rien : utiliser le chemin explicite de l'environnement, ou
+`py` pour un script jetable sans dépendances.
 
 ## Vérifier
 
@@ -44,8 +55,13 @@ docker compose --profile dev run --rm dev python -m pytest
 
 Attendu : `All checks passed!` et `11 passed, 1 xfailed`. Le `xfailed` est voulu.
 
-Preuve que le cœur n'a pas bougé, quand c'est ce qu'on veut montrer :
+Preuve que la physique et la récompense n'ont pas bougé :
 
 ```bash
-git diff archive/avant-clean-2026-09-18 -- src/environments/poppy_humanoid_env.py assets configs
+git diff archive/avant-clean-2026-09-18 -- assets configs
 ```
+
+Ce diff doit être **vide**. `src/environments/poppy_humanoid_env.py` n'y est plus :
+il a reçu les réglages de caméra, qui ne touchent qu'au rendu. Un diff sur ce fichier
+ne doit montrer que le bloc `CAMERAS`, l'argument `default_camera_config` et la ligne
+`camera_id = None`.

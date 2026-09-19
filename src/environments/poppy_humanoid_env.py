@@ -30,9 +30,10 @@ Action space (25-dim):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import gymnasium as gym
+import mujoco
 import numpy as np
 from gymnasium import spaces
 from gymnasium.envs.mujoco import MujocoEnv
@@ -85,6 +86,72 @@ _INIT_PELVIS_Z = 0.41
 # servo PID would provide internally.
 _KP = 8.0    # Nm/rad  — proportional gain
 _KD = 0.5    # Nm·s/rad — derivative gain
+
+# ── Camera views ────────────────────────────────────────────
+# ``trackbodyid = 1`` is the pelvis: the camera follows it instead of
+# staying where the episode started.  Without this, a policy that walks
+# 1.4 m simply leaves the frame and the recording shows an empty floor.
+#
+# ``distance`` and ``lookat`` are sized for Poppy (83 cm), not for the
+# 1.4 m Humanoid-v5 the Gymnasium defaults assume.
+# ``type`` is what actually makes the camera follow.  Setting
+# ``trackbodyid`` alone leaves the camera in mjCAMERA_FREE, where MuJoCo
+# ignores it entirely: ``lookat`` then stays wherever it was put and the
+# robot walks out of frame.
+#
+# It also needs ``mujoco_renderer.camera_id = None`` — see __init__.
+_TRACKING = {
+    "type": mujoco.mjtCamera.mjCAMERA_TRACKING,
+    "trackbodyid": 1,  # pelvis
+}
+_LOOKAT_HIP_HEIGHT = np.array([0.0, 0.0, 0.4])
+
+CAMERAS: Dict[str, Dict[str, Any]] = {
+    # Three-quarter view, following the robot.  The default: the gait is
+    # readable and the robot stays centred.
+    "suivi": {
+        **_TRACKING,
+        "distance": 2.2,
+        "lookat": _LOOKAT_HIP_HEIGHT,
+        "elevation": -12.0,
+        "azimuth": 135.0,
+    },
+    # Side view: the one that shows stride length and foot clearance.
+    "cote": {
+        **_TRACKING,
+        "distance": 2.0,
+        "lookat": _LOOKAT_HIP_HEIGHT,
+        "elevation": -8.0,
+        "azimuth": 90.0,
+    },
+    # Head-on: shows lateral drift, which the reward penalises and which
+    # the best-scoring policy exhibits badly.
+    "face": {
+        **_TRACKING,
+        "distance": 2.0,
+        "lookat": _LOOKAT_HIP_HEIGHT,
+        "elevation": -8.0,
+        "azimuth": 180.0,
+    },
+    # From above: shows the trajectory on the ground plane.
+    "dessus": {
+        **_TRACKING,
+        "distance": 3.0,
+        "lookat": _LOOKAT_HIP_HEIGHT,
+        "elevation": -70.0,
+        "azimuth": 135.0,
+    },
+    # Static wide shot: the robot crosses the frame.  Useful to judge the
+    # distance actually covered.
+    "large": {
+        "distance": 6.0,
+        "lookat": np.array([1.5, 0.0, 0.4]),
+        "elevation": -15.0,
+        "azimuth": 135.0,
+    },
+}
+
+DEFAULT_CAMERA_CONFIG = CAMERAS["suivi"]
 
 
 class PoppyHumanoidEnv(MujocoEnv, EzPickle):
@@ -179,6 +246,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             frame_skip=frame_skip,
             observation_space=obs_space,
             render_mode=render_mode,
+            default_camera_config=DEFAULT_CAMERA_CONFIG,
         )
 
         # ── Fix init_qpos so action=0 → natural standing pose ───────
@@ -214,6 +282,16 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
         # ── Cache initial body masses for DR mass randomization ──────
         self._init_body_mass = self.model.body_mass.copy()
+
+        # ── Let the camera config actually apply ─────────────────────
+        # When no camera is named, Gymnasium looks for a MuJoCo camera
+        # called "track" in the model.  Every stock Gym model defines one;
+        # the Poppy MJCF, converted from its URDF, does not.  mj_name2id
+        # then returns -1, and OffScreenViewer.render() resets
+        # cam.type to mjCAMERA_FREE on *every frame* — silently undoing
+        # DEFAULT_CAMERA_CONFIG.  Setting camera_id to None skips that
+        # branch and leaves our camera alone.
+        self.mujoco_renderer.camera_id = None
 
     @property
     def is_healthy(self) -> bool:
@@ -460,6 +538,26 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             "floor_slide_friction": float(self.model.geom_friction[floor_id, 0]),
             "floor_restitution": float(self.model.geom_solimp[floor_id, 4]),
         }
+
+
+def set_camera(env: PoppyHumanoidEnv, name: str) -> None:
+    """Change the camera view of an already-built environment.
+
+    The renderer is created lazily, on the first ``render()`` call, so this
+    takes effect as long as it is called before then.
+
+    Args:
+        env: The environment to re-frame.
+        name: A key of :data:`CAMERAS`.
+
+    Raises:
+        KeyError: If ``name`` is not a known view.
+    """
+    if name not in CAMERAS:
+        raise KeyError(
+            f"Vue inconnue : {name!r}. Disponibles : {', '.join(CAMERAS)}"
+        )
+    env.mujoco_renderer.default_cam_config = CAMERAS[name]
 
 
 def register_poppy_env() -> None:
