@@ -29,11 +29,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import numpy as np
 from numpy.typing import NDArray
 from stable_baselines3 import A2C, PPO, SAC, TD3
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-from src.config import as_evaluation_config, load_yaml, make_poppy_env_config
-from src.environments.env_factory import load_normalized_env, make_poppy_env
-from src.environments.poppy_humanoid_env import CAMERAS, set_camera
+from src.config import load_yaml, make_poppy_env_config
+from src.environments.env_factory import make_eval_env, single_env
+from src.environments.poppy_humanoid_env import CAMERAS
 
 # Ordre d'essai pour retrouver l'algorithme d'un fichier .zip. Stable-Baselines3
 # n'y enregistre pas son nom de façon exploitable : PPO et A2C partagent la même
@@ -239,66 +238,6 @@ class RandomPolicy:
         return action.astype(np.float32), None
 
 
-def build_env(
-    config_path: Path,
-    seed: int,
-    floor_noise: bool,
-    vec_normalize_path: Path | None,
-    render: bool,
-    camera: str = "suivi",
-) -> VecNormalize | DummyVecEnv:
-    """Construit l'environnement d'évaluation.
-
-    L'environnement est dérivé du YAML d'entraînement : mêmes limites
-    articulaires, même ``frame_skip``, même seuil de chute. Sans cela les
-    métriques ne seraient pas comparables à celles de l'entraînement.
-
-    Args:
-        config_path: YAML décrivant l'environnement.
-        seed: Graine aléatoire.
-        floor_noise: Active la randomisation du sol.
-        vec_normalize_path: Statistiques de normalisation, ou ``None``.
-        render: Prépare l'environnement pour le rendu hors écran.
-        camera: Cadrage à appliquer, une clé de ``CAMERAS``.
-
-    Returns:
-        L'environnement vectorisé, enveloppé de ``VecNormalize`` si des
-        statistiques ont été fournies.
-    """
-    train_config = make_poppy_env_config(load_yaml(config_path))
-    eval_config = as_evaluation_config(train_config, floor_noise=floor_noise)
-
-    # make_poppy_env renvoie déjà un VecNormalize ; on ne garde que
-    # l'environnement de base pour y appliquer les statistiques enregistrées.
-    wrapped = make_poppy_env(
-        config=eval_config,
-        n_envs=1,
-        seed=seed,
-        use_subprocess=False,
-    )
-    base_env = wrapped.venv
-
-    if render:
-        single = _single_env(base_env).unwrapped
-        single.render_mode = "rgb_array"
-        # Le moteur de rendu est construit à la demande : la vue doit être
-        # posée avant le premier render().
-        set_camera(single, camera)
-
-    if vec_normalize_path is None:
-        return base_env
-
-    return load_normalized_env(str(vec_normalize_path), base_env, training=False)
-
-
-def _single_env(vec_env: Any) -> Any:
-    """Retourne l'environnement Gymnasium sous les enveloppes vectorielles."""
-    env = vec_env
-    while hasattr(env, "venv"):
-        env = env.venv
-    return env.envs[0]
-
-
 def run_episodes(
     model: Any,
     env: Any,
@@ -320,7 +259,7 @@ def run_episodes(
         somme de chaque terme de récompense.
     """
     # Durée d'un pas de politique, en secondes : frame_skip x le pas MuJoCo.
-    dt = 1.0 / float(_single_env(env).metadata.get("render_fps", 100))
+    dt = 1.0 / float(single_env(env).metadata.get("render_fps", 100))
 
     episodes: list[dict[str, float]] = []
     frames: list[NDArray] = []
@@ -341,7 +280,7 @@ def run_episodes(
         current["reward"].append(float(rewards[0]))
 
         if video_path is not None and not episodes:
-            frames.append(_single_env(env).render())
+            frames.append(single_env(env).render())
 
         if dones[0]:
             episodes.append(_summarise(current, steps, info, dt))
@@ -349,7 +288,7 @@ def run_episodes(
             steps = 0
 
             if video_path is not None and frames:
-                _write_video(frames, video_path, _single_env(env))
+                _write_video(frames, video_path, single_env(env))
                 frames = []
 
     return episodes
@@ -481,12 +420,12 @@ def main() -> int:
         else:
             print(f"Normalisation : {vec_normalize_path}")
 
-    env = build_env(
-        config_path=args.config,
+    env = make_eval_env(
+        config=make_poppy_env_config(load_yaml(args.config)),
         seed=args.seed,
         floor_noise=args.floor_noise,
         vec_normalize_path=vec_normalize_path,
-        render=args.video is not None,
+        render_mode="rgb_array" if args.video is not None else None,
         camera=args.camera,
     )
 

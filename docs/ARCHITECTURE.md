@@ -124,7 +124,8 @@ graph TB
     tp --> cfg
     ev --> fac
     ev --> cfg
-    vz --> env
+    vz --> fac
+    vz --> cfg
     rr --> rob
     rob --> env
     fac --> env
@@ -133,6 +134,7 @@ graph TB
     env --> assets
     env --> mujoco
     vw --> env
+    vw --> cfg
     fac --> sb3
     tp --> sb3
 
@@ -155,6 +157,10 @@ graph TB
 - `viewer.py` passe par `PoppyHumanoidEnv` pour montrer le sol randomisé, coloré selon
   sa friction. Il ne marche donc plus si `src/` est cassé : il chargeait autrefois le
   MJCF avec `mujoco` brut pour cette raison.
+- `evaluate.py` et `visualize.py` construisent leur environnement avec la même
+  fonction, `make_eval_env` dans `env_factory.py`, à partir du YAML d'entraînement.
+  La couleur du sol, commune au viewer et à `visualize.py`, est dans
+  `environments/floor_display.py` : elle ne touche qu'à l'affichage.
 
 ---
 

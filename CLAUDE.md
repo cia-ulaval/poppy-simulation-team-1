@@ -66,7 +66,7 @@ docker compose --profile dev run --rm dev ruff check .
 docker compose --profile dev run --rm dev python -m pytest
 ```
 
-Attendu : `All checks passed!` et `16 passed, 1 xfailed`. Le `xfailed` est voulu.
+Attendu : `All checks passed!` et `19 passed, 1 xfailed`. Le `xfailed` est voulu.
 
 Preuve que la physique et la récompense n'ont pas bougé :
 
@@ -74,7 +74,10 @@ Preuve que la physique et la récompense n'ont pas bougé :
 git diff archive/avant-clean-2026-09-18 -- assets configs
 ```
 
-Ce diff doit être **vide**. `src/environments/poppy_humanoid_env.py` n'y est plus :
+Sur `configs`, ce diff doit être **vide**. Sur `assets`, il ne doit montrer que le
+damier du sol, qui ne touche qu'au rendu : la `texture` `floor_checker`, le
+`material` `floor_mat`, et sur le geom `floor` l'attribut `material` à la place de
+`rgba`. `src/environments/poppy_humanoid_env.py` n'y est plus :
 il a reçu les réglages de caméra, qui ne touchent qu'au rendu. Un diff sur ce fichier
 ne doit montrer que le bloc `CAMERAS`, l'argument `default_camera_config` et la ligne
 `camera_id = None`.

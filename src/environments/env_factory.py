@@ -1,7 +1,7 @@
 """Construction des environnements vectorisés, pour l'entraînement comme pour
 l'évaluation.
 
-Trois fonctions de module, pas une classe : il n'y a aucun état à porter d'un
+Des fonctions de module, pas une classe : il n'y a aucun état à porter d'un
 appel au suivant. La fabrique précédente était une classe dont seules les
 méthodes statiques étaient appelées ; sa machinerie d'instance (dossier
 temporaire, ``__del__``) ne servait que la génération d'obstacles procéduraux,
@@ -18,15 +18,21 @@ soit levée.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv, VecNormalize
 
+from src.config.loaders import as_evaluation_config
 from src.config.settings import EnvironmentConfig, PoppyEnvironmentConfig
-from src.environments.poppy_humanoid_env import PoppyHumanoidEnv, register_poppy_env
+from src.environments.poppy_humanoid_env import (
+    PoppyHumanoidEnv,
+    register_poppy_env,
+    set_camera,
+)
 
 # Durée maximale d'un épisode, en pas de politique. À 10 ms par pas
 # (frame_skip=5 x 2 ms), cela fait 10 s de temps simulé.
@@ -216,3 +222,64 @@ def load_normalized_env(
     env.training = training
     env.norm_reward = False
     return env
+
+
+def make_eval_env(
+    config: PoppyEnvironmentConfig,
+    seed: int,
+    floor_noise: bool = False,
+    vec_normalize_path: Path | None = None,
+    render_mode: str | None = None,
+    camera: str = "suivi",
+) -> VecNormalize | DummyVecEnv:
+    """Construit l'environnement d'évaluation d'un modèle Poppy.
+
+    Partagé par ``evaluate.py`` et ``visualize.py`` : mêmes limites articulaires,
+    même ``frame_skip``, même seuil de chute qu'à l'entraînement. Sans cela les
+    métriques ne seraient pas comparables à celles de l'entraînement.
+
+    Args:
+        config: Configuration d'entraînement, issue du YAML.
+        seed: Graine aléatoire.
+        floor_noise: Active la randomisation du sol, et avec elle les poussées
+            et la variation des masses.
+        vec_normalize_path: Statistiques de normalisation, ou ``None``.
+        render_mode: ``"human"`` pour une fenêtre, ``"rgb_array"`` pour des
+            images, ``None`` pour aucun rendu.
+        camera: Cadrage de départ, une clé de ``CAMERAS``. Ignoré sans rendu.
+
+    Returns:
+        L'environnement vectorisé, enveloppé de ``VecNormalize`` si des
+        statistiques ont été fournies.
+    """
+    eval_config = as_evaluation_config(config, floor_noise=floor_noise)
+
+    # make_poppy_env renvoie déjà un VecNormalize ; on ne garde que
+    # l'environnement de base pour y appliquer les statistiques enregistrées.
+    wrapped = make_poppy_env(
+        config=eval_config,
+        n_envs=1,
+        seed=seed,
+        use_subprocess=False,
+    )
+    base_env = wrapped.venv
+
+    if render_mode is not None:
+        single = single_env(base_env).unwrapped
+        single.render_mode = render_mode
+        # Le moteur de rendu est construit à la demande : la vue doit être
+        # posée avant le premier render().
+        set_camera(single, camera)
+
+    if vec_normalize_path is None:
+        return base_env
+
+    return load_normalized_env(str(vec_normalize_path), base_env, training=False)
+
+
+def single_env(vec_env: VecEnv) -> gym.Env:
+    """Retourne l'environnement Gymnasium sous les enveloppes vectorielles."""
+    env = vec_env
+    while hasattr(env, "venv"):
+        env = env.venv
+    return env.envs[0]
