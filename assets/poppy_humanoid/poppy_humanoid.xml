@@ -74,6 +74,13 @@
     <mesh name="r_shoulder_motor_c"  file="r_shoulder_motor_respondable.STL" />
     <mesh name="r_upper_arm_c"       file="r_upper_arm_respondable.STL" />
     <mesh name="r_forearm_c"         file="r_forearm_respondable.STL" />
+
+    <!-- Floor checker, display only. Grey on purpose: scripts/viewer.py and
+         visualize.py tint it through geom_rgba according to the friction. -->
+    <texture name="floor_checker" type="2d" builtin="checker"
+             rgb1=".95 .95 .95" rgb2=".7 .7 .7" width="512" height="512" />
+    <material name="floor_mat" texture="floor_checker"
+              texrepeat="2 2" texuniform="true" />
   </asset>
 
   <worldbody>
@@ -83,7 +90,7 @@
       by PoppyHumanoidEnv.reset_model() for domain randomization.
     -->
     <geom name="floor" type="plane" size="0 0 0.05"
-          rgba=".8 .8 .8 1" friction="1.0 0.005 0.0001"
+          material="floor_mat" friction="1.0 0.005 0.0001"
           condim="3" contype="1" conaffinity="1" />
     <!-- ============================================================
          ROOT BODY: pelvis
