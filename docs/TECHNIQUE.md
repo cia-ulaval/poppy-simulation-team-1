@@ -162,7 +162,11 @@ entraîné nécessaire : c'est le premier réflexe utile quand on découvre le p
 
 Une politique qui se déroule, à l'écran. `--camera` choisit le cadrage de départ, la
 souris prend le relais ensuite. `--fps 30` ralentit, `--no-render` désactive la
-fenêtre pour ne mesurer que les récompenses.
+fenêtre pour ne mesurer que les récompenses. `--floor-noise` tire le sol comme à
+l'entraînement et le colore selon sa friction (bleu clair = glissant, bleu marine =
+adhérent) ; il active aussi les poussées et la variation des masses.
+L'environnement est dérivé du YAML d'entraînement (`--config`, par défaut
+`configs/poppy_robust.yaml`), exactement comme dans `evaluate.py`.
 
 > `python` tout court ne fonctionne pas sous Windows tant que rien n'est installé :
 > la commande est interceptée par un raccourci Microsoft Store qui ne fait rien.
@@ -216,7 +220,7 @@ docker compose --profile dev run --rm dev python -m pytest
 docker compose --profile dev run --rm dev ruff check .
 ```
 
-**Le résultat attendu est `16 passed, 1 xfailed`.** Le `xfailed` n'est pas une panne :
+**Le résultat attendu est `19 passed, 1 xfailed`.** Le `xfailed` n'est pas une panne :
 c'est un test volontairement en échec attendu, qui documente une incohérence connue
 entre le contrat annoncé (actions dans `[-1, 1]`) et `action_space`, hérité de
 `actuator_ctrlrange`. Voir §8. `ruff check . --fix` corrige ce qui est mécanique.

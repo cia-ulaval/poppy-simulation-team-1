@@ -279,7 +279,7 @@ Le service `dev` est le seul à monter le dépôt **entier en écriture**. Les d
 lui sont nécessaires : entier pour que `tests/` et la racine passent aussi sous
 le linter, en écriture parce que `--fix` doit pouvoir corriger.
 
-Attendu : `16 passed, 1 xfailed` et `All checks passed!`.
+Attendu : `19 passed, 1 xfailed` et `All checks passed!`.
 
 ### Le test en échec attendu
 
