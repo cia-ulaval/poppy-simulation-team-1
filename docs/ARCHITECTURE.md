@@ -132,7 +132,7 @@ graph TB
     cfg --> yaml
     env --> assets
     env --> mujoco
-    vw --> mujoco
+    vw --> env
     fac --> sb3
     tp --> sb3
 
@@ -152,8 +152,9 @@ graph TB
 - `src/sensors/` est un **îlot** : aucune flèche ne part de `scripts/` ni de `src/`
   vers lui. La vision n'est branchée sur rien. Son état détaillé est dans
   [`../src/sensors/README.md`](../src/sensors/README.md).
-- `viewer.py` ne passe pas par `src/` du tout : il charge le MJCF avec `mujoco` brut.
-  C'est voulu — il doit marcher même si `src/` est cassé.
+- `viewer.py` passe par `PoppyHumanoidEnv` pour montrer le sol randomisé, coloré selon
+  sa friction. Il ne marche donc plus si `src/` est cassé : il chargeait autrefois le
+  MJCF avec `mujoco` brut pour cette raison.
 
 ---
 
