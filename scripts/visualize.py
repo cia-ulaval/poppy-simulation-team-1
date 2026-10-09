@@ -5,13 +5,17 @@ import time
 from pathlib import Path
 
 import numpy as np
-from gymnasium.wrappers import TimeLimit
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.environments.poppy_humanoid_env import CAMERAS, PoppyHumanoidEnv, set_camera
+from src.config import load_yaml, make_poppy_env_config
+from src.environments.env_factory import load_normalized_env, make_eval_env, single_env
+from src.environments.floor_display import color_floor
+from src.environments.poppy_humanoid_env import CAMERAS
+
+_DEFAULT_CONFIG = Path(__file__).parent.parent / "configs" / "poppy_robust.yaml"
 
 
 def evaluate_model(
@@ -23,6 +27,8 @@ def evaluate_model(
     fps=50,
     baseline=False,
     camera="suivi",
+    config_path=_DEFAULT_CONFIG,
+    floor_noise=False,
 ):
     """
     Évalue un modèle PPO entraîné avec ou sans visualisation.
@@ -36,6 +42,9 @@ def evaluate_model(
         fps: Vitesse d'affichage en FPS (seulement si render=True)
         camera: Cadrage de départ, une clé de CAMERAS. La souris reste
             libre de déplacer la caméra ensuite.
+        config_path: YAML d'entraînement, d'où l'environnement est dérivé.
+        floor_noise: Sol randomisé et coloré selon sa friction, avec les
+            poussées et la variation des masses de l'entraînement.
 
     Returns:
         tuple: (episode_rewards, episode_lengths)
@@ -52,7 +61,16 @@ def evaluate_model(
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Modèle introuvable: {model_path}")
 
+    if vec_normalize_path and not os.path.exists(vec_normalize_path):
+        print(f"⚠ ATTENTION: {vec_normalize_path} introuvable!")
+        vec_normalize_path = None
+    if vec_normalize_path:
+        print(f"✓ Statistiques de normalisation : {vec_normalize_path}\n")
+    else:
+        print("⚠ Pas de normalisation appliquée (performances possiblement dégradées)\n")
+
     # Créer l'environnement
+    friction_range = None
     if baseline:
         import gymnasium as gym_lib
         env = gym_lib.make(
@@ -61,30 +79,25 @@ def evaluate_model(
             terminate_when_unhealthy=True,
             healthy_z_range=(1.0, 2.0),
         )
-    else:
-        env = PoppyHumanoidEnv(
-            floor_noise=False,
-            render_mode="human" if render else None,
-        )
-        if render:
-            set_camera(env, camera)
-        env = TimeLimit(env, max_episode_steps=1000)
-    env = Monitor(env)
-    env.reset(seed=seed)
-
-    env = DummyVecEnv([lambda: env])
-
-    # Charger les statistiques de normalisation
-    if vec_normalize_path and os.path.exists(vec_normalize_path):
-        print("✓ Chargement des statistiques de normalisation...")
-        env = VecNormalize.load(vec_normalize_path, env)
-        env.training = False
-        env.norm_reward = False  # Pour voir les vraies récompenses
-        print("✓ Statistiques chargées\n")
-    else:
+        env = Monitor(env)
+        env.reset(seed=seed)
+        env = DummyVecEnv([lambda: env])
         if vec_normalize_path:
-            print(f"⚠ ATTENTION: {vec_normalize_path} introuvable!")
-        print("⚠ Pas de normalisation appliquée (performances possiblement dégradées)\n")
+            env = load_normalized_env(vec_normalize_path, env)
+    else:
+        # Même construction qu'evaluate.py : l'environnement suit le YAML
+        # d'entraînement, pas les valeurs par défaut de PoppyHumanoidEnv.
+        train_config = make_poppy_env_config(load_yaml(config_path))
+        if floor_noise:
+            friction_range = train_config.domain_randomization.friction_range
+        env = make_eval_env(
+            config=train_config,
+            seed=seed,
+            floor_noise=floor_noise,
+            vec_normalize_path=Path(vec_normalize_path) if vec_normalize_path else None,
+            render_mode="human" if render else None,
+            camera=camera,
+        )
 
     # Charger le modèle
     print("Chargement du modèle...")
@@ -102,6 +115,8 @@ def evaluate_model(
 
     for ep in range(n_episodes):
         obs = env.reset()
+        if friction_range is not None:
+            friction = color_floor(single_env(env).unwrapped, friction_range)
         done = np.array([False])
         total_reward = 0.0
         steps = 0
@@ -120,6 +135,8 @@ def evaluate_model(
         episode_lengths.append(steps)
 
         print(f"  Épisode {ep+1}/{n_episodes}:")
+        if friction_range is not None:
+            print(f"    → Sol:    friction {friction:.2f}")
         print(f"    → Reward: {total_reward:>8.2f}")
         print(f"    → Steps:  {steps:>4d}")
 
@@ -179,6 +196,10 @@ Exemples d'utilisation:
   # 100 épisodes le plus vite possible
   python scripts/visualize.py models/<date>/best_model.zip --no-render --episodes 100
 
+  # Sol randomisé comme à l'entraînement, coloré selon sa friction
+  # (bleu clair = glissant, bleu marine = adhérent)
+  python scripts/visualize.py models/<date>/best_model.zip --floor-noise
+
 Pour regarder le robot SANS politique (aucun modèle requis) :
   python scripts/viewer.py
         """
@@ -231,6 +252,22 @@ Pour regarder le robot SANS politique (aucun modèle requis) :
     )
 
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=_DEFAULT_CONFIG,
+        help="YAML d'entraînement dont l'environnement est dérivé "
+             "(défaut: configs/poppy_robust.yaml)"
+    )
+
+    parser.add_argument(
+        "--floor-noise",
+        action="store_true",
+        help="Sol randomisé comme à l'entraînement, coloré selon sa friction "
+             "(bleu clair = glissant, bleu marine = adhérent). Active aussi les "
+             "poussées et la variation des masses de l'entraînement."
+    )
+
+    parser.add_argument(
         "--camera",
         choices=sorted(CAMERAS),
         default="suivi",
@@ -273,6 +310,8 @@ Pour regarder le robot SANS politique (aucun modèle requis) :
         baseline=args.baseline,
         fps=args.fps,
         camera=args.camera,
+        config_path=args.config,
+        floor_noise=args.floor_noise,
     )
 
     print("✓ Évaluation terminée!")
