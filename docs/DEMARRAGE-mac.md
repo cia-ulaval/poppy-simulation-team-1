@@ -1,4 +1,8 @@
-# Démarrage — votre première heure sur le projet
+# Démarrage (macOS) — votre première heure sur le projet
+
+Version macOS de [`DEMARRAGE.md`](DEMARRAGE.md). Les commandes Docker sont les mêmes ;
+ce qui change, c'est l'installation du viewer (étape 2) et ce qu'un Mac Intel peut
+faire en natif.
 
 Un parcours guidé, à faire dans l'ordre. À la fin vous aurez construit l'image, vu le
 robot en 3D, regardé la meilleure politique marcher, lu ses chiffres, entraîné votre
@@ -7,7 +11,6 @@ propre modèle et comparé les deux.
 **Aucune connaissance du projet n'est supposée.** Chaque étape dit quoi taper, ce que
 vous devez voir, et ce que ça veut dire.
 
-Sur Mac : [`DEMARRAGE-mac.md`](DEMARRAGE-mac.md).
 Référence complète des commandes : [`TECHNIQUE.md`](TECHNIQUE.md).
 Comment c'est construit : [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -20,7 +23,13 @@ docker info --format "{{.ServerVersion}}"
 ```
 
 Un numéro de version s'affiche → c'est bon. Une erreur de connexion → Docker Desktop
-n'est pas démarré, et rien d'autre ne marchera.
+n'est pas démarré, et rien d'autre ne marchera. `command not found: docker` → Docker
+Desktop n'est pas installé : <https://www.docker.com/products/docker-desktop/>, en
+choisissant la version qui correspond à la puce du Mac (voir l'étape 2).
+
+> Sur Mac, Docker Desktop ne donne aux conteneurs qu'une partie des cœurs et de la
+> mémoire. Le réglage est dans **Settings → Resources**. Le nombre d'environnements
+> d'entraînement (`--n-envs`) ne doit pas dépasser le nombre de CPU accordés là.
 
 ## Étape 1 — Construire l'image
 
@@ -55,37 +64,73 @@ Ouvrez `logs/robot.mp4`. C'est une politique aléatoire : le robot s'écroule pr
 aussitôt. C'est normal, et c'est justement le point de comparaison de l'étape 5.
 
 **Avec le viewer interactif** — vous tournez autour à la souris, vous zoomez. Il faut
-un Python installé sur la machine, une fois par poste :
+un Python 3.12 installé sur la machine, une fois par poste.
 
-```powershell
-winget install --id Python.Python.3.12 --exact --source winget --scope user
+D'abord, quelle puce a le Mac ?
+
+```bash
+uname -m
 ```
 
-```powershell
-py -3.12 -m venv .venv
+`arm64` → Apple Silicon (M1, M2…). `x86_64` → Intel. L'installation diffère d'une
+ligne, et un Mac Intel a une limite (voir plus bas).
+
+Installer Python 3.12, avec [Homebrew](https://brew.sh) ou l'installeur de
+<https://www.python.org/downloads/macos/> :
+
+```bash
+brew install python@3.12
 ```
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+Créer l'environnement :
+
+```bash
+python3.12 -m venv .venv
 ```
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements/train.txt
+```bash
+.venv/bin/python -m pip install --upgrade pip
 ```
 
-Puis :
+Puis les dépendances. **Apple Silicon** :
 
-```powershell
-.\.venv\Scripts\python.exe scripts/viewer.py
+```bash
+.venv/bin/python -m pip install -r requirements/train.txt
+```
+
+**Intel** — les versions récentes de MuJoCo ne publient plus de paquet pour Mac Intel,
+il faut plafonner la version :
+
+```bash
+.venv/bin/python -m pip install "mujoco<3.11" -r requirements/train.txt
+```
+
+Pas d'`--index-url` pour PyTorch comme sous Windows : sur Mac, le paquet standard est
+déjà sans CUDA. Comptez quelques minutes.
+
+Puis, avec `mjpython` et non `python` — sous macOS, la fenêtre de MuJoCo
+qu'utilise le viewer l'exige :
+
+```bash
+.venv/bin/mjpython scripts/viewer.py
 ```
 
 Une fenêtre MuJoCo s'ouvre avec Poppy. Clic gauche glissé pour tourner, molette pour
-zoomer. **Aucun modèle entraîné nécessaire.** Regardez les articulations : il y en a
-25, une par moteur.
+zoomer (ou deux doigts sur le trackpad). **Aucun modèle entraîné nécessaire.**
+Regardez les articulations : il y en a 25, une par moteur. Le sol est tiré au hasard
+comme à l'entraînement : bleu clair s'il est glissant, bleu marine s'il est adhérent.
+Cliquez dans la fenêtre puis appuyez sur Entrée pour en tirer un autre.
 
-> Sous Windows, `python` tout court ne marche pas tant que rien n'est installé — la
-> commande est interceptée par un raccourci Microsoft Store qui ne fait rien. D'où le
-> chemin explicite. Sous bash, c'est `.venv/bin/python`.
+> Utilisez toujours le chemin explicite `.venv/bin/python`, sans activer
+> l'environnement : c'est la même commande pour tout le monde, et on ne lance pas par
+> erreur le Python du système. N'utilisez pas le dossier `venv/` (sans point) : c'est
+> un reliquat cassé.
+
+> **Limite des Mac Intel.** PyTorch ne publie plus de version pour Mac Intel au-delà de
+> la 2.2, et cette version ne sait pas lire les modèles du dépôt, enregistrés avec
+> NumPy 2. `scripts/viewer.py` fonctionne, puisqu'il n'utilise aucun modèle.
+> `scripts/visualize.py`, lui, échoue sur `No module named 'numpy._core.numeric'`.
+> Sur Intel, regardez les politiques en vidéo, via Docker (étape 3).
 
 ## Étape 3 — Regarder le meilleur modèle marcher
 
@@ -99,10 +144,11 @@ le suit — sans ça, il sortirait du cadre au bout de deux secondes.
 Essayez les autres angles, `--camera` accepte `suivi`, `cote`, `face`, `dessus`,
 `large`. **`dessus` est le plus instructif** : on voit la trajectoire au sol.
 
-Si vous avez fait l'installation de l'étape 2, en interactif :
+Si vous avez fait l'installation de l'étape 2 sur un Mac **Apple Silicon**, en
+interactif (impossible sur Intel, voir l'étape 2) :
 
-```powershell
-.\.venv\Scripts\python.exe scripts/visualize.py models/2026-09-19_recompense-corrigee/best_model.zip --episodes 2
+```bash
+.venv/bin/python scripts/visualize.py models/2026-09-19_recompense-corrigee/best_model.zip --episodes 2
 ```
 
 ## Étape 4 — Lire les chiffres
@@ -190,7 +236,10 @@ après.
 toutes les 10 000 étapes, il y a toujours un modèle utilisable dans
 `logs/moi/<date>/best_model/`.
 
-Quelques repères sur une machine à 12 cœurs :
+Le nombre de cœurs du Mac s'obtient avec `sysctl -n hw.ncpu`, mais c'est celui que
+Docker Desktop accorde (Settings → Resources) qui compte pour `--n-envs`.
+
+Quelques repères sur une machine à 12 cœurs ; un Mac portable sera plus lent :
 
 | Pas | Durée | Ce qu'on voit |
 |---|---|---|
@@ -256,8 +305,11 @@ docker compose --profile eval run --rm eval python scripts/evaluate.py --help
 |---|---|
 | `failed to connect to the docker API` | Docker Desktop n'est pas démarré |
 | `no such service: train` | profil oublié : `--profile train` |
-| `Python est introuvable` | voir l'étape 2 — utiliser le chemin explicite de `.venv` |
-| `BrokenPipeError` pendant l'entraînement | trop d'environnements, baisser `--n-envs` |
+| `command not found: python3.12` | Python 3.12 pas installé, voir l'étape 2 |
+| `Failed building wheel for mujoco` | Mac Intel : ajouter `"mujoco<3.11"`, voir l'étape 2 |
+| `No module named 'numpy._core.numeric'` | Mac Intel : `visualize.py` impossible en natif, passer par la vidéo Docker |
+| `launch_passive requires that the Python script be run under mjpython` | lancer avec `.venv/bin/mjpython` au lieu de `.venv/bin/python` |
+| `BrokenPipeError` pendant l'entraînement | trop d'environnements, baisser `--n-envs` (et vérifier Settings → Resources de Docker Desktop) |
 | `spaces must have the same shape` | modèle incompatible avec l'environnement, voir [`models/README.md`](../models/README.md) |
 | `Could not deserialize object lr_schedule` | avertissement sans conséquence, les poids se chargent |
 | La commande colle deux lignes ensemble | la doc n'utilise pas d'antislash ; copiez la ligne entière |
