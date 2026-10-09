@@ -100,7 +100,9 @@ Pour que les chiffres restent comparables d'une version à l'autre, toutes les
 
 - sol plat, sans randomisation (`evaluate.py` sans `--floor-noise`) ;
 - mêmes graines, même nombre d'épisodes (par exemple `--episodes 20 --seed 1`) ;
-- mêmes mesures : avance, vitesse, dérive, verticalité, % sans chute.
+- mêmes mesures : avance, vitesse, dérive, verticalité, % sans chute ; à ajouter :
+  dérive de cap, appui gauche / droite, cadence, hauteur des pieds (voir
+  « Ce que montre la démarche du modèle du 19 septembre »).
 
 Chaque palier ajoute ensuite **son** test (sol accidenté, poussées), mais le banc plat
 reste toujours mesuré.
@@ -140,6 +142,9 @@ Changements proposés :
 - [ ] **Sortir les poids dans le YAML** — pour essayer des réglages sans toucher au
       code.
 - [ ] Corriger les défauts de `TECHNIQUE.md` §8 attribués au palier 1 (voir plus bas).
+- [ ] Étudier les quatre propositions tirées des mesures du 9 octobre (voir
+      « Ce que montre la démarche du modèle du 19 septembre ») : virage, boiterie,
+      piétinement, postures.
 
 **Réussi quand :** sur le banc plat, plus loin et plus vite que le modèle du
 19 septembre, sans chute, et la courbe d'entraînement ne plafonne plus avant la fin.
@@ -208,6 +213,108 @@ démarche d'évoluer.
 
 ---
 
+## Ce que montre la démarche du modèle du 19 septembre
+
+> **Statut : propositions**, ajoutées le 9 octobre 2026. Rien n'est décidé : elles
+> seront tranchées avec le reste au moment de figer la récompense.
+
+Mesures sur `models/2026-09-19_recompense-corrigee/best_model.zip`, sol plat, 5 graines
+(1 à 5), 1000 pas chacune. Les chiffres se répètent d'une graine à l'autre.
+
+| Mesure | Valeur | Ce que ça veut dire |
+| --- | --- | --- |
+| Dérive de cap en 10 s | **+45° à +52°**, toujours vers la gauche | il marche en arc de cercle |
+| Appui sur le pied droit seul / gauche seul | **35 % / 58 %** | il boite |
+| Amplitude de hanche (tangage) droite / gauche | 25° / 44° | idem |
+| Rotation moyenne de la hanche droite | −16,5° (gauche : −1,2°) | jambe droite tournée |
+| Cadence | **4,4 pas/s**, pas de ~15 cm | il piétine |
+| Appui simple | 94 % du temps | `gait_reward` payé presque à chaque pas de 10 ms |
+| Hauteur des pieds en vol | 5,5 cm (droit), 7,9 cm (gauche) | correct |
+| Coudes en butée | **~100 % du temps** | pose de départ à 1° de la limite |
+| Tronc (`abs_y`, `bust_y`) | ~−13° chacun en moyenne | penché, et rien ne le voit |
+| Moteurs à leur couple maximal | 3–4 % du temps | correct |
+| Actions hors de [−1, 1] | quasi jamais (max 1,25) | correct |
+
+### Proposition 1 — Arrêter de tourner
+
+**Cause.** La récompense mesure l'avance *dans la direction où le robot regarde*. C'est
+ce qui a corrigé le pas chassé, mais tourner ne coûte donc rien : ni
+`forward_reward`, ni `lateral_cost` ne voient un virage.
+
+**Proposition.** Pénaliser la vitesse de rotation autour de l'axe vertical
+(`yaw_rate_cost = w × ω_z²`). Variante plus tard : un cap cible fixé au `reset()` et
+une récompense d'avance dans *cette* direction. Elle demande d'ajouter une consigne à
+l'observation, donc on l'écarte pour l'instant.
+
+### Proposition 2 — Corriger la boiterie
+
+**Proposition.** Au choix :
+- une **récompense de symétrie** (temps d'appui et amplitudes gauche / droite proches) ;
+- ou l'**augmentation miroir** : chaque transition est aussi apprise en version
+  gauche-droite inversée. C'est souvent plus efficace qu'un terme de récompense. Il
+  faut une table de correspondance gauche ↔ droite des articulations, des
+  observations et des actions, mais pas de nouvelle dimension.
+
+La boiterie et le virage sont probablement liés : corriger l'un peut corriger l'autre.
+
+### Proposition 3 — Des pas plus longs
+
+**Cause.** `gait_reward` donne 0,3 dès qu'un seul pied touche, à chaque pas de 10 ms.
+Alterner très vite rapporte autant que marcher posément.
+
+**Proposition.** Remplacer ce terme par une récompense de **temps de vol** : au moment
+où un pied se repose, récompenser `(durée en l'air − 0,25 s)`. C'est le terme classique
+des marches apprises (legged_gym, Isaac Lab). Le seuil de 0,25 s est à régler.
+
+### Proposition 4 — Deux postures à surveiller
+
+- **Butées articulaires** : une pénalité quand une articulation s'approche de ses
+  limites. Les coudes du modèle actuel y restent en permanence ; sur le vrai robot,
+  garder un moteur en butée le fait chauffer. À voir aussi : la pose de départ des
+  coudes, à 1° de la limite.
+- **Verticalité du haut du corps** : `upright_reward` se mesure sur le **bassin**. Le
+  tronc peut se plier sans pénalité. Proposition : mesurer la verticalité sur la
+  poitrine ou la tête, ou ajouter une pénalité sur les angles du tronc.
+
+### Avec quels capteurs ?
+
+**La récompense n'est pas une observation.** Elle n'est calculée qu'en simulation,
+pendant l'entraînement ; le vrai robot ne la calcule jamais. Elle peut donc utiliser
+tout ce que le simulateur sait, **sans ajouter de dimension**. Il faut seulement que la
+politique puisse percevoir ce qu'on lui demande de corriger :
+
+| Proposition | Ce que la politique doit percevoir | Capteur sur le robot | Nouvelle dimension ? |
+| --- | --- | --- | --- |
+| 1. Rotation | vitesse de rotation du bassin (déjà observée) | gyroscope de l'IMU | non |
+| 2. Symétrie / miroir | angles des articulations | encodeurs des moteurs | non |
+| 3. Temps de vol | contacts des pieds (déjà observés) | capteurs de pression sous les pieds | non |
+| 4. Butées, tronc | angles des articulations, inclinaison du bassin | encodeurs + IMU | non |
+
+**Les quatre propositions tiennent dans les 63 dimensions**, à condition d'avoir une IMU
+(avec gyroscope) et des capteurs de contact sous les pieds.
+
+**À noter pour le moment de figer le contrat d'observation.** Les 63 dimensions
+actuelles (`qpos[2:]` + `qvel` + contacts) contiennent déjà des grandeurs que le vrai
+robot ne mesure pas :
+
+| Dans l'observation | Mesurable sur le robot ? |
+| --- | --- |
+| 25 angles articulaires et leurs vitesses | oui, encodeurs |
+| Inclinaison du bassin (roulis, tangage) | oui, IMU |
+| Vitesse de rotation du bassin | oui, gyroscope |
+| Contacts des pieds | oui, si capteurs de pression |
+| **Hauteur du bassin** (`qpos[2]`) | **non** |
+| **Vitesse d'avance du bassin** (`qvel[0:3]`) | **non**, à estimer, imprécis avec une IMU seule |
+| **Cap absolu** (dans le quaternion) | dérive avec le temps |
+
+La réponse habituelle est une politique **asymétrique acteur / critique** : l'acteur,
+qui tourne sur le robot, ne voit que ce que les capteurs mesurent ; le critique, qui
+n'existe qu'à l'entraînement, voit tout le simulateur. Cela change l'espace
+d'observation et invalide les modèles existants. Mieux vaut le décider **avant** de
+retoucher la récompense, pour ne réentraîner qu'une fois.
+
+---
+
 ## Questions pour l'équipe
 
 1. Plafond de vitesse plus haut, ou suivi d'une vitesse cible ?
@@ -216,6 +323,10 @@ démarche d'évoluer.
 4. Quels seuils de réussite pour les paliers 2 et 3 ?
 5. Avons-nous la puissance de calcul pour plusieurs entraînements de 10 M de pas en
    parallèle (5 à 7 h chacun sur 12 cœurs) ?
+6. Quels capteurs aura le robot ? Une IMU avec gyroscope et des capteurs de contact
+   sous les pieds sont nécessaires aux quatre propositions ci-dessus.
+7. Passe-t-on à une politique asymétrique acteur / critique avant de retoucher la
+   récompense ?
 
 ## Avis
 
