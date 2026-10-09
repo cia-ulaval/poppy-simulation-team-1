@@ -66,7 +66,7 @@ docker compose --profile dev run --rm dev ruff check .
 docker compose --profile dev run --rm dev python -m pytest
 ```
 
-Attendu : `All checks passed!` et `16 passed, 1 xfailed`. Le `xfailed` est voulu.
+Attendu : `All checks passed!` et `19 passed, 1 xfailed`. Le `xfailed` est voulu.
 
 Preuve que la physique et la récompense n'ont pas bougé :
 

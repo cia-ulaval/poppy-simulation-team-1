@@ -36,7 +36,7 @@ Vérifier que tout est en place :
 docker compose --profile dev run --rm dev python -m pytest
 ```
 
-> **Attendu : `16 passed, 1 xfailed`.** Le `xfailed` n'est **pas** une panne : c'est un
+> **Attendu : `19 passed, 1 xfailed`.** Le `xfailed` n'est **pas** une panne : c'est un
 > test volontairement en échec attendu, qui documente une incohérence connue. Il est
 > expliqué dans [`TECHNIQUE.md` §8](TECHNIQUE.md).
 
