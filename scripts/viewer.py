@@ -37,6 +37,7 @@ import mujoco
 import mujoco.viewer
 
 from src.config.loaders import load_yaml, make_poppy_env_config
+from src.environments.floor_display import color_floor
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
 
 _MODEL_PATH = Path(__file__).parent.parent / "assets" / "poppy_humanoid" / "poppy_humanoid.xml"
@@ -44,27 +45,17 @@ _MODEL_PATH = Path(__file__).parent.parent / "assets" / "poppy_humanoid" / "popp
 # l'entraînement si le YAML change.
 _CONFIG_PATH = Path(__file__).parent.parent / "configs" / "poppy_robust.yaml"
 
-_SLIPPERY_RGBA = np.array([0.75, 0.88, 1.00, 1.0])  # bleu clair : glissant
-_GRIPPY_RGBA = np.array([0.05, 0.15, 0.45, 1.0])    # bleu marine : adhérent
 _KEY_ENTER = 257
-
-
-def _floor_color(friction: float, low: float, high: float) -> np.ndarray:
-    """Couleur du sol: bleu clair si glissant, bleu marine si adhérent."""
-    t = (friction - low) / (high - low)
-    return _SLIPPERY_RGBA + t * (_GRIPPY_RGBA - _SLIPPERY_RGBA)
 
 
 def _new_episode(
     env: PoppyHumanoidEnv,
-    floor_id: int,
     friction_range: tuple[float, float],
     episode: int,
 ) -> None:
-    """Relance un essai: nouveau sol tiré au hasard et recoloré selon sa friction."""
+    """Relance un essai : nouveau sol tiré au hasard et recoloré selon sa friction."""
     env.reset()
-    friction = env.get_floor_randomization_info()["floor_slide_friction"]
-    env.model.geom_rgba[floor_id] = _floor_color(friction, *friction_range)
+    friction = color_floor(env, friction_range)
     print(f"Episode {episode} : friction {friction:.2f}")
 
 
@@ -122,8 +113,7 @@ Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
             restart = True
 
     episode = 1
-    floor_id = model.geom("floor").id
-    _new_episode(env, floor_id, dr.friction_range, episode)
+    _new_episode(env, dr.friction_range, episode)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
         while viewer.is_running():
@@ -131,7 +121,7 @@ Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
                 if restart:
                     restart = False
                     episode += 1
-                    _new_episode(env, floor_id, dr.friction_range, episode)
+                    _new_episode(env, dr.friction_range, episode)
                 env.step(np.zeros(model.nu))
             viewer.sync()
             time.sleep(env.dt)
