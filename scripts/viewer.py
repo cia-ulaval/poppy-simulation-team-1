@@ -4,14 +4,14 @@ Pour *regarder* le robot : articulations, limites, pose de départ. C'est le
 premier réflexe utile quand on découvre le projet, et ça ne demande aucun
 modèle entraîné.
 
-Le sol est tiré au hasard à chaque episode
-comme à l'entraînement, sa friction varie entre 0,4 et 2,0
-Sa couleurchange en focntion de la friciton:
- - bleu clair s'il est glissant
- - bleu marine s'il est adhérent
-La touche Entrée lance un nouvel épisode avec un nouveau sol
+Le sol est tiré au hasard à chaque épisode, comme à l'entraînement : sa
+friction suit la plage de configs/poppy_robust.yaml. Sa couleur change en
+fonction de la friction :
+ - bleu clair s'il est glissant ;
+ - bleu marine s'il est adhérent.
+La touche Entrée lance un nouvel épisode avec un nouveau sol.
 
-Pour regarder une **politique** se dérouler, c'est `scripts/visualize.py`
+Pour regarder une **politique** se dérouler, c'est `scripts/visualize.py`.
 
 Nécessite un écran : à lancer en natif, pas dans un conteneur (voir
 docs/DOCKER.md § Sans Docker).
@@ -36,15 +36,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import mujoco
 import mujoco.viewer
 
+from src.config.loaders import load_yaml, make_poppy_env_config
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
 
 _MODEL_PATH = Path(__file__).parent.parent / "assets" / "poppy_humanoid" / "poppy_humanoid.xml"
+# Les plages de friction et de restitution sont lues ici, pour rester celles de
+# l'entraînement si le YAML change.
+_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "poppy_robust.yaml"
 
 _SLIPPERY_RGBA = np.array([0.75, 0.88, 1.00, 1.0])  # bleu clair : glissant
 _GRIPPY_RGBA = np.array([0.05, 0.15, 0.45, 1.0])    # bleu marine : adhérent
-# Mêmes plages que l'entraînement : configs/poppy_robust.yaml, domain_randomization.
-_FRICTION_RANGE = (0.4, 2.0)
-_RESTITUTION_RANGE = (0.0, 0.5)
 _KEY_ENTER = 257
 
 
@@ -54,11 +55,16 @@ def _floor_color(friction: float, low: float, high: float) -> np.ndarray:
     return _SLIPPERY_RGBA + t * (_GRIPPY_RGBA - _SLIPPERY_RGBA)
 
 
-def _new_episode(env: PoppyHumanoidEnv, floor_id: int, episode: int) -> None:
+def _new_episode(
+    env: PoppyHumanoidEnv,
+    floor_id: int,
+    friction_range: tuple[float, float],
+    episode: int,
+) -> None:
     """Relance un essai: nouveau sol tiré au hasard et recoloré selon sa friction."""
     env.reset()
     friction = env.get_floor_randomization_info()["floor_slide_friction"]
-    env.model.geom_rgba[floor_id] = _floor_color(friction, _FRICTION_RANGE[0], _FRICTION_RANGE[1])
+    env.model.geom_rgba[floor_id] = _floor_color(friction, *friction_range)
     print(f"Episode {episode} : friction {friction:.2f}")
 
 
@@ -92,10 +98,11 @@ Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
         print(f"Modèle introuvable : {_MODEL_PATH}", file=sys.stderr)
         return 1
 
+    dr = make_poppy_env_config(load_yaml(_CONFIG_PATH)).domain_randomization
     env = PoppyHumanoidEnv(
         floor_noise=True,
-        friction_range=_FRICTION_RANGE,
-        restitution_range=_RESTITUTION_RANGE,
+        friction_range=dr.friction_range,
+        restitution_range=dr.restitution_range,
     )
     model = env.model
     data = env.data
@@ -116,7 +123,7 @@ Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
 
     episode = 1
     floor_id = model.geom("floor").id
-    _new_episode(env, floor_id, episode)
+    _new_episode(env, floor_id, dr.friction_range, episode)
 
     with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
         while viewer.is_running():
@@ -124,7 +131,7 @@ Pour regarder une POLITIQUE se dérouler, c'est scripts/visualize.py.
                 if restart:
                     restart = False
                     episode += 1
-                    _new_episode(env, floor_id, episode)
+                    _new_episode(env, floor_id, dr.friction_range, episode)
                 env.step(np.zeros(model.nu))
             viewer.sync()
             time.sleep(env.dt)
