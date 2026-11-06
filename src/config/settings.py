@@ -31,6 +31,66 @@ class DomainRandomizationConfig:
     enabled: bool = True
     friction_range: tuple[float, float] = (0.5, 1.5)
     restitution_range: tuple[float, float] = (0.0, 0.3)
+    # Corrections des défauts de docs/TECHNIQUE.md §8, désactivées par défaut
+    # pour que les YAML existants gardent exactement leur physique.
+    restitution_in_solref: bool = False
+    push_as_force: bool = False
+
+
+@dataclass(frozen=True)
+class RewardConfig:
+    """Poids de la récompense, par pas de 10 ms.
+
+    Les valeurs par défaut sont **exactement** la récompense codée en dur
+    jusqu'en octobre 2026 : un YAML sans section ``reward:`` entraîne et évalue
+    comme avant. Les termes ajoutés pour le palier 1 valent 0 par défaut.
+    Détail et justification : ``spec/recompense-et-paliers.md``.
+
+    Attributes:
+        forward_weight: Poids de la vitesse d'avance, projetée sur le cap.
+        max_forward_vel: Plafond de la vitesse récompensée (m/s).
+        healthy: Bonus par pas debout.
+        upright_weight: Poids de la verticalité du bassin.
+        gait_single: Bonus d'appui simple, payé à chaque pas.
+        gait_double: Bonus de double appui, payé à chaque pas.
+        lateral_weight: Pénalité de vitesse latérale (valeur absolue).
+        ctrl_weight: Pénalité Σ action².
+        action_rate_weight: Pénalité Σ (action − action précédente)².
+        joint_vel_weight: Pénalité Σ vitesse articulaire².
+        yaw_rate_weight: Pénalité sur le carré de la vitesse de lacet.
+        yaw_rate_tau: Constante de temps (s) du filtre appliqué à la vitesse
+            de lacet avant pénalité. 0 : vitesse instantanée. Un filtre d'une
+            seconde ne garde que le virage de fond, pas l'oscillation du bassin
+            à chaque pas.
+        air_time_weight: Poids du temps de vol, payé quand un pied se repose.
+        air_time_target: Temps de vol neutre (s) ; en dessous, le terme est
+            négatif.
+        air_time_max: Plafond du temps de vol récompensé (s), contre le saut.
+        joint_limit_weight: Pénalité de dépassement des butées douces (rad).
+        joint_limit_soft: Fraction de la course au-delà de laquelle une
+            articulation est pénalisée.
+        torso_upright_weight: Poids de la verticalité de la poitrine, mesurée
+            par rapport à la pose debout.
+    """
+
+    forward_weight: float = 5.0
+    max_forward_vel: float = 0.5
+    healthy: float = 1.0
+    upright_weight: float = 1.0
+    gait_single: float = 0.3
+    gait_double: float = 0.1
+    lateral_weight: float = 0.5
+    ctrl_weight: float = 0.1
+    action_rate_weight: float = 0.05
+    joint_vel_weight: float = 0.005
+    yaw_rate_weight: float = 0.0
+    yaw_rate_tau: float = 0.0
+    air_time_weight: float = 0.0
+    air_time_target: float = 0.25
+    air_time_max: float = 0.5
+    joint_limit_weight: float = 0.0
+    joint_limit_soft: float = 0.95
+    torso_upright_weight: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -51,6 +111,11 @@ class PoppyEnvironmentConfig:
         frame_skip: Pas de simulation par pas de politique (dt = 2 ms x
             frame_skip).
         domain_randomization: Réglages de randomisation du sol.
+        reward: Poids de la récompense.
+        normalize_action_space: Annonce un espace d'action ``[-1, 1]``,
+            conforme au contrat. Faux par défaut : le corriger change
+            ``action_space`` et les modèles existants ne se chargent plus sans
+            le forcer (voir ``docs/TECHNIQUE.md`` §8).
     """
 
     terminate_when_unhealthy: bool = True
@@ -64,6 +129,8 @@ class PoppyEnvironmentConfig:
     domain_randomization: DomainRandomizationConfig = field(
         default_factory=DomainRandomizationConfig
     )
+    reward: RewardConfig = field(default_factory=RewardConfig)
+    normalize_action_space: bool = False
 
 
 @dataclass(frozen=True)

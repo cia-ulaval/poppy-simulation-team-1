@@ -9,11 +9,16 @@ silencieusement dénués de sens.
 
 from __future__ import annotations
 
+from dataclasses import fields, replace
 from pathlib import Path
 
 import yaml
 
-from src.config.settings import DomainRandomizationConfig, PoppyEnvironmentConfig
+from src.config.settings import (
+    DomainRandomizationConfig,
+    PoppyEnvironmentConfig,
+    RewardConfig,
+)
 
 
 def load_yaml(path: Path) -> dict:
@@ -27,6 +32,33 @@ def load_yaml(path: Path) -> dict:
     """
     with open(path, encoding="utf-8") as handle:
         return yaml.safe_load(handle) or {}
+
+
+def make_reward_config(section: dict | None) -> RewardConfig:
+    """Construit les poids de la récompense depuis la section ``reward:``.
+
+    Une clé inconnue lève une erreur au lieu d'être ignorée : une faute de
+    frappe dans un poids entraînerait sinon 10 M de pas avec la valeur par
+    défaut, sans que rien ne le signale.
+
+    Args:
+        section: Contenu de la section ``reward:``, ou ``None`` si absente.
+
+    Returns:
+        Les poids, ceux non précisés gardant leur valeur par défaut.
+
+    Raises:
+        ValueError: Si la section contient une clé inconnue.
+    """
+    section = section or {}
+    known = {f.name for f in fields(RewardConfig)}
+    unknown = sorted(set(section) - known)
+    if unknown:
+        raise ValueError(
+            f"Clés inconnues dans reward: {', '.join(unknown)}. "
+            f"Connues : {', '.join(sorted(known))}"
+        )
+    return RewardConfig(**{key: float(value) for key, value in section.items()})
 
 
 def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
@@ -55,7 +87,11 @@ def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
             enabled=dr_cfg.get("enabled", True),
             friction_range=tuple(dr_cfg.get("friction_range", [0.5, 1.5])),
             restitution_range=tuple(dr_cfg.get("restitution_range", [0.0, 0.3])),
+            restitution_in_solref=bool(dr_cfg.get("restitution_in_solref", False)),
+            push_as_force=bool(dr_cfg.get("push_as_force", False)),
         ),
+        reward=make_reward_config(cfg.get("reward")),
+        normalize_action_space=bool(env_cfg.get("normalize_action_space", False)),
     )
 
 
@@ -79,18 +115,9 @@ def as_evaluation_config(
     Returns:
         La configuration d'évaluation correspondante.
     """
-    return PoppyEnvironmentConfig(
-        terminate_when_unhealthy=config.terminate_when_unhealthy,
-        healthy_z_range=config.healthy_z_range,
+    return replace(
+        config,
         n_envs=1,
-        normalize_obs=config.normalize_obs,
         normalize_reward=False,
-        clip_obs=config.clip_obs,
-        gamma=config.gamma,
-        frame_skip=config.frame_skip,
-        domain_randomization=DomainRandomizationConfig(
-            enabled=floor_noise,
-            friction_range=config.domain_randomization.friction_range,
-            restitution_range=config.domain_randomization.restitution_range,
-        ),
+        domain_randomization=replace(config.domain_randomization, enabled=floor_noise),
     )

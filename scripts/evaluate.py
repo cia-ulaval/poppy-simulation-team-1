@@ -39,9 +39,10 @@ from src.environments.poppy_humanoid_env import CAMERAS
 # classe de politique. On tente donc les classes jusqu'à ce que l'une charge.
 _ALGO_CLASSES = {"PPO": PPO, "SAC": SAC, "TD3": TD3, "A2C": A2C}
 
-# Les huit termes que la récompense additionne, dans l'ordre où ils apparaissent
-# dans PoppyHumanoidEnv.step. Les trois derniers sont des coûts (déjà négatifs
-# dans la somme, comptés positifs ici).
+# Les termes que la récompense additionne, dans l'ordre où ils apparaissent
+# dans PoppyHumanoidEnv.step. Les coûts sont comptés positifs ici, alors qu'ils
+# sont retranchés dans la somme. Les quatre derniers sont ceux du palier 1 :
+# ils valent 0 avec une configuration qui ne les active pas.
 _REWARD_TERMS = (
     "healthy_reward",
     "gait_reward",
@@ -51,6 +52,10 @@ _REWARD_TERMS = (
     "ctrl_cost",
     "action_rate_cost",
     "joint_vel_cost",
+    "air_time_reward",
+    "torso_upright_reward",
+    "yaw_rate_cost",
+    "joint_limit_cost",
 )
 
 
@@ -330,9 +335,42 @@ def _summarise(
     # pour juger une démarche.
     summary["avance"] = float(np.sum(current["forward_vel"])) * dt
     summary["derive"] = float(np.sum(current["lateral_vel"])) * dt
+
+    # Mesures de démarche du banc d'essai (spec/recompense-et-paliers.md),
+    # indépendantes de la récompense : elles comparent des modèles entraînés
+    # avec des récompenses différentes.
+    summary.update(_gait_metrics(current, steps, dt))
     for term in _REWARD_TERMS:
         summary[f"sum_{term}"] = float(np.sum(current[term])) if current[term] else 0.0
     return summary
+
+
+def _gait_metrics(
+    current: dict[str, list[float]],
+    steps: int,
+    dt: float,
+) -> dict[str, float]:
+    """Dérive de cap, appui gauche / droite, cadence et verticalité du tronc.
+
+    Returns:
+        ``cap_deg`` : rotation totale du cap sur l'épisode, positive vers la
+        gauche ; ``appui_droit`` / ``appui_gauche`` : part du temps sur ce
+        pied seul ; ``cadence`` : poses de pied par seconde ;
+        ``tronc_mean`` : verticalité de la poitrine (1 = comme debout).
+    """
+    if not current["heading"] or steps == 0:
+        return {"cap_deg": 0.0, "appui_droit": 0.0, "appui_gauche": 0.0,
+                "cadence": 0.0, "tronc_mean": 0.0}
+    heading = np.unwrap(np.asarray(current["heading"]))
+    right = np.asarray(current["r_contact"]) > 0.5
+    left = np.asarray(current["l_contact"]) > 0.5
+    return {
+        "cap_deg": float(np.degrees(heading[-1] - heading[0])),
+        "appui_droit": float(np.mean(right & ~left)),
+        "appui_gauche": float(np.mean(left & ~right)),
+        "cadence": float(np.sum(current["touchdowns"])) / (steps * dt),
+        "tronc_mean": float(np.mean(current["torso_uprightness"])),
+    }
 
 
 def _write_video(frames: list[NDArray], path: Path, env: Any) -> None:
@@ -371,6 +409,13 @@ def report(episodes: list[dict[str, float]], model: Path | str) -> None:
     print(f"{'Vitesse avant (m/s)':<28} {stat('forward_vel_mean')[0]:>10.3f}")
     print(f"{'Verticalité (0-1)':<28} {stat('uprightness_mean')[0]:>10.3f}")
     print(f"{'Épisodes sans chute':<28} {survival * 100:>9.0f} %")
+    print("-" * 62)
+    print("Démarche")
+    print(f"{'  dérive de cap (°)':<28} {stat('cap_deg')[0]:>+10.1f} ± {stat('cap_deg')[1]:.1f}")
+    print(f"{'  appui droit / gauche (%)':<28} "
+          f"{stat('appui_droit')[0] * 100:>6.0f} / {stat('appui_gauche')[0] * 100:.0f}")
+    print(f"{'  cadence (poses/s)':<28} {stat('cadence')[0]:>10.2f}")
+    print(f"{'  verticalité du tronc':<28} {stat('tronc_mean')[0]:>10.3f}")
     print("-" * 62)
     print("Décomposition de la récompense (somme moyenne par épisode)")
     for term in _REWARD_TERMS:

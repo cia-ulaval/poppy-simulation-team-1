@@ -55,6 +55,8 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.utils import EzPickle
 from numpy.typing import NDArray
 
+from src.config.settings import RewardConfig
+
 _ASSETS_DIR = Path(__file__).parent.parent.parent / "assets" / "poppy_humanoid"
 _MODEL_PATH = _ASSETS_DIR / "poppy_humanoid.xml"
 
@@ -73,6 +75,7 @@ _FLOOR_GEOM_NAME = "floor"
 # lateral_cost are projected on; using world x instead rewarded
 # side-stepping and charged genuine walking to the lateral penalty.
 _PELVIS_BODY_ID = 1
+_CHEST_BODY_NAME = "chest"
 _LOCAL_FORWARD = np.array([0.0, -1.0, 0.0])
 _LOCAL_LEFT = np.array([1.0, 0.0, 0.0])
 
@@ -109,6 +112,10 @@ _INIT_PELVIS_Z = 0.41
 # servo PID would provide internally.
 _KP = 8.0    # Nm/rad  — proportional gain
 _KD = 0.5    # Nm·s/rad — derivative gain
+
+# ── Foot contact threshold ──────────────────────────────────
+# Contact force (N) above which a foot counts as touching the ground.
+_CONTACT_THRESHOLD = 1.0
 
 # ── Camera views ────────────────────────────────────────────
 # ``trackbodyid = 1`` is the pelvis: the camera follows it instead of
@@ -195,6 +202,27 @@ def _ground_direction(vector: NDArray) -> NDArray:
     return flat / norm
 
 
+def _restitution_to_dampratio(restitution: float) -> float:
+    """Convert a coefficient of restitution into a MuJoCo ``solref`` damping ratio.
+
+    MuJoCo has no restitution parameter: a contact is a damped spring, and
+    it bounces when that spring is under-damped.  For a damped oscillator
+    the restitution is ``e = exp(-ζπ / sqrt(1 - ζ²))``, hence
+    ``ζ = -ln(e) / sqrt(π² + ln²(e))``.  ``e = 0`` gives ``ζ = 1``, MuJoCo's
+    default, critically damped: no bounce.
+
+    Args:
+        restitution: Coefficient of restitution, in ``[0, 1)``.
+
+    Returns:
+        The damping ratio, in ``(0, 1]``.
+    """
+    if restitution <= 0.0:
+        return 1.0
+    log_e = float(np.log(min(restitution, 0.999)))
+    return -log_e / float(np.sqrt(np.pi ** 2 + log_e ** 2))
+
+
 class PoppyHumanoidEnv(MujocoEnv, EzPickle):
     """
     MuJoCo environment for the Poppy Humanoid robot with optional
@@ -222,6 +250,21 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         "human" or "rgb_array" or None.
     frame_skip : int
         Number of MuJoCo simulation steps per ``step()`` call.
+    reward : RewardConfig or None
+        Every reward weight.  When given, it replaces the six individual
+        weight arguments above, which are kept so that older call sites
+        build the same environment as before.
+    normalize_action_space : bool
+        Advertise ``[-1, 1]`` as the action space, as the contract says.
+        Off by default: it changes ``action_space``, and models trained
+        before cannot be loaded against it without forcing their space.
+    restitution_in_solref : bool
+        Write the sampled restitution into ``geom_solref`` (damping ratio)
+        instead of ``geom_solimp[:, 4]``, where it had no effect.
+    push_as_force : bool
+        Apply random pushes as a force (``xfrc_applied[:, 0:3]``) instead of
+        a torque (``xfrc_applied[:, 3:6]``), which is what the code used to
+        write.
     """
 
     metadata = {
@@ -244,6 +287,10 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         joint_vel_cost_weight: float = 0.005,
         render_mode: Optional[str] = None,
         frame_skip: int = 5,
+        reward: Optional[RewardConfig] = None,
+        normalize_action_space: bool = False,
+        restitution_in_solref: bool = False,
+        push_as_force: bool = False,
     ):
         EzPickle.__init__(
             self,
@@ -260,22 +307,38 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             joint_vel_cost_weight=joint_vel_cost_weight,
             render_mode=render_mode,
             frame_skip=frame_skip,
+            reward=reward,
+            normalize_action_space=normalize_action_space,
+            restitution_in_solref=restitution_in_solref,
+            push_as_force=push_as_force,
         )
+
+        if reward is None:
+            reward = RewardConfig(
+                forward_weight=forward_reward_weight,
+                max_forward_vel=max_forward_vel,
+                healthy=healthy_reward,
+                ctrl_weight=ctrl_cost_weight,
+                action_rate_weight=action_rate_cost_weight,
+                joint_vel_weight=joint_vel_cost_weight,
+            )
+        self._reward = reward
+        self._restitution_in_solref = restitution_in_solref
+        self._push_as_force = push_as_force
 
         self._floor_noise = floor_noise
         self._friction_range = friction_range
         self._restitution_range = restitution_range
         self._healthy_z_range = healthy_z_range
         self._terminate_when_unhealthy = terminate_when_unhealthy
-        self._forward_reward_weight = forward_reward_weight
-        self._healthy_reward = healthy_reward
-        self._ctrl_cost_weight = ctrl_cost_weight
-        self._max_forward_vel = max_forward_vel
-        self._action_rate_cost_weight = action_rate_cost_weight
-        self._joint_vel_cost_weight = joint_vel_cost_weight
 
         # Track previous action for smoothness penalty
         self._prev_action: Optional[NDArray] = None
+
+        # Per-episode state of the palier-1 reward terms, reset in reset_model
+        self._yaw_rate_filtered = 0.0
+        self._air_time = np.zeros(2)          # (right, left), seconds
+        self._was_in_contact = np.ones(2, dtype=bool)
 
         obs_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(_OBS_DIM,), dtype=np.float64
@@ -333,6 +396,30 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # DEFAULT_CAMERA_CONFIG.  Setting camera_id to None skips that
         # branch and leaves our camera alone.
         self.mujoco_renderer.camera_id = None
+
+        # ── Normalised action space (TECHNIQUE.md §8) ────────────────
+        if normalize_action_space:
+            self.action_space = spaces.Box(
+                low=-1.0, high=1.0, shape=(_N_JOINTS,), dtype=np.float32
+            )
+
+        # ── Soft joint limits, for the joint-limit penalty ───────────
+        mid = 0.5 * (self._joint_low + self._joint_high)
+        half = 0.5 * (self._joint_high - self._joint_low) * reward.joint_limit_soft
+        self._soft_low = mid - half
+        self._soft_high = mid + half
+
+        # ── Chest "up" direction at the standing pose ────────────────
+        # The chest frame comes from the URDF and is not aligned with the
+        # world: its local z is not "up".  We record which local direction
+        # points up when the robot stands at init_qpos, and measure torso
+        # uprightness against that.
+        self._chest_id = self.model.body(_CHEST_BODY_NAME).id
+        standing = mujoco.MjData(self.model)
+        standing.qpos[:] = self.init_qpos
+        mujoco.mj_kinematics(self.model, standing)
+        chest_rot = standing.xmat[self._chest_id].reshape(3, 3)
+        self._chest_local_up = chest_rot.T @ np.array([0.0, 0.0, 1.0])
 
     @property
     def is_healthy(self) -> bool:
@@ -414,6 +501,25 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         up_z = 1.0 - 2.0 * (x * x + y * y)
         return float(up_z)
 
+    def _get_torso_uprightness(self) -> float:
+        """Return how upright the chest is, relative to the standing pose.
+
+        1.0 when the chest is oriented as at ``init_qpos``.  Unlike
+        :meth:`_get_uprightness`, which looks at the pelvis, this sees the
+        trunk bending at ``abs_y`` / ``bust_y``.
+        """
+        rotation = self.data.xmat[self._chest_id].reshape(3, 3)
+        return float((rotation @ self._chest_local_up)[2])
+
+    def _get_yaw_rate(self) -> float:
+        """Return the pelvis angular velocity around the world vertical (rad/s).
+
+        A free joint's ``qvel[3:6]`` is expressed in the body frame; rotating
+        it by the pelvis orientation gives it in the world frame.
+        """
+        rotation = self.data.xmat[_PELVIS_BODY_ID].reshape(3, 3)
+        return float((rotation @ self.data.qvel[3:6])[2])
+
     def step(self, action: NDArray) -> Tuple[NDArray, float, bool, bool, Dict]:
         xy_before = self.data.qpos[:2].copy()
 
@@ -436,48 +542,60 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         #
         # Cap at max_forward_vel to prevent the policy from
         # learning to take huge strides for extra speed.
+        w = self._reward
         velocity = (xy_after - xy_before) / dt
         forward_dir, left_dir = self._heading_frame()
         forward_vel = float(velocity @ forward_dir)
-        capped_vel = np.clip(forward_vel, -self._max_forward_vel,
-                             self._max_forward_vel)
-        forward_reward = self._forward_reward_weight * capped_vel
+        capped_vel = np.clip(forward_vel, -w.max_forward_vel, w.max_forward_vel)
+        forward_reward = w.forward_weight * capped_vel
 
         # ── Alive bonus ─────────────────────────────────────────
-        healthy_reward = self._healthy_reward if self.is_healthy else 0.0
+        healthy_reward = w.healthy if self.is_healthy else 0.0
 
         # ── Uprightness bonus ───────────────────────────────────
         uprightness = self._get_uprightness()
-        upright_reward = 1.0 * uprightness  # max 1.0/step when perfectly vertical
+        upright_reward = w.upright_weight * uprightness
 
         # ── Foot contact alternation reward ─────────────────────
         # Reward proper gait: exactly one foot on the ground at a time
         foot_contacts = self._get_foot_contacts()
-        r_contact = foot_contacts[0] > 1.0   # right foot touching
-        l_contact = foot_contacts[1] > 1.0   # left foot touching
+        in_contact = foot_contacts > _CONTACT_THRESHOLD   # (right, left)
+        r_contact, l_contact = bool(in_contact[0]), bool(in_contact[1])
         if r_contact != l_contact:
             # One foot on ground, one in air → walking gait
-            gait_reward = 0.3
+            gait_reward = w.gait_single
         elif r_contact and l_contact:
             # Both feet on ground → standing/double support (ok but less)
-            gait_reward = 0.1
+            gait_reward = w.gait_double
         else:
             # Both feet in air → airborne/falling
             gait_reward = 0.0
 
+        # ── Feet air time (palier 1, proposal 3) ────────────────
+        # Paid once, when a foot lands: (time in the air − target).  Short
+        # shuffling steps score negative, unlike gait_reward which pays at
+        # every 10 ms step whatever the cadence.
+        touchdown = in_contact & ~self._was_in_contact
+        landed_air_time = np.minimum(self._air_time, w.air_time_max)
+        air_time_reward = w.air_time_weight * float(
+            np.sum((landed_air_time - w.air_time_target) * touchdown)
+        )
+        self._air_time = np.where(in_contact, 0.0, self._air_time + dt)
+        self._was_in_contact = in_contact
+
         # ── Lateral velocity penalty ────────────────────────────
         # Sideways relative to the robot, not to the world.
         lateral_vel = float(velocity @ left_dir)
-        lateral_cost = 0.5 * abs(lateral_vel)
+        lateral_cost = w.lateral_weight * abs(lateral_vel)
 
         # ── Control cost ────────────────────────────────────────
-        ctrl_cost = self._ctrl_cost_weight * np.sum(np.square(action))
+        ctrl_cost = w.ctrl_weight * np.sum(np.square(action))
 
         # ── Action rate penalty (smoothness) ────────────────────
         # Penalise large changes between consecutive actions to
         # prevent jerky movements and huge step-to-step changes.
         if self._prev_action is not None:
-            action_rate_cost = self._action_rate_cost_weight * np.sum(
+            action_rate_cost = w.action_rate_weight * np.sum(
                 np.square(action - self._prev_action)
             )
         else:
@@ -487,14 +605,37 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # ── Joint velocity penalty ──────────────────────────────
         # Penalise fast joint movements (prevents wild swinging)
         joint_vel = self.data.qvel[6:]  # skip root 6-dof
-        joint_vel_cost = self._joint_vel_cost_weight * np.sum(
-            np.square(joint_vel)
-        )
+        joint_vel_cost = w.joint_vel_weight * np.sum(np.square(joint_vel))
+
+        # ── Yaw rate penalty (palier 1, proposal 1) ─────────────
+        # Optionally low-pass filtered: the pelvis twists back and forth at
+        # every step, and penalising that oscillation would fight walking
+        # itself.  The filter keeps the slow, steady turn.
+        yaw_rate = self._get_yaw_rate()
+        if w.yaw_rate_tau > 0.0:
+            alpha = dt / (w.yaw_rate_tau + dt)
+            self._yaw_rate_filtered += alpha * (yaw_rate - self._yaw_rate_filtered)
+        else:
+            self._yaw_rate_filtered = yaw_rate
+        yaw_rate_cost = w.yaw_rate_weight * self._yaw_rate_filtered ** 2
+
+        # ── Joint limit penalty (palier 1, proposal 4) ──────────
+        q = self.data.qpos[7:]
+        joint_limit_cost = w.joint_limit_weight * float(np.sum(
+            np.clip(self._soft_low - q, 0.0, None)
+            + np.clip(q - self._soft_high, 0.0, None)
+        ))
+
+        # ── Torso uprightness (palier 1, proposal 4) ────────────
+        torso_uprightness = self._get_torso_uprightness()
+        torso_upright_reward = w.torso_upright_weight * torso_uprightness
 
         reward = (forward_reward + healthy_reward + upright_reward
                   + gait_reward
                   - lateral_cost - ctrl_cost
-                  - action_rate_cost - joint_vel_cost)
+                  - action_rate_cost - joint_vel_cost
+                  + air_time_reward + torso_upright_reward
+                  - yaw_rate_cost - joint_limit_cost)
 
         observation = self._get_obs()
         terminated = self.terminated
@@ -508,6 +649,17 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             "ctrl_cost": ctrl_cost,
             "action_rate_cost": action_rate_cost,
             "joint_vel_cost": joint_vel_cost,
+            "air_time_reward": air_time_reward,
+            "yaw_rate_cost": yaw_rate_cost,
+            "joint_limit_cost": joint_limit_cost,
+            "torso_upright_reward": torso_upright_reward,
+            # Gait measurements, read by scripts/evaluate.py
+            "torso_uprightness": torso_uprightness,
+            "yaw_rate": yaw_rate,
+            "heading": float(np.arctan2(forward_dir[1], forward_dir[0])),
+            "r_contact": float(r_contact),
+            "l_contact": float(l_contact),
+            "touchdowns": float(np.sum(touchdown)),
             "x_position": xy_after[0],
             "y_position": xy_after[1],
         }
@@ -535,11 +687,19 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             angle = self.np_random.uniform(-np.pi, np.pi)
             fx = force_mag * np.cos(angle)
             fy = force_mag * np.sin(angle)
-            self.data.xfrc_applied[1, 3] = fx
-            self.data.xfrc_applied[1, 4] = fy
+            if self._push_as_force:
+                self.data.xfrc_applied[1, 0] = fx
+                self.data.xfrc_applied[1, 1] = fy
+            else:
+                # Historical behaviour: indices 3:6 are a torque, not a force.
+                self.data.xfrc_applied[1, 3] = fx
+                self.data.xfrc_applied[1, 4] = fy
         else:
             # Clear any previous push
-            self.data.xfrc_applied[1, 3:5] = 0.0
+            if self._push_as_force:
+                self.data.xfrc_applied[1, 0:3] = 0.0
+            else:
+                self.data.xfrc_applied[1, 3:5] = 0.0
 
     def _randomize_masses(self) -> None:
         """Scale each body mass by ±15% to prevent overfitting to exact dynamics."""
@@ -578,6 +738,11 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # Reset action smoothness tracking
         self._prev_action = None
 
+        # Reset palier-1 reward state: standing on both feet, not turning
+        self._yaw_rate_filtered = 0.0
+        self._air_time = np.zeros(2)
+        self._was_in_contact = np.ones(2, dtype=bool)
+
         return self._get_obs()
 
     def _randomize_floor(self) -> None:
@@ -596,15 +761,23 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         restitution = self.np_random.uniform(
             self._restitution_range[0], self._restitution_range[1]
         )
-        self.model.geom_solimp[floor_id, 4] = restitution
+        if self._restitution_in_solref:
+            self.model.geom_solref[floor_id, 1] = _restitution_to_dampratio(restitution)
+        else:
+            # Historical behaviour, kept for older configs: index 4 of
+            # solimp is the "power" of the impedance curve, not a bounce.
+            self.model.geom_solimp[floor_id, 4] = restitution
 
     def get_floor_randomization_info(self) -> Dict[str, float]:
         """Return current floor friction and restitution (for logging)."""
         floor_id = self.model.geom(name=_FLOOR_GEOM_NAME).id
-        return {
+        info = {
             "floor_slide_friction": float(self.model.geom_friction[floor_id, 0]),
             "floor_restitution": float(self.model.geom_solimp[floor_id, 4]),
         }
+        if self._restitution_in_solref:
+            info["floor_dampratio"] = float(self.model.geom_solref[floor_id, 1])
+        return info
 
 
 def set_camera(env: PoppyHumanoidEnv, name: str) -> None:

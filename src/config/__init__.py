@@ -4,18 +4,22 @@ from src.config.loaders import (
     as_evaluation_config,
     load_yaml,
     make_poppy_env_config,
+    make_reward_config,
 )
 from src.config.settings import (
     DomainRandomizationConfig,
     EnvironmentConfig,
     PoppyEnvironmentConfig,
+    RewardConfig,
 )
 
 __all__ = [
     "DomainRandomizationConfig",
     "EnvironmentConfig",
     "PoppyEnvironmentConfig",
+    "RewardConfig",
     "as_evaluation_config",
     "load_yaml",
     "make_poppy_env_config",
+    "make_reward_config",
 ]

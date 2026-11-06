@@ -7,9 +7,11 @@ Usage:
     python scripts/train_poppy.py --config configs/poppy_robust.yaml
     python scripts/train_poppy.py --config configs/poppy_robust.yaml --timesteps 5000000
     python scripts/train_poppy.py --config configs/poppy_robust.yaml --no-floor-noise
+    python scripts/train_poppy.py --config configs/palier1.yaml         --init-from models/2026-09-19_recompense-corrigee/best_model.zip
 """
 import argparse
 import os
+import pickle
 import sys
 import time
 from datetime import datetime
@@ -21,6 +23,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import torch.nn as nn
+import yaml
 from stable_baselines3 import A2C, PPO, SAC, TD3
 from stable_baselines3.common.callbacks import (
     CallbackList,
@@ -119,6 +122,15 @@ Examples:
         default=None,
         help="Override log directory from YAML",
     )
+    parser.add_argument(
+        "--init-from",
+        type=Path,
+        default=None,
+        help="Repart des poids d'un modèle existant (.zip) au lieu de zéro. "
+             "Ses statistiques de normalisation des observations sont reprises "
+             "aussi ; celles des récompenses repartent de zéro, la récompense "
+             "ayant pu changer.",
+    )
     return parser.parse_args()
 
 
@@ -182,13 +194,90 @@ def make_policy_kwargs(cfg: dict, algo_name: str) -> dict:
     return kwargs
 
 
+def linear_schedule(initial: float):
+    """Taux qui décroît linéairement de ``initial`` à 0 sur l'entraînement.
+
+    Stable-Baselines3 appelle le schéma avec la part restante de
+    l'entraînement : 1 au premier pas, 0 au dernier.
+    """
+    def schedule(progress_remaining: float) -> float:
+        return progress_remaining * initial
+    return schedule
+
+
 def make_algo_kwargs(cfg: dict, algo_name: str) -> dict:
     key = algo_name.lower()
-    algo_cfg = cfg.get(key, {})
+    algo_cfg = dict(cfg.get(key, {}))
+    # « linear » : learning_rate est la valeur de départ, qui décroît jusqu'à 0.
+    schedule = algo_cfg.pop("learning_rate_schedule", "constant")
     # Convert learning_rate from string like "1.0e-4" → float
     if "learning_rate" in algo_cfg:
         algo_cfg["learning_rate"] = float(algo_cfg["learning_rate"])
+        if schedule == "linear":
+            algo_cfg["learning_rate"] = linear_schedule(algo_cfg["learning_rate"])
+        elif schedule != "constant":
+            raise ValueError(
+                f"learning_rate_schedule inconnu : {schedule!r} (constant | linear)"
+            )
     return algo_cfg
+
+
+def find_vec_normalize(model_path: Path) -> Path:
+    """Retrouve le ``vec_normalize.pkl`` rangé à côté d'un modèle."""
+    for name in ("vec_normalize.pkl", "vec_normalize_final.pkl"):
+        candidate = model_path.parent / name
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"Pas de statistiques de normalisation à côté de {model_path}. Sans "
+        f"elles, la politique reprise verrait des observations mal centrées."
+    )
+
+
+def load_pretrained(
+    algo_class,
+    model_path: Path,
+    train_env: VecNormalize,
+    algo_kwargs: dict,
+    **kwargs,
+):
+    """Charge un modèle existant pour continuer à l'entraîner.
+
+    Les hyperparamètres du YAML remplacent ceux enregistrés dans le modèle.
+    Les espaces enregistrés sont remplacés par ceux de l'environnement : la
+    forme est vérifiée à la main, seules les bornes de l'action peuvent
+    différer (espace d'action normalisé ou non, docs/TECHNIQUE.md §8).
+
+    Les statistiques d'observation du modèle sont recopiées dans
+    ``train_env`` : la politique a appris sur des observations centrées sur
+    cette moyenne-là.
+    """
+    with open(find_vec_normalize(model_path), "rb") as handle:
+        previous = pickle.load(handle)
+    if previous.obs_rms.mean.shape != train_env.observation_space.shape:
+        raise ValueError(
+            f"Observation de {previous.obs_rms.mean.shape} dimensions dans "
+            f"{model_path}, {train_env.observation_space.shape} ici."
+        )
+    train_env.obs_rms = previous.obs_rms
+
+    custom_objects = {
+        "observation_space": train_env.observation_space,
+        "action_space": train_env.action_space,
+        # Les schémas enregistrés sont des fonctions sérialisées, fragiles
+        # d'une version de Python à l'autre ; ils sont reconstruits depuis
+        # les kwargs de toute façon.
+        "lr_schedule": lambda _: 0.0,
+        "learning_rate": algo_kwargs.get("learning_rate", 3e-4),
+        "clip_range": algo_kwargs.get("clip_range", 0.2),
+    }
+    return algo_class.load(
+        str(model_path),
+        env=train_env,
+        custom_objects=custom_objects,
+        **algo_kwargs,
+        **kwargs,
+    )
 
 
 def main() -> int:
@@ -213,6 +302,16 @@ def main() -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     figs_dir.mkdir(parents=True, exist_ok=True)
 
+    # La configuration effective (YAML + options de la ligne de commande) est
+    # gardée à côté du modèle : sans elle, impossible de savoir plus tard avec
+    # quelle récompense il a été entraîné.
+    with open(log_dir / "config.yaml", "w", encoding="utf-8") as handle:
+        yaml.safe_dump(
+            {**cfg, "_source": str(config_path),
+             "_init_from": str(args.init_from) if args.init_from else None},
+            handle, allow_unicode=True, sort_keys=False,
+        )
+
     dr_enabled = cfg.get("domain_randomization", {}).get("enabled", True)
 
     print("\n" + "=" * 70)
@@ -223,6 +322,7 @@ def main() -> int:
     print(f"  Seed            : {seed}")
     print(f"  Config          : {config_path}")
     print(f"  Log dir         : {log_dir}")
+    print(f"  Init from       : {args.init_from or 'zéro'}")
     print(f"  Floor noise     : {'ON' if dr_enabled else 'OFF'}")
     if dr_enabled:
         dr = cfg.get("domain_randomization", {})
@@ -280,16 +380,32 @@ def main() -> int:
     policy_kwargs = make_policy_kwargs(cfg, algo_name)
     algo_kwargs  = make_algo_kwargs(cfg, algo_name)
 
-    model = AlgoClass(
-        "MlpPolicy",
-        train_env,
-        seed=seed,
-        verbose=1,
-        tensorboard_log=str(log_dir),
-        policy_kwargs=policy_kwargs,
-        device=device,
-        **algo_kwargs,
-    )
+    if args.init_from is not None:
+        if use_baseline:
+            raise SystemExit("--init-from ne s'applique pas à --baseline.")
+        # policy_kwargs n'est pas transmis : l'architecture est celle du
+        # modèle repris, pas celle du YAML.
+        model = load_pretrained(
+            AlgoClass,
+            args.init_from,
+            train_env,
+            algo_kwargs,
+            seed=seed,
+            verbose=1,
+            tensorboard_log=str(log_dir),
+            device=device,
+        )
+    else:
+        model = AlgoClass(
+            "MlpPolicy",
+            train_env,
+            seed=seed,
+            verbose=1,
+            tensorboard_log=str(log_dir),
+            policy_kwargs=policy_kwargs,
+            device=device,
+            **algo_kwargs,
+        )
 
     # ── Callbacks ───────────────────────────────────────────────────────
     checkpoint_cb = CheckpointCallback(

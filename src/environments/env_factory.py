@@ -122,6 +122,10 @@ def make_poppy_env(
                 healthy_z_range=config.healthy_z_range,
                 terminate_when_unhealthy=config.terminate_when_unhealthy,
                 frame_skip=config.frame_skip,
+                reward=config.reward,
+                normalize_action_space=config.normalize_action_space,
+                restitution_in_solref=dr.restitution_in_solref,
+                push_as_force=dr.push_as_force,
             )
             env = TimeLimit(env, max_episode_steps=_MAX_EPISODE_STEPS)
             env = Monitor(env)
