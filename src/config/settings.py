@@ -38,6 +38,61 @@ class DomainRandomizationConfig:
 
 
 @dataclass(frozen=True)
+class TerrainConfig:
+    """Sol à relief aléatoire (palier 2), régénéré à chaque ``reset()``.
+
+    Désactivé, le modèle MuJoCo est exactement celui du MJCF. Activé, un champ
+    de hauteur (``hfield``) est ajouté par le code et le plan ``floor`` cesse
+    de toucher le robot. À ``difficulty = 0`` le relief est plat : c'est le
+    banc d'essai commun.
+
+    Attributes:
+        enabled: Ajoute le champ de hauteur au modèle.
+        difficulty: Intensité du relief, de 0 (plat) à 1 (toutes les
+            amplitudes ci-dessous au maximum). Le curriculum la fait monter.
+        size: Côté du terrain (m), centré sur le point de départ.
+        resolution: Taille d'une case (m).
+        slope_amplitude: Amplitude des ondulations longues (m) — pentes douces.
+        bump_height: Hauteur maximale des bosses et des creux (m).
+        step_height: Hauteur maximale des petites marches (m).
+        roughness: Rugosité case par case (m).
+        flat_radius: Rayon de la zone plate au départ (m).
+    """
+
+    enabled: bool = False
+    difficulty: float = 0.0
+    size: float = 20.0
+    resolution: float = 0.05
+    slope_amplitude: float = 0.05
+    bump_height: float = 0.04
+    step_height: float = 0.03
+    roughness: float = 0.005
+    flat_radius: float = 0.6
+
+
+@dataclass(frozen=True)
+class PushConfig:
+    """Poussées sur le bassin (palier 3), utilisées quand ``push_as_force``.
+
+    Sans ``push_as_force``, l'ancien comportement s'applique : un « coup » d'un
+    pas de 10 ms, de 1 à 5 unités, écrit comme un couple.
+
+    Attributes:
+        probability: Probabilité, à chaque pas sans poussée en cours, d'en
+            commencer une.
+        force_range: Bornes de l'intensité (N), avant ``scale``.
+        duration: Durée d'une poussée (s).
+        scale: Multiplicateur de l'intensité, de 0 à 1. Le curriculum le
+            fait monter.
+    """
+
+    probability: float = 0.02
+    force_range: tuple[float, float] = (1.0, 5.0)
+    duration: float = 0.01
+    scale: float = 1.0
+
+
+@dataclass(frozen=True)
 class RewardConfig:
     """Poids de la récompense, par pas de 10 ms.
 
@@ -131,6 +186,11 @@ class PoppyEnvironmentConfig:
     )
     reward: RewardConfig = field(default_factory=RewardConfig)
     normalize_action_space: bool = False
+    terrain: TerrainConfig = field(default_factory=TerrainConfig)
+    pushes: PushConfig = field(default_factory=PushConfig)
+    # Le genou gauche du MJCF plie à l'envers : voir PoppyHumanoidEnv.
+    # Faux par défaut, c'est un changement de physique.
+    fix_left_knee_axis: bool = False
 
 
 @dataclass(frozen=True)

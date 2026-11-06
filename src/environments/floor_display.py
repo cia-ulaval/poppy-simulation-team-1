@@ -1,6 +1,7 @@
 """Couleur du sol selon sa friction, pour voir la randomisation à l'écran.
 
-Partagé par ``scripts/viewer.py`` et ``scripts/visualize.py``. Ne touche qu'à
+Partagé par ``scripts/viewer.py``, ``scripts/visualize.py`` et les vidéos de
+``scripts/evaluate.py``. Ne touche qu'à
 ``geom_rgba`` : l'affichage change, la physique non.
 
 Volontairement hors de ``poppy_humanoid_env.py`` : l'environnement ne sait rien
@@ -9,6 +10,7 @@ de la façon dont on le regarde.
 
 from __future__ import annotations
 
+import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
@@ -18,6 +20,7 @@ SLIPPERY_RGBA = np.array([0.75, 0.88, 1.00, 1.0])  # bleu clair : glissant
 GRIPPY_RGBA = np.array([0.05, 0.15, 0.45, 1.0])    # bleu marine : adhérent
 
 _FLOOR_GEOM_NAME = "floor"
+_TERRAIN_GEOM_NAME = "terrain"
 
 
 def floor_color(friction: float, friction_range: tuple[float, float]) -> NDArray:
@@ -49,6 +52,10 @@ def color_floor(env: PoppyHumanoidEnv, friction_range: tuple[float, float]) -> f
         La friction du sol, pour l'afficher.
     """
     friction = env.get_floor_randomization_info()["floor_slide_friction"]
-    floor_id = env.model.geom(_FLOOR_GEOM_NAME).id
-    env.model.geom_rgba[floor_id] = floor_color(friction, friction_range)
+    color = floor_color(friction, friction_range)
+    # Le sol accidenté (palier 2) est un second geom, celui que l'on voit.
+    for name in (_FLOOR_GEOM_NAME, _TERRAIN_GEOM_NAME):
+        geom_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_GEOM, name)
+        if geom_id >= 0:
+            env.model.geom_rgba[geom_id] = color
     return friction

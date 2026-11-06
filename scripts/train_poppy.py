@@ -7,7 +7,10 @@ Usage:
     python scripts/train_poppy.py --config configs/poppy_robust.yaml
     python scripts/train_poppy.py --config configs/poppy_robust.yaml --timesteps 5000000
     python scripts/train_poppy.py --config configs/poppy_robust.yaml --no-floor-noise
-    python scripts/train_poppy.py --config configs/palier1.yaml         --init-from models/2026-09-19_recompense-corrigee/best_model.zip
+    python scripts/train_poppy.py --config configs/palier1.yaml --init-from <modele.zip>
+
+    # Reprendre un entraînement interrompu, au dernier checkpoint de son dossier
+    python scripts/train_poppy.py --resume logs/palier1/<date>
 """
 import argparse
 import os
@@ -39,6 +42,8 @@ from src.config import (
     make_poppy_env_config,
 )
 from src.environments.env_factory import make_baseline_env, make_poppy_env
+from src.training.curriculum import CurriculumCallback, CurriculumConfig
+from src.training.mirror_ppo import MirrorPPO
 
 _ALGO_MAP = {
     "PPO": PPO,
@@ -121,6 +126,16 @@ Examples:
         type=Path,
         default=None,
         help="Override log directory from YAML",
+    )
+    parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        help="Reprend un entraînement interrompu : le dossier de l'entraînement "
+             "(son dernier checkpoint est pris) ou un checkpoint précis (.zip). "
+             "La configuration est relue dans le config.yaml du dossier, le "
+             "compteur de pas, le taux d'apprentissage, le curriculum et le "
+             "meilleur score repartent où ils en étaient.",
     )
     parser.add_argument(
         "--init-from",
@@ -210,6 +225,8 @@ def make_algo_kwargs(cfg: dict, algo_name: str) -> dict:
     algo_cfg = dict(cfg.get(key, {}))
     # « linear » : learning_rate est la valeur de départ, qui décroît jusqu'à 0.
     schedule = algo_cfg.pop("learning_rate_schedule", "constant")
+    # Lu à part, par symmetry_weight() : ce n'est pas un argument de PPO.
+    algo_cfg.pop("symmetry_loss_weight", None)
     # Convert learning_rate from string like "1.0e-4" → float
     if "learning_rate" in algo_cfg:
         algo_cfg["learning_rate"] = float(algo_cfg["learning_rate"])
@@ -220,6 +237,47 @@ def make_algo_kwargs(cfg: dict, algo_name: str) -> dict:
                 f"learning_rate_schedule inconnu : {schedule!r} (constant | linear)"
             )
     return algo_cfg
+
+
+def symmetry_weight(cfg: dict, algo_name: str) -> float:
+    """Poids de la perte de symétrie miroir (``ppo.symmetry_loss_weight``)."""
+    weight = float(cfg.get(algo_name.lower(), {}).get("symmetry_loss_weight", 0.0))
+    if weight > 0.0 and algo_name != "PPO":
+        raise ValueError("symmetry_loss_weight n'existe que pour PPO.")
+    return weight
+
+
+def find_checkpoint(resume: Path) -> Path:
+    """Retrouve le checkpoint à reprendre.
+
+    Args:
+        resume: Un fichier ``.zip``, ou le dossier d'un entraînement : son
+            checkpoint au plus grand nombre de pas est alors choisi.
+
+    Returns:
+        Le chemin du ``.zip``.
+    """
+    if resume.suffix == ".zip":
+        if not resume.exists():
+            raise FileNotFoundError(f"Checkpoint introuvable : {resume}")
+        return resume
+    checkpoints = list(resume.glob("*_steps.zip"))
+    if not checkpoints:
+        raise FileNotFoundError(
+            f"Aucun checkpoint *_steps.zip dans {resume}. Un entraînement "
+            f"interrompu avant son premier checkpoint (training.checkpoint_freq) "
+            f"ne peut pas être repris."
+        )
+    return max(checkpoints, key=lambda path: int(path.stem.split("_")[-2]))
+
+
+def checkpoint_vec_normalize(checkpoint: Path) -> Path:
+    """Statistiques de normalisation enregistrées avec un checkpoint."""
+    prefix, steps, _ = checkpoint.stem.rsplit("_", 2)
+    candidate = checkpoint.with_name(f"{prefix}_vecnormalize_{steps}_steps.pkl")
+    if not candidate.exists():
+        raise FileNotFoundError(f"Normalisation du checkpoint introuvable : {candidate}")
+    return candidate
 
 
 def find_vec_normalize(model_path: Path) -> Path:
@@ -283,10 +341,23 @@ def load_pretrained(
 def main() -> int:
     args = parse_args()
 
-    # Load YAML
-    config_path = resolve_config_path(args)
-    cfg = load_yaml(config_path)
-    cfg = build_config(cfg, args)
+    checkpoint = None
+    if args.resume is not None:
+        if args.init_from is not None:
+            raise SystemExit("--resume et --init-from s'excluent.")
+        checkpoint = find_checkpoint(args.resume)
+        # La configuration est celle de l'entraînement interrompu, pas celle du
+        # YAML d'aujourd'hui, qui a pu changer depuis.
+        config_path = checkpoint.parent / "config.yaml"
+        cfg = load_yaml(config_path)
+        cfg.pop("_source", None)
+        cfg.pop("_init_from", None)
+        cfg = build_config(cfg, args)
+    else:
+        # Load YAML
+        config_path = resolve_config_path(args)
+        cfg = load_yaml(config_path)
+        cfg = build_config(cfg, args)
 
     algo_name  = cfg.get("algorithm", "PPO").upper()
     train_cfg  = cfg.get("training", {})
@@ -296,21 +367,25 @@ def main() -> int:
     eval_freq  = train_cfg.get("eval_freq", 10_000)
     n_eval_ep  = train_cfg.get("n_eval_episodes", 5)
 
-    timestamp  = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_dir    = Path(train_cfg.get("log_dir", "./logs/poppy")) / timestamp
+    if checkpoint is not None:
+        log_dir = checkpoint.parent
+    else:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_dir = Path(train_cfg.get("log_dir", "./logs/poppy")) / timestamp
     figs_dir   = Path(cfg.get("figs_dir", "./figs/poppy"))
     log_dir.mkdir(parents=True, exist_ok=True)
     figs_dir.mkdir(parents=True, exist_ok=True)
 
     # La configuration effective (YAML + options de la ligne de commande) est
     # gardée à côté du modèle : sans elle, impossible de savoir plus tard avec
-    # quelle récompense il a été entraîné.
-    with open(log_dir / "config.yaml", "w", encoding="utf-8") as handle:
-        yaml.safe_dump(
-            {**cfg, "_source": str(config_path),
-             "_init_from": str(args.init_from) if args.init_from else None},
-            handle, allow_unicode=True, sort_keys=False,
-        )
+    # quelle récompense il a été entraîné. Une reprise ne la réécrit pas.
+    if checkpoint is None:
+        with open(log_dir / "config.yaml", "w", encoding="utf-8") as handle:
+            yaml.safe_dump(
+                {**cfg, "_source": str(config_path),
+                 "_init_from": str(args.init_from) if args.init_from else None},
+                handle, allow_unicode=True, sort_keys=False,
+            )
 
     dr_enabled = cfg.get("domain_randomization", {}).get("enabled", True)
 
@@ -323,6 +398,8 @@ def main() -> int:
     print(f"  Config          : {config_path}")
     print(f"  Log dir         : {log_dir}")
     print(f"  Init from       : {args.init_from or 'zéro'}")
+    if checkpoint is not None:
+        print(f"  Reprise de      : {checkpoint}")
     print(f"  Floor noise     : {'ON' if dr_enabled else 'OFF'}")
     if dr_enabled:
         dr = cfg.get("domain_randomization", {})
@@ -376,11 +453,25 @@ def main() -> int:
     print(f"  Device          : {device}"
           + (f" ({torch.cuda.get_device_name(0)})" if device == "cuda" else ""))
 
-    AlgoClass    = _ALGO_MAP[algo_name]
+    sym_weight   = symmetry_weight(cfg, algo_name)
+    AlgoClass    = MirrorPPO if sym_weight > 0.0 else _ALGO_MAP[algo_name]
     policy_kwargs = make_policy_kwargs(cfg, algo_name)
     algo_kwargs  = make_algo_kwargs(cfg, algo_name)
 
-    if args.init_from is not None:
+    if checkpoint is not None:
+        # Statistiques de normalisation du checkpoint, observations ET
+        # récompenses : c'est le même entraînement qui continue.
+        train_env = VecNormalize.load(str(checkpoint_vec_normalize(checkpoint)),
+                                      train_env.venv)
+        train_env.training = True
+        model = AlgoClass.load(
+            str(checkpoint),
+            env=train_env,
+            device=device,
+            tensorboard_log=str(log_dir),
+        )
+        print(f"  Pas déjà faits  : {model.num_timesteps:,}")
+    elif args.init_from is not None:
         if use_baseline:
             raise SystemExit("--init-from ne s'applique pas à --baseline.")
         # policy_kwargs n'est pas transmis : l'architecture est celle du
@@ -444,14 +535,46 @@ def main() -> int:
         n_eval_episodes=n_eval_ep,
         deterministic=True,
     )
-    callbacks = CallbackList([checkpoint_cb, eval_cb])
+    callback_list = [checkpoint_cb, eval_cb]
+
+    if checkpoint is not None:
+        # Sans cela, la première évaluation après la reprise deviendrait le
+        # « meilleur » modèle, même moins bonne que celles d'avant, et
+        # evaluations.npz perdrait son historique.
+        history = log_dir / "eval" / "evaluations.npz"
+        if history.exists():
+            import numpy as np
+            previous = np.load(history)
+            eval_cb.evaluations_timesteps = list(previous["timesteps"])
+            eval_cb.evaluations_results = [list(r) for r in previous["results"]]
+            eval_cb.evaluations_length = [list(r) for r in previous["ep_lengths"]]
+            if len(previous["results"]):
+                eval_cb.best_mean_reward = float(previous["results"].mean(axis=1).max())
+
+    if sym_weight > 0.0:
+        mirror = train_env.env_method("mirror_spec", indices=[0])[0]
+        model.set_mirror(mirror, sym_weight)
+        print(f"  Symétrie miroir : poids {sym_weight}")
+
+    curriculum = CurriculumConfig.from_yaml(cfg.get("curriculum"))
+    if curriculum is not None:
+        callback_list.append(CurriculumCallback(curriculum, total_ts))
+        print(f"  Curriculum      : {curriculum}")
+    callbacks = CallbackList(callback_list)
 
     # ── Train ───────────────────────────────────────────────────────────
+    # En reprise, learn() continue le compteur de pas : le taux
+    # d'apprentissage et le curriculum reprennent à leur avancement.
+    remaining = total_ts - (model.num_timesteps if checkpoint is not None else 0)
+    if remaining <= 0:
+        print("Rien à reprendre : cet entraînement était déjà terminé.")
+        return 0
     t0 = time.time()
     model.learn(
-        total_timesteps=total_ts,
+        total_timesteps=remaining,
         callback=callbacks,
         progress_bar=True,
+        reset_num_timesteps=checkpoint is None,
     )
     elapsed = time.time() - t0
 

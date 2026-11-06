@@ -126,6 +126,9 @@ def make_poppy_env(
                 normalize_action_space=config.normalize_action_space,
                 restitution_in_solref=dr.restitution_in_solref,
                 push_as_force=dr.push_as_force,
+                terrain=config.terrain,
+                pushes=config.pushes,
+                fix_left_knee_axis=config.fix_left_knee_axis,
             )
             env = TimeLimit(env, max_episode_steps=_MAX_EPISODE_STEPS)
             env = Monitor(env)
@@ -235,6 +238,7 @@ def make_eval_env(
     vec_normalize_path: Path | None = None,
     render_mode: str | None = None,
     camera: str = "suivi",
+    terrain_difficulty: float = 0.0,
 ) -> VecNormalize | DummyVecEnv:
     """Construit l'environnement d'évaluation d'un modèle Poppy.
 
@@ -251,12 +255,21 @@ def make_eval_env(
         render_mode: ``"human"`` pour une fenêtre, ``"rgb_array"`` pour des
             images, ``None`` pour aucun rendu.
         camera: Cadrage de départ, une clé de ``CAMERAS``. Ignoré sans rendu.
+        terrain_difficulty: Relief du sol accidenté (palier 2). 0, le banc
+            plat, par défaut. Exige ``terrain.enabled`` dans le YAML.
 
     Returns:
         L'environnement vectorisé, enveloppé de ``VecNormalize`` si des
         statistiques ont été fournies.
     """
-    eval_config = as_evaluation_config(config, floor_noise=floor_noise)
+    if terrain_difficulty > 0.0 and not config.terrain.enabled:
+        raise ValueError(
+            "Relief demandé, mais terrain.enabled est faux dans ce YAML : "
+            "le modèle MuJoCo n'a pas de champ de hauteur."
+        )
+    eval_config = as_evaluation_config(
+        config, floor_noise=floor_noise, terrain_difficulty=terrain_difficulty,
+    )
 
     # make_poppy_env renvoie déjà un VecNormalize ; on ne garde que
     # l'environnement de base pour y appliquer les statistiques enregistrées.

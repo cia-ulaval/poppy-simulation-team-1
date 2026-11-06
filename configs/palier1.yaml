@@ -8,10 +8,15 @@
 # Différences avec configs/poppy_robust.yaml, et seulement celles-ci :
 #   - section reward: (les poids étaient écrits en dur dans le code) ;
 #   - espace d'action normalisé à [-1, 1] (TECHNIQUE.md §8) ;
-#   - PPO : learning_rate, son schéma, ent_coef, n_epochs, clip_range ;
+#   - genou gauche corrigé (fix_left_knee_axis, voir plus bas) ;
+#   - PPO : learning_rate, son schéma, ent_coef, n_epochs, clip_range, et la
+#     perte de symétrie miroir (proposition 2) ;
 #   - eval_freq espacé (l'évaluation coûtait la moitié du temps de calcul).
-# La physique (sol, poussées, masses) est inchangée : ses corrections
+# Le sol, les poussées et les masses sont inchangés : leurs corrections
 # appartiennent aux paliers 2 et 3.
+#
+# Historique : les deux essais du 6 novembre (logs/palier1/zero et reprise)
+# ont tourné SANS le genou corrigé ni le miroir ; leur config.yaml en fait foi.
 #
 # Usage :
 #   python scripts/train_poppy.py --config configs/palier1.yaml
@@ -41,6 +46,11 @@ environment:
   # Annonce [-1, 1], comme le contrat. Les anciens modèles ne se chargent plus
   # tels quels : --init-from force leur espace (même forme, bornes différentes).
   normalize_action_space: true
+  # Le genou gauche du MJCF plie à l'envers (même axe que le droit, butées
+  # opposées) : le modèle du 19 sept. marche genou gauche en hyperextension,
+  # jusqu'à +17,7°. Correction faite au chargement, assets/ n'est pas touché.
+  # C'est un changement de physique : décision d'équipe. Le miroir l'exige.
+  fix_left_knee_axis: true
 
 domain_randomization:
   enabled: true
@@ -95,6 +105,9 @@ ppo:
   gae_lambda: 0.95
   clip_range: 0.2               # 0.3
   ent_coef: 0.005               # 0.0
+  # Proposition 2, contre la boiterie : la politique doit répondre à la
+  # situation vue dans un miroir par l'action vue dans un miroir.
+  symmetry_loss_weight: 1.0     # 0
   vf_coef: 0.5
   max_grad_norm: 0.8
 

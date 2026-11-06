@@ -55,7 +55,8 @@ from gymnasium.envs.mujoco import MujocoEnv
 from gymnasium.utils import EzPickle
 from numpy.typing import NDArray
 
-from src.config.settings import RewardConfig
+from src.config.settings import PushConfig, RewardConfig, TerrainConfig
+from src.environments.terrain import TERRAIN_NAME, TerrainGrid, add_terrain
 
 _ASSETS_DIR = Path(__file__).parent.parent.parent / "assets" / "poppy_humanoid"
 _MODEL_PATH = _ASSETS_DIR / "poppy_humanoid.xml"
@@ -76,6 +77,7 @@ _FLOOR_GEOM_NAME = "floor"
 # side-stepping and charged genuine walking to the lateral penalty.
 _PELVIS_BODY_ID = 1
 _CHEST_BODY_NAME = "chest"
+_LEFT_KNEE = "l_knee_y"
 _LOCAL_FORWARD = np.array([0.0, -1.0, 0.0])
 _LOCAL_LEFT = np.array([1.0, 0.0, 0.0])
 
@@ -264,7 +266,17 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
     push_as_force : bool
         Apply random pushes as a force (``xfrc_applied[:, 0:3]``) instead of
         a torque (``xfrc_applied[:, 3:6]``), which is what the code used to
-        write.
+        write.  The force follows ``pushes``.
+    terrain : TerrainConfig or None
+        Random rough terrain, regenerated at every reset (palier 2).
+    pushes : PushConfig or None
+        Intensity, duration and frequency of the pushes (palier 3).
+    fix_left_knee_axis : bool
+        Flip the left knee axis.  In the URDF, and so in the MJCF, both
+        knees turn about the same world axis while their ranges are
+        opposite: the right knee flexes, the left one can only hyperextend
+        (it bends backwards, up to 134°, and flexes 3.5° at most).  Flipping
+        the axis keeps the URDF range, hence its angle convention.
     """
 
     metadata = {
@@ -291,6 +303,9 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         normalize_action_space: bool = False,
         restitution_in_solref: bool = False,
         push_as_force: bool = False,
+        terrain: Optional[TerrainConfig] = None,
+        pushes: Optional[PushConfig] = None,
+        fix_left_knee_axis: bool = False,
     ):
         EzPickle.__init__(
             self,
@@ -311,7 +326,18 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             normalize_action_space=normalize_action_space,
             restitution_in_solref=restitution_in_solref,
             push_as_force=push_as_force,
+            terrain=terrain,
+            pushes=pushes,
+            fix_left_knee_axis=fix_left_knee_axis,
         )
+        self._fix_left_knee_axis = fix_left_knee_axis
+
+        # Read by _initialize_simulation, which MujocoEnv.__init__ calls.
+        self._terrain_config = terrain or TerrainConfig()
+        self._push_config = pushes or PushConfig()
+        self._push_scale = self._push_config.scale
+        self._push_steps_left = 0
+        self._push_force = np.zeros(2)
 
         if reward is None:
             reward = RewardConfig(
@@ -423,8 +449,71 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
     @property
     def is_healthy(self) -> bool:
-        z = self.data.qpos[2]
+        # Above the ground under the pelvis: on rough terrain, the absolute
+        # height also moves with the bumps.  Flat ground is at z = 0.
+        z = self.data.qpos[2] - self._ground_height()
         return float(self._healthy_z_range[0]) < z < float(self._healthy_z_range[1])
+
+    def _ground_height(self) -> float:
+        """Height of the ground under the pelvis (0 without terrain)."""
+        if self._terrain is None:
+            return 0.0
+        return self._terrain.height_at(self.data.qpos[0], self.data.qpos[1])
+
+    def _initialize_simulation(self) -> Tuple[mujoco.MjModel, mujoco.MjData]:
+        """Build the MuJoCo model, with the rough terrain when it is enabled.
+
+        Without terrain this is exactly Gymnasium's implementation: the MJCF
+        is loaded as is.
+        """
+        self._terrain: Optional[TerrainGrid] = None
+        self._terrain_dirty = False
+        if not self._terrain_config.enabled and not self._fix_left_knee_axis:
+            return super()._initialize_simulation()
+        spec = mujoco.MjSpec.from_file(self.fullpath)
+        if self._fix_left_knee_axis:
+            knee = spec.joint(_LEFT_KNEE)
+            knee.axis = -np.asarray(knee.axis)
+        if self._terrain_config.enabled:
+            self._terrain = add_terrain(spec, self._terrain_config)
+        model = spec.compile()
+        if self._terrain is not None:
+            self._terrain.bind(model)
+        model.vis.global_.offwidth = self.width
+        model.vis.global_.offheight = self.height
+        return model, mujoco.MjData(model)
+
+    def set_curriculum(
+        self,
+        terrain_difficulty: Optional[float] = None,
+        push_scale: Optional[float] = None,
+    ) -> None:
+        """Change the difficulty, taken into account at the next reset.
+
+        Called by the training curriculum through ``VecEnv.env_method``.
+        """
+        if terrain_difficulty is not None and self._terrain is not None:
+            self._terrain.difficulty = float(terrain_difficulty)
+        if push_scale is not None:
+            self._push_scale = float(push_scale)
+
+    def mirror_spec(self):
+        """Left-right mirror tables of this model, for the symmetry loss."""
+        from src.environments.mirror import build_mirror_spec
+        return build_mirror_spec(self)
+
+    def render(self):
+        # A regenerated terrain must be re-sent to the GPU, otherwise the
+        # video shows the first terrain while the robot walks on another.
+        if self._terrain is not None and self._terrain_dirty:
+            try:
+                viewer = self.mujoco_renderer._get_viewer(self.render_mode)
+                viewer.make_context_current()
+                mujoco.mjr_uploadHField(self.model, viewer.con, self._terrain.hfield_id)
+                self._terrain_dirty = False
+            except Exception:  # noqa: BLE001 - the render must not stop an episode
+                pass
+        return super().render()
 
     @property
     def terminated(self) -> bool:
@@ -526,6 +615,11 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # Random external push (domain randomization)
         if self._floor_noise:
             self._maybe_apply_push()
+        elif self._push_steps_left > 0:
+            # A push started by apply_push(), without random pushes.
+            self._push_steps_left -= 1
+            if self._push_steps_left == 0:
+                self.data.xfrc_applied[_PELVIS_BODY_ID, 0:3] = 0.0
 
         # PD position control: action [-1,1] → target pos → torque
         torque = self._action_to_torque(action)
@@ -681,25 +775,44 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         This forces the policy to learn active balance recovery instead of
         relying on a single leaned posture.  Pushes happen ~2% of steps.
         """
+        if self._push_as_force:
+            self._apply_force_push()
+            return
         if self.np_random.random() < 0.02:
             # Random horizontal force on pelvis (body index 1)
             force_mag = self.np_random.uniform(1.0, 5.0)  # Newtons
             angle = self.np_random.uniform(-np.pi, np.pi)
             fx = force_mag * np.cos(angle)
             fy = force_mag * np.sin(angle)
-            if self._push_as_force:
-                self.data.xfrc_applied[1, 0] = fx
-                self.data.xfrc_applied[1, 1] = fy
-            else:
-                # Historical behaviour: indices 3:6 are a torque, not a force.
-                self.data.xfrc_applied[1, 3] = fx
-                self.data.xfrc_applied[1, 4] = fy
+            # Historical behaviour: indices 3:6 are a torque, not a force.
+            self.data.xfrc_applied[1, 3] = fx
+            self.data.xfrc_applied[1, 4] = fy
         else:
             # Clear any previous push
-            if self._push_as_force:
-                self.data.xfrc_applied[1, 0:3] = 0.0
-            else:
-                self.data.xfrc_applied[1, 3:5] = 0.0
+            self.data.xfrc_applied[1, 3:5] = 0.0
+
+    def _apply_force_push(self) -> None:
+        """Push the pelvis with a horizontal force lasting ``pushes.duration``."""
+        cfg = self._push_config
+        if self._push_steps_left == 0 and self.np_random.random() < cfg.probability:
+            magnitude = self._push_scale * self.np_random.uniform(*cfg.force_range)
+            angle = self.np_random.uniform(-np.pi, np.pi)
+            self._push_force = magnitude * np.array([np.cos(angle), np.sin(angle)])
+            self._push_steps_left = max(1, int(round(cfg.duration / self.dt)))
+        if self._push_steps_left > 0:
+            self.data.xfrc_applied[_PELVIS_BODY_ID, 0:2] = self._push_force
+            self._push_steps_left -= 1
+        else:
+            self.data.xfrc_applied[_PELVIS_BODY_ID, 0:3] = 0.0
+
+    def apply_push(self, force_xy: NDArray, duration: float) -> None:
+        """Start a given push now, whatever the random pushes do.
+
+        Used by the push test of ``scripts/evaluate.py``.
+        """
+        self._push_force = np.asarray(force_xy, dtype=np.float64)
+        self._push_steps_left = max(1, int(round(duration / self.dt)))
+        self.data.xfrc_applied[_PELVIS_BODY_ID, 0:2] = self._push_force
 
     def _randomize_masses(self) -> None:
         """Scale each body mass by ±15% to prevent overfitting to exact dynamics."""
@@ -708,6 +821,9 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             self.model.body_mass[i] = self._init_body_mass[i] * scale
 
     def reset_model(self) -> NDArray:
+        if self._terrain is not None:
+            self._terrain.regenerate(self.model, self.np_random)
+            self._terrain_dirty = True
         qpos = self.init_qpos + self.np_random.uniform(
             low=-0.01, high=0.01, size=self.model.nq
         )
@@ -734,6 +850,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
         # Clear any leftover push forces
         self.data.xfrc_applied[:] = 0.0
+        self._push_steps_left = 0
 
         # Reset action smoothness tracking
         self._prev_action = None
@@ -749,24 +866,28 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         """
         Re-sample floor friction and restitution at every episode reset.
         """
-        floor_id = self.model.geom(name=_FLOOR_GEOM_NAME).id
+        floor_ids = [self.model.geom(name=_FLOOR_GEOM_NAME).id]
+        if self._terrain is not None:
+            floor_ids.append(self.model.geom(name=TERRAIN_NAME).id)
 
         slide_friction = self.np_random.uniform(
             self._friction_range[0], self._friction_range[1]
         )
-        self.model.geom_friction[floor_id, 0] = slide_friction
-        self.model.geom_friction[floor_id, 1] = 0.005 * slide_friction
-        self.model.geom_friction[floor_id, 2] = 0.0001 * slide_friction
-
         restitution = self.np_random.uniform(
             self._restitution_range[0], self._restitution_range[1]
         )
-        if self._restitution_in_solref:
-            self.model.geom_solref[floor_id, 1] = _restitution_to_dampratio(restitution)
-        else:
-            # Historical behaviour, kept for older configs: index 4 of
-            # solimp is the "power" of the impedance curve, not a bounce.
-            self.model.geom_solimp[floor_id, 4] = restitution
+        for floor_id in floor_ids:
+            self.model.geom_friction[floor_id, 0] = slide_friction
+            self.model.geom_friction[floor_id, 1] = 0.005 * slide_friction
+            self.model.geom_friction[floor_id, 2] = 0.0001 * slide_friction
+            if self._restitution_in_solref:
+                self.model.geom_solref[floor_id, 1] = (
+                    _restitution_to_dampratio(restitution)
+                )
+            else:
+                # Historical behaviour, kept for older configs: index 4 of
+                # solimp is the "power" of the impedance curve, not a bounce.
+                self.model.geom_solimp[floor_id, 4] = restitution
 
     def get_floor_randomization_info(self) -> Dict[str, float]:
         """Return current floor friction and restitution (for logging)."""

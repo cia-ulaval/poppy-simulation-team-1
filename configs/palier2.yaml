@@ -1,0 +1,131 @@
+# ============================================================
+# Poppy Humanoid — Palier 2 : sol accidenté
+#
+# EXPÉRIMENTAL — branche exp/palier1-recompense. Spec :
+# spec/recompense-et-paliers.md, « Palier 2 ».
+#
+# Repart du meilleur modèle du palier 1 (même observation, même action, même
+# récompense) ; seule la difficulté change :
+#   - terrain: un champ de hauteur régénéré à chaque reset() — bosses, creux,
+#     petites marches, pentes douces — ajouté par le code, sans toucher au MJCF ;
+#   - curriculum: le relief monte de 10 % à 100 % sur les 70 premiers % ;
+#   - le rebond du sol est enfin écrit dans solref (défaut de TECHNIQUE.md §8).
+# L'évaluation pendant l'entraînement reste sur sol plat : c'est le banc commun.
+#
+# Usage :
+#   python scripts/train_poppy.py --config configs/palier2.yaml --init-from logs/palier1/<date>/best_model/best_model.zip
+# Test du palier :
+#   python scripts/evaluate.py --model <modele> --config configs/palier2.yaml --terrain 1.0
+# ============================================================
+
+algorithm: PPO
+
+training:
+  total_timesteps: 5_000_000
+  seed: 42
+  checkpoint_freq: 500_000
+  eval_freq: 50_000
+  n_eval_episodes: 5
+  log_dir: ./logs/palier2
+
+environment:
+  n_envs: 12
+  frame_skip: 5
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.25, 0.70]
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  # Annonce [-1, 1], comme le contrat. Les anciens modèles ne se chargent plus
+  # tels quels : --init-from force leur espace (même forme, bornes différentes).
+  normalize_action_space: true
+  # Le genou gauche du MJCF plie à l'envers (même axe que le droit, butées
+  # opposées) : le modèle du 19 sept. marche genou gauche en hyperextension,
+  # jusqu'à +17,7°. Correction faite au chargement, assets/ n'est pas touché.
+  # C'est un changement de physique : décision d'équipe. Le miroir l'exige.
+  fix_left_knee_axis: true
+
+domain_randomization:
+  enabled: true
+  friction_range: [0.4, 2.0]
+  restitution_range: [0.0, 0.5]
+  # Palier 2 : le rebond est aujourd'hui écrit à un indice sans effet.
+  restitution_in_solref: true
+  # Palier 3 : les poussées sont aujourd'hui un couple, pas une force.
+  push_as_force: false
+
+# ── Récompense, par pas de 10 ms ─────────────────────────────
+# Valeurs d'origine en commentaire. Une clé mal orthographiée lève une erreur.
+reward:
+  # Lever le plafond de vitesse — le modèle du 19 sept. marche à 0,65 m/s.
+  forward_weight: 5.0
+  max_forward_vel: 0.8          # 0.5
+  # Réduire le socle : rester debout rapportait 42 % de la récompense.
+  healthy: 0.5                  # 1.0
+  upright_weight: 0.25          # 1.0  (bassin)
+  torso_upright_weight: 0.25    # 0    (poitrine, proposition 4)
+  # Proposition 3 : le temps de vol remplace le bonus d'appui payé à chaque
+  # pas de 10 ms, qui récompensait le piétinement (4,4 pas/s).
+  gait_single: 0.0              # 0.3
+  gait_double: 0.0              # 0.1
+  air_time_weight: 50.0         # 0
+  air_time_target: 0.25
+  air_time_max: 0.5
+  # Proposition 1 : arrêter de tourner (+50° en 10 s). Le bassin oscille de
+  # ±0,75 rad/s en lacet à chaque pas, pour un virage de fond de 0,09 rad/s :
+  # pénaliser la vitesse instantanée punirait surtout la marche elle-même.
+  # Filtrée sur 2 s, 72 % de la pénalité porte sur le virage de fond (mesuré
+  # sur le modèle du 19 sept.), qui paierait ~0,23 par pas, ~7 % de son avance.
+  yaw_rate_weight: 20.0         # 0
+  yaw_rate_tau: 2.0
+  # Proposition 4 : coudes en butée ~100 % du temps.
+  joint_limit_weight: 2.0       # 0
+  joint_limit_soft: 0.95
+  # Inchangés.
+  lateral_weight: 0.5
+  ctrl_weight: 0.1
+  action_rate_weight: 0.05
+  joint_vel_weight: 0.005
+
+# ── PPO ───────────────────────────────────────────────────────
+ppo:
+  learning_rate: 1.0e-4         # reprise : plus prudent qu'au palier 1
+  learning_rate_schedule: linear  # constant
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 5                   # 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2               # 0.3
+  ent_coef: 0.005               # 0.0
+  # Proposition 2, contre la boiterie : la politique doit répondre à la
+  # situation vue dans un miroir par l'action vue dans un miroir.
+  symmetry_loss_weight: 1.0     # 0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2
+  ortho_init: false
+
+figs_dir: ./figs/palier2
+
+# ── Sol accidenté (palier 2) ─────────────────────────────────
+# Amplitudes à difficulté 1 ; le curriculum part de 0,1.
+terrain:
+  enabled: true
+  difficulty: 0.1
+  size: 20.0
+  resolution: 0.05
+  slope_amplitude: 0.05
+  bump_height: 0.04
+  step_height: 0.03
+  roughness: 0.005
+  flat_radius: 0.6
+
+curriculum:
+  terrain_difficulty: [0.1, 1.0]
+  ramp_fraction: 0.7

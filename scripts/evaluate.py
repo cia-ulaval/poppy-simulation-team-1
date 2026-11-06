@@ -14,6 +14,8 @@ Exemples
     python scripts/evaluate.py --model <modele> --episodes 20 --floor-noise
     python scripts/evaluate.py --model <modele> --video sortie.mp4
     python scripts/evaluate.py --random --episodes 10
+    python scripts/evaluate.py --model <modele> --config configs/palier2.yaml --terrain 1.0
+    python scripts/evaluate.py --model <modele> --push 10
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from stable_baselines3 import A2C, PPO, SAC, TD3
 
 from src.config import load_yaml, make_poppy_env_config
 from src.environments.env_factory import make_eval_env, single_env
+from src.environments.floor_display import color_floor
 from src.environments.poppy_humanoid_env import CAMERAS
 
 # Ordre d'essai pour retrouver l'algorithme d'un fichier .zip. Stable-Baselines3
@@ -115,6 +118,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Réactive la randomisation du sol : mesure la robustesse, pas la "
              "performance nominale. Les résultats cessent d'être reproductibles.",
+    )
+    parser.add_argument(
+        "--terrain",
+        type=float,
+        default=0.0,
+        metavar="DIFFICULTE",
+        help="Test du palier 2 : relief du sol, de 0 (plat, défaut) à 1. "
+             "Exige un YAML où terrain.enabled est vrai.",
+    )
+    parser.add_argument(
+        "--push",
+        type=float,
+        default=None,
+        metavar="NEWTONS",
+        help="Test du palier 3 : une poussée de cette force sur le bassin, à "
+             "3 s de chaque épisode, pendant --push-duration, dans une "
+             "direction au hasard. « Sans chute » devient le taux de "
+             "poussées encaissées.",
+    )
+    parser.add_argument(
+        "--push-duration",
+        type=float,
+        default=0.1,
+        help="Durée de la poussée de --push, en secondes (défaut: 0.1)",
     )
     parser.add_argument(
         "--stochastic",
@@ -249,6 +276,8 @@ def run_episodes(
     n_episodes: int,
     deterministic: bool,
     video_path: Path | None,
+    push: tuple[float, float] | None = None,
+    seed: int = 0,
 ) -> list[dict[str, float]]:
     """Déroule des épisodes complets et collecte leurs métriques.
 
@@ -258,6 +287,9 @@ def run_episodes(
         n_episodes: Nombre d'épisodes à dérouler.
         deterministic: Prend l'action moyenne plutôt qu'un échantillon.
         video_path: Si fourni, enregistre le premier épisode.
+        push: ``(force en N, durée en s)`` d'une poussée appliquée à 3 s de
+            chaque épisode, ou ``None``.
+        seed: Graine des directions de poussée.
 
     Returns:
         Une entrée par épisode : récompense, durée, distances, vitesses et
@@ -272,8 +304,22 @@ def run_episodes(
 
     obs = env.reset()
     steps = 0
+    push_rng = np.random.default_rng(seed)
+    push_step = int(round(3.0 / dt))
+
+    # Même sol bleu que viewer.py et visualize.py : clair si glissant, marine
+    # si adhérent. Seule la couleur change, pas la physique.
+    def tint_floor() -> None:
+        if video_path is not None:
+            bare = single_env(env).unwrapped
+            color_floor(bare, bare._friction_range)
+    tint_floor()
 
     while len(episodes) < n_episodes:
+        if push is not None and steps == push_step:
+            angle = push_rng.uniform(-np.pi, np.pi)
+            force = push[0] * np.array([np.cos(angle), np.sin(angle)])
+            single_env(env).unwrapped.apply_push(force, push[1])
         action, _ = model.predict(obs, deterministic=deterministic)
         obs, rewards, dones, infos = env.step(action)
         steps += 1
@@ -291,6 +337,7 @@ def run_episodes(
             episodes.append(_summarise(current, steps, info, dt))
             current = defaultdict(list)
             steps = 0
+            tint_floor()
 
             if video_path is not None and frames:
                 _write_video(frames, video_path, single_env(env))
@@ -472,6 +519,7 @@ def main() -> int:
         vec_normalize_path=vec_normalize_path,
         render_mode="rgb_array" if args.video is not None else None,
         camera=args.camera,
+        terrain_difficulty=args.terrain,
     )
 
     model = (
@@ -487,6 +535,8 @@ def main() -> int:
             n_episodes=args.episodes,
             deterministic=not args.stochastic,
             video_path=args.video,
+            push=(args.push, args.push_duration) if args.push else None,
+            seed=args.seed,
         )
         report(episodes, label)
     finally:

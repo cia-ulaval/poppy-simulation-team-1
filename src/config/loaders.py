@@ -17,7 +17,9 @@ import yaml
 from src.config.settings import (
     DomainRandomizationConfig,
     PoppyEnvironmentConfig,
+    PushConfig,
     RewardConfig,
+    TerrainConfig,
 )
 
 
@@ -34,31 +36,47 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(handle) or {}
 
 
-def make_reward_config(section: dict | None) -> RewardConfig:
-    """Construit les poids de la récompense depuis la section ``reward:``.
+def _make_section(cls, section: dict | None, name: str):
+    """Construit une dataclass de réglages depuis une section du YAML.
 
     Une clé inconnue lève une erreur au lieu d'être ignorée : une faute de
     frappe dans un poids entraînerait sinon 10 M de pas avec la valeur par
     défaut, sans que rien ne le signale.
 
     Args:
-        section: Contenu de la section ``reward:``, ou ``None`` si absente.
+        cls: La dataclass à construire.
+        section: Contenu de la section, ou ``None`` si absente.
+        name: Nom de la section, pour le message d'erreur.
 
     Returns:
-        Les poids, ceux non précisés gardant leur valeur par défaut.
+        Les réglages, ceux non précisés gardant leur valeur par défaut.
 
     Raises:
         ValueError: Si la section contient une clé inconnue.
     """
     section = section or {}
-    known = {f.name for f in fields(RewardConfig)}
-    unknown = sorted(set(section) - known)
+    types = {f.name: f.type for f in fields(cls)}
+    unknown = sorted(set(section) - set(types))
     if unknown:
         raise ValueError(
-            f"Clés inconnues dans reward: {', '.join(unknown)}. "
-            f"Connues : {', '.join(sorted(known))}"
+            f"Clés inconnues dans {name}: {', '.join(unknown)}. "
+            f"Connues : {', '.join(sorted(types))}"
         )
-    return RewardConfig(**{key: float(value) for key, value in section.items()})
+    values = {}
+    for key, value in section.items():
+        kind = str(types[key])
+        if kind.startswith("tuple"):
+            values[key] = tuple(float(v) for v in value)
+        elif kind == "bool":
+            values[key] = bool(value)
+        else:
+            values[key] = float(value)
+    return cls(**values)
+
+
+def make_reward_config(section: dict | None) -> RewardConfig:
+    """Construit les poids de la récompense depuis la section ``reward:``."""
+    return _make_section(RewardConfig, section, "reward")
 
 
 def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
@@ -92,12 +110,16 @@ def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
         ),
         reward=make_reward_config(cfg.get("reward")),
         normalize_action_space=bool(env_cfg.get("normalize_action_space", False)),
+        terrain=_make_section(TerrainConfig, cfg.get("terrain"), "terrain"),
+        pushes=_make_section(PushConfig, cfg.get("pushes"), "pushes"),
+        fix_left_knee_axis=bool(env_cfg.get("fix_left_knee_axis", False)),
     )
 
 
 def as_evaluation_config(
     config: PoppyEnvironmentConfig,
     floor_noise: bool = False,
+    terrain_difficulty: float = 0.0,
 ) -> PoppyEnvironmentConfig:
     """Dérive une configuration d'évaluation depuis une configuration d'entraînement.
 
@@ -111,6 +133,8 @@ def as_evaluation_config(
         config: Configuration issue du YAML d'entraînement.
         floor_noise: Réactive la randomisation du sol, pour mesurer la
             robustesse plutôt que la performance nominale.
+        terrain_difficulty: Relief du sol accidenté, s'il est activé. 0 par
+            défaut : le banc d'essai commun est plat.
 
     Returns:
         La configuration d'évaluation correspondante.
@@ -120,4 +144,5 @@ def as_evaluation_config(
         n_envs=1,
         normalize_reward=False,
         domain_randomization=replace(config.domain_randomization, enabled=floor_noise),
+        terrain=replace(config.terrain, difficulty=terrain_difficulty),
     )

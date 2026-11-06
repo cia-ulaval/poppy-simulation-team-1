@@ -315,6 +315,37 @@ retoucher la récompense, pour ne réentraîner qu'une fois.
 
 ---
 
+## Essai du 6 novembre 2026 — ce qui est implémenté
+
+> Sur la branche `exp/palier1-recompense`, pour essayer. Rien n'est décidé : tout est
+> derrière des options, et `configs/poppy_robust.yaml` garde exactement l'ancienne
+> récompense (vérifié au bit près).
+
+| Point de la spec | Où |
+| --- | --- |
+| Poids de la récompense dans le YAML, copie de la config à côté du modèle | section `reward:`, `logs/…/config.yaml` |
+| Palier 1 : plafond 0,8 m/s, socle réduit, `ent_coef`, `learning_rate` décroissant | `configs/palier1.yaml` |
+| Proposition 1 : pénalité de lacet, filtrée sur 2 s | `reward.yaw_rate_weight`, `yaw_rate_tau` |
+| Proposition 2 : augmentation miroir (perte de symétrie) | `ppo.symmetry_loss_weight`, `src/training/mirror_ppo.py` |
+| Proposition 3 : temps de vol à la place du bonus d'appui | `reward.air_time_*` |
+| Proposition 4 : butées, verticalité de la poitrine | `reward.joint_limit_*`, `torso_upright_weight` |
+| Espace d'action normalisé | `environment.normalize_action_space` |
+| Palier 2 : sol à relief (`hfield`), curriculum, rebond dans `solref` | `configs/palier2.yaml`, `src/environments/terrain.py` |
+| Palier 3 : poussées en force, durée et intensité réalistes, curriculum | `configs/palier3.yaml` |
+| Banc d'essai : cap, appui G/D, cadence, tronc ; tests `--terrain` et `--push` | `scripts/evaluate.py` |
+| Repartir d'un modèle / reprendre un entraînement interrompu | `train_poppy.py --init-from` / `--resume` |
+
+**Découvert en route : le genou gauche du MJCF plie à l'envers** (voir
+`docs/TECHNIQUE.md` §8). Le miroir l'exige corrigé : `environment.fix_left_knee_axis`.
+
+**Pas fait :** la politique asymétrique acteur / critique (question 7, elle change
+l'observation) et les seuils de réussite des paliers 2 et 3 (question 4).
+
+**Premières mesures.** Le modèle du 19 septembre encaisse une poussée de 10 N pendant
+0,1 s dans 80 % des cas (10 épisodes, graine 1). Repartir de lui pour le palier 1
+échoue : son écart-type d'action vaut 0,025, et ses épisodes tombent de 1000 à 60
+pas en 350 000 pas d'entraînement, contre 112 pour un modèle parti de zéro.
+
 ## Questions pour l'équipe
 
 1. Plafond de vitesse plus haut, ou suivi d'une vitesse cible ?

@@ -283,6 +283,21 @@ plage configurée.
 deux actions consécutives, or l'action précédente ne fait pas partie des 63 dimensions
 de l'observation. La politique est punie pour une variable qu'elle ne peut pas voir.
 
+**Le genou gauche plie à l'envers.** Dans l'URDF, donc dans le MJCF, `l_knee_y` et
+`r_knee_y` tournent autour du même axe monde, mais leurs butées sont opposées
+(`[-0,06 ; 2,34]` contre `[-2,34 ; 0,06]`). Le genou droit fléchit ; le gauche ne peut
+fléchir que de 3,5° et s'hyperétend jusqu'à 134°. Le modèle du 19 septembre marche
+genou gauche à l'envers, jusqu'à +17,7° : c'est la cause probable de sa boiterie.
+Correction à la demande, au chargement, sans toucher `assets/` :
+`environment.fix_left_knee_axis` (branche `exp/palier1-recompense`). Elle retourne
+l'axe et garde les butées, donc la convention d'angle de l'URDF. Changement de
+physique : décision d'équipe.
+
+**Les poussées sont un couple, pas une force.** `_maybe_apply_push` écrit dans
+`xfrc_applied[1, 3:5]`, qui est un couple ; la force est dans `[1, 0:3]`. Correction à
+la demande : `domain_randomization.push_as_force`, avec intensité et durée dans la
+section `pushes:`.
+
 **Le pont ROS n'a jamais parlé à un vrai robot.** Il est testé contre le faux
 `rosbridge` de la pile compose, et rien d'autre.
 
