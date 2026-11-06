@@ -293,6 +293,31 @@ Correction à la demande, au chargement, sans toucher `assets/` :
 l'axe et garde les butées, donc la convention d'angle de l'URDF. Changement de
 physique : décision d'équipe.
 
+Ce défaut est **dans l'URDF officiel de poppy-project**, identique octet pour octet au
+nôtre, et présent depuis le premier commit : il n'a pas été introduit ici. Il touche
+tous les modèles de `models/` (genou gauche jusqu'à +35° pour `2026-04-08_23-00-52`).
+Il compte aussi pour le robot : le pont envoie les angles de la simulation sans
+conversion, et sur le vrai Poppy un angle positif du genou gauche est une flexion
+normale. `src/robot/simulation_adapter.py` construit encore l'environnement sans la
+correction.
+
+**Audit de symétrie du 6 novembre 2026.** Axes, butées, masses, inerties, actionneurs
+et sens physique de chaque articulation, comparés au partenaire miroir et à la config
+moteurs officielle du vrai robot. Le genou gauche est le seul défaut de ce type ;
+`tests/test_symetrie.py` le verrouille. Restent des écarts mineurs, signalés et non
+corrigés :
+
+| Écart | Ampleur | Origine |
+| --- | --- | --- |
+| Pose debout des chevilles : `r_ankle_y` et `l_ankle_y` valent toutes deux +0,026, mais leurs axes sont opposés | un pied 1,5° pointe en haut, l'autre 1,5° pointe en bas | `_STANDING_POSE_OVERRIDES`, cherchée avec le genou à l'envers |
+| Pose debout des épaules (`shoulder_y`, `shoulder_x`) | 2,1° et 1,6° | idem |
+| Butées de `shoulder_x` | 5° | config du vrai robot |
+| Butées de `hip_y` : ±68,8° en simulation, −85° à 105° sur le robot | volontaire | commentaire du MJCF |
+| Cuisse droite / gauche, centre de masse de l'avant-bras | 1,3 %, 0,8 cm | URDF |
+
+La pose debout tient ~290 pas à action nulle, avec ou sans correction du genou, et non
+~700 comme l'annonce le commentaire de `_STANDING_POSE_OVERRIDES`.
+
 **Les poussées sont un couple, pas une force.** `_maybe_apply_push` écrit dans
 `xfrc_applied[1, 3:5]`, qui est un couple ; la force est dans `[1, 0:3]`. Correction à
 la demande : `domain_randomization.push_as_force`, avec intensité et durée dans la
