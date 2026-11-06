@@ -1,0 +1,78 @@
+# ============================================================
+# Poppy Humanoid — ancienne récompense, genou gauche corrigé
+#
+# EXPÉRIMENTAL — branche exp/palier1-recompense. Copie exacte de
+# configs/poppy_robust.yaml, la config du modèle du 19 septembre, à deux
+# lignes près :
+#   - fix_left_knee_axis: true (le genou gauche du MJCF plie à l'envers,
+#     voir docs/TECHNIQUE.md §8) ;
+#   - eval_freq espacé et log_dir propre, qui ne changent pas l'apprentissage.
+# Question posée : la récompense d'origine donne-t-elle une meilleure marche
+# une fois le genou corrigé ? À comparer au modèle du 19 septembre sur le
+# banc plat (evaluate.py --config configs/robust_genou_corrige.yaml).
+# ============================================================
+
+# ── Algorithm ────────────────────────────────────────────────
+algorithm: PPO          # PPO | SAC | TD3 | A2C
+
+# ── Training ─────────────────────────────────────────────────
+training:
+  total_timesteps: 10_000_000
+  seed: 42
+  checkpoint_freq: 200_000   # Save a model checkpoint every N steps
+  eval_freq: 50_000          # 10_000 dans poppy_robust.yaml
+  n_eval_episodes: 5
+  log_dir: ./logs/robust_genou
+
+# ── Environment ──────────────────────────────────────────────
+environment:
+  n_envs: 64                       # Parallel environments (optimised for 32-core + RTX 4090)
+  frame_skip: 5                    # Sim steps per policy step (dt = 0.002 * 5 = 10 ms)
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.25, 0.70]   # Pelvis height [m] considered healthy
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  fix_left_knee_axis: true         # seule différence de physique
+
+# ── Domain Randomization (floor) ─────────────────────────────
+domain_randomization:
+  enabled: true
+  friction_range: [0.4, 2.0]       # Slide friction coefficient at reset
+  restitution_range: [0.0, 0.5]    # Bounciness coefficient at reset
+
+# ── PPO hyperparameters ───────────────────────────────────────
+ppo:
+  learning_rate: 2.5e-5
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+
+# ── SAC hyperparameters ───────────────────────────────────────
+sac:
+  learning_rate: 3.0e-4
+  buffer_size: 1_000_000
+  learning_starts: 10_000
+  batch_size: 1024
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+
+# ── Network architecture ──────────────────────────────────────
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2                # Start with small action noise (std≈0.14)
+  ortho_init: false
+
+# ── Output ───────────────────────────────────────────────────
+figs_dir: ./figs/robust_genou
