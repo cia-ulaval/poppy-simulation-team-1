@@ -582,6 +582,80 @@ puisque la posture des bras était l'un des défauts relevés ; le reste du lot
 
 Le détail est dans `spec/sim2real-a-corriger.md` (branche Placo).
 
+### 4.5 Vague 1 de l'après-midi : H et H-Placo (8 nov., 13:04–14:45)
+
+Deux variantes, deux graines chacune (42 et 7), 10 M de pas, sur le cadre de
+A :
+- **H** : A + les trois correctifs (`normalize_action_space`, perte miroir
+  `symmetry_loss_weight: 1.0`, `target_kl: 0.03`) + bras corrigés
+  (`fix_arm_frames`). Config `configs/exp_h_a_trois_correctifs.yaml`.
+- **H-Placo** : la même chose sur I (imitation de la marche Placo), avec la
+  référence régénérée sur les bras corrigés. Code sur
+  `claude/piste3-placo-4cdd4e`.
+
+Serveurs : CCX43 pour H-Placo (~2 200 pas/s par run), CPX62 pour H
+(~1 700 pas/s par run), 4 threads par run. Fin vers 14:20 et 14:40. Logs
+vérifiés par empreinte (94 fichiers sur 94 par serveur), serveurs supprimés.
+
+**M7, fixé avant de lire les résultats** : en moyenne sur les épisodes, chaque
+coude reste au moins 10 cm sous son épaule (axe z du monde ; la pose debout
+donne ~12 cm). Validé sur deux modèles déjà connus : F-best (bras bas en
+vidéo) a 14,5 / 14,5 cm ✓, G-final (bras levé en vidéo) a −12,5 / 5,9 cm ✗.
+
+Mesure : M1–M6 + M7, 10 épisodes, graine 1, sol plat.
+
+| Run | 2,5 M | 5 M | 7,5 M | best | final | M7 |
+|---|---|---|---|---|---|---|
+| H-Placo, 42 | 5/6 | **6/6** | 5/6 (lat. 0,30) | **6/6** | **6/6** | ✓ partout |
+| H-Placo, 7 | **6/6** | **6/6** | **6/6** | **6/6** | **6/6** | ✓ partout |
+| H, 42 | 5/6 (0,41 m/s) | **6/6** | 5/6 (lat. 0,51) | 5/6 (lat. 0,40) | 5/6 (lat. 0,33) | ✗ au best (G 5 cm) et au final (bras levés) |
+| H, 7 | 5/6 (0,15 m/s) | 4/6 | 5/6 (lat. 0,76) | 5/6 (lat. 0,34) | 5/6 (lat. 0,62) | ✓ partout |
+
+H-Placo au meilleur modèle : graine 7 à 0,273 m/s, tronc 0,998, cap 1,1°,
+appui 0,4 pt, latéral 0,04 m ; graine 42 à 0,249 m/s, tronc 0,998, cap 1,4°,
+appui 0,7 pt, latéral 0,12 m.
+
+**Conclusions** :
+- **H-Placo est le premier candidat qui passe 6/6 + M7 sur les deux graines**,
+  et presque à chaque checkpoint (9 points sur 10). C'est la variante la plus
+  reproductible mesurée jusqu'ici ; la référence n'est plus une graine
+  chanceuse.
+- **H tient debout partout mais dérive de côté** (M6 raté à 8 points sur 10),
+  et une graine sur deux lève encore les bras en fin de run, même avec les
+  bras corrigés. **La correction des bras ne suffit donc pas** à fixer la
+  posture sans imitation ; la référence Placo, elle, la fixe.
+- `target_kl` a tenu : aucun effondrement, épisodes de 1000 pas dès 1 à 3 M
+  sur les quatre runs.
+- Les récompenses de H (~3 000) et de H-Placo (~7 200) ne se comparent pas : la
+  seconde contient le terme d'imitation.
+
+**Sol en champ de hauteur** (même protocole qu'au §4.3, meilleur modèle) :
+
+| Modèle | plat (sol normal) | hfield 0 (plat) | hfield 0,3 |
+|---|---|---|---|
+| H-Placo, 7 | 6/6, 100 % | 6/6, 90 % | 4/6, 80 % |
+| H-Placo, 42 | 6/6, 100 % | 5/6, 80 % | 4/6, 70 % |
+| H, 7 | 5/6, 100 % | 6/6, 100 % | 4/6, 80 % |
+| F-best (§4.3) | 6/6, 100 % | 6/6, 90 % | 30 % |
+
+La sensibilité au modèle de contact demeure : sur un hfield pourtant plat,
+H-Placo tombe une à deux fois sur dix. Ces modèles résistent mieux au relief
+que ceux de la nuit (70 à 80 % à 0,3 contre 30 à 60 %), mais **aucun n'est prêt
+pour le palier 2 sans un entraînement sur terrain**.
+
+**Vidéos** (`logs/videos/2026-11-08/exp-h*-profil.mp4`) :
+- H-Placo, deux graines : tronc droit, bras le long du corps, genoux fléchis
+  comme la référence Placo, petits pas.
+- H graine 7 : jambes plus tendues, bras bas, tronc droit.
+- H graine 42 au final : **les deux bras levés au-dessus de la tête**, comme
+  A-42 et G (M7 à −6,2 / −2,0 cm).
+
+**Caméras** : depuis la correction des axes, la caméra `cote` (azimut 90°)
+filme le robot **de face** et `face` (azimut 180°) **de profil**. Les vidéos
+« -profil » de cette section ont été faites avec `--camera face`. Les noms dans
+`CAMERAS` ne sont pas corrigés : c'est à décider avec l'équipe. Les vidéos
+`*-profil.mp4` de la nuit sont à revoir avec ça en tête.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -664,6 +738,7 @@ facturé : il faut le supprimer.
 |---|---|
 | 7-8 nov., jusqu'à 01:40 | ~3,80 $ (CCX43 zero-v2 1 h 27, CPX62 4 h 37, CCX43 2 h 55) |
 | Nuit du 8 nov. | prévu ~7 $, plafond 15 $ |
+| 8 nov. après-midi (vague H / H-Placo) | ~1,55 $ (CCX43 ~2 h, CPX62 ~2 h) |
 
 ---
 
