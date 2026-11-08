@@ -538,3 +538,10 @@ facturé : il faut le supprimer.
   en mauvaise posture, à confirmer à 8 M. A graine 7 à 8 M : 1000 pas, 100 %,
   2,42 m, **latéral 0,20 m**, cap −14°, appui 47/46, tronc 0,991 : **A est
   reproductible** sur une deuxième graine. Coût cumulé ~6,60 $.
+- **05:16** — E à 5,9 M (1000 pas, 100 %, **1,81 m soit 0,18 m/s**, latéral
+  1,33 m, cap +6°, appui 49/41, tronc 0,995) : il marche, mais **plus
+  lentement** que A, sous la vitesse cible ; les pénalités lourdes réduisent
+  l'amplitude sans empêcher la marche. F à 1,25 M (1000 pas, 0,52 m, appui
+  31/22). A graine 7 à 8,9 M (1000 pas, 2,41 m, latéral −0,04 m, cap −14°,
+  appui 47/44). Prévu : supprimer le CCX43 à la fin de E (~06:05), rien d'autre
+  n'y est planifié avant 08:00. Coût cumulé ~6,60 $.
