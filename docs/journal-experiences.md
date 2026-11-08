@@ -503,4 +503,4 @@ facturé : il faut le supprimer.
 - **04:36** — I fini et rapatrié ; mesure ci-dessus (§4.1). **E a démarré
   automatiquement** sur le CCX43 (1,2 M de pas à 04:36, durée moyenne de 641
   pas en entraînement, ~1 810 pas/s, fin vers 06:05). D à 8,6 M (KL ~0,6–0,7),
-  A graine 7 à 7,1 M (KL 1,3). Coût cumulé ~6,40 $.
+  A graine 7 à 7,1 M (KL 1,3). Coût cumulé ~6,10 $.
