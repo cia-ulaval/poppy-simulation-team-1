@@ -371,6 +371,31 @@ checkpoint, `criteres.py` :
   posture est sobre. Il reste à corriger la dérive latérale (M6), le défaut
   commun à tous les runs.
 
+**A, graine 7** (même config que A, `--seed 7`, portable), fini à 05:42 :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| 5 M | 90 % | 0,229 | 0,990 | 7,8° | 6,0 | 0,97 ✗ | 5/6 |
+| 7 M | 100 % | 0,261 | 0,995 | 14,4° | 0,5 | 0,52 ✗ | 5/6 |
+| **8 M** | 100 % | 0,237 | 0,991 | 13,1° | 0,1 | **0,19** (0,27) | **6/6** |
+| **9 M** | 100 % | 0,220 | 0,991 | 8,3° | 2,7 | **0,26** (0,35) | **6/6** |
+| **`best_model` (8,05 M)** | 100 % | 0,243 | 0,990 | 13,0° | 2,4 | **0,25** (0,36) | **6/6** |
+| final (10 M) | 100 % | 0,229 | 0,985 ✗ (à l'arrondi) | 5,0° | 0,5 | 0,16 | 5/6 |
+
+- **Premiers modèles à passer les six critères** (8 M, 9 M, `best_model`).
+  Le cap reste proche de la limite (13° pour 15°) : à surveiller avec des
+  épisodes plus longs.
+- **A est reproductible** sur la marche elle-même : 100 % sans chute, vitesse à
+  la cible, tronc droit, pour les deux graines. Le modèle final de la graine 7
+  se dégrade moins que celui de la graine 42.
+- **Le bras levé de A-42 était propre à cette graine** : A-7 marche les bras
+  tenus vers l'avant, comme I (`exp-a-graine7-best-profil.mp4`). Les deux
+  graines montrent que rien dans la récompense de A ne tient la posture des
+  bras : chaque graine trouve la sienne.
+- La dérive latérale varie beaucoup d'une graine à l'autre (A-42 : 0,24 à
+  1,24 m selon le checkpoint ; A-7 : 0,16 à 0,97 m). C'est un défaut de la
+  récompense, avec beaucoup de variance, pas une propriété stable.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -552,3 +577,5 @@ facturé : il faut le supprimer.
   du nouveau cadre (lr 3e-4 linéaire, 5 époques, clip 0,2, entropie 0,005),
   pas encore testés un par un. F à 2,5 M : 872 pas, 60 %, 2,05 m, appui
   43/37. A graine 7 à 9,96 M, presque fini. Coût cumulé ~6,90 $.
+- **05:42** — A graine 7 fini et mesuré (§4.1) : **6/6 à 8 M, 9 M et au
+  meilleur modèle**. G (A + `target_kl` 0,03) démarré sur le portable.
