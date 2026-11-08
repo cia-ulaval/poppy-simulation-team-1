@@ -1,0 +1,66 @@
+# ============================================================
+# Expérience B — nouveau cadre d'entraînement, ancienne récompense
+#
+# EXPÉRIMENTAL — branche exp/palier1-recompense, 8 novembre 2026.
+# Question : le cadre des pilotes du palier 1 (action normalisée [-1, 1],
+# PPO lr 3e-4 décroissant, 5 époques, clip 0,2, exploration 0,005, miroir,
+# 12 environnements) empêche-t-il de marcher, même avec la récompense qui a
+# donné robust-genou ? Copie de configs/palier1_marche_horloge.yaml SANS
+# section de récompense (récompense d'origine) et SANS horloge (63 dim.).
+# Pendant : configs/exp_a_ancien_cadre_nouvelle_recompense.yaml.
+# ============================================================
+
+algorithm: PPO
+
+training:
+  total_timesteps: 10_000_000
+  seed: 42
+  checkpoint_freq: 500_000
+  eval_freq: 50_000
+  n_eval_episodes: 5
+  log_dir: ./logs/exp_b
+
+environment:
+  n_envs: 12
+  frame_skip: 5
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.25, 0.70]
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  normalize_action_space: true
+  fix_left_knee_axis: true
+
+domain_randomization:
+  enabled: true
+  friction_range: [0.4, 2.0]
+  restitution_range: [0.0, 0.5]
+  restitution_in_solref: false
+  push_as_force: false
+
+# ── Récompense : pas de section reward, donc la récompense d'origine
+# (RewardConfig par défaut, celle de robust-genou et du 19 septembre).
+
+# ── PPO : identique à configs/palier1.yaml ────────────────────
+ppo:
+  learning_rate: 3.0e-4
+  learning_rate_schedule: linear
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 5
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.005
+  symmetry_loss_weight: 1.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2
+  ortho_init: false
+
+figs_dir: ./figs/exp_b
