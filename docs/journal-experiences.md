@@ -537,4 +537,4 @@ facturé : il faut le supprimer.
   toujours**. L'hypothèse « ces pénalités bloquaient les pilotes » est donc
   en mauvaise posture, à confirmer à 8 M. A graine 7 à 8 M : 1000 pas, 100 %,
   2,42 m, **latéral 0,20 m**, cap −14°, appui 47/46, tronc 0,991 : **A est
-  reproductible** sur une deuxième graine. Coût cumulé ~6,40 $.
+  reproductible** sur une deuxième graine. Coût cumulé ~6,60 $.
