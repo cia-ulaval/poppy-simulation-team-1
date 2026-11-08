@@ -428,3 +428,9 @@ facturé : il faut le supprimer.
   bras levé en permanence (vidéo). D à 1,85 M (durée moyenne de 765 pas en
   entraînement, à ~1 120 pas/s, fin vers 04:55) ; I à 1,43 M (878 pas, fin
   vers 04:30) ; A, graine 7, à 2,16 M (803 pas). Coût cumulé ~5,40 $.
+- **03:25** — Vague 2 préparée et testée (2 048 pas chacune, sans erreur) :
+  E (`5f763f2`), F et G (`55f0723`), chacune à une variable de A. Les
+  enchaînements sont automatiques : E démarre sur le CCX43 à la fin de I, F sur
+  le CPX62 à la fin de D, G sur le portable à la fin de A graine 7. Fins
+  prévues : E ~06:15, F ~07:30, G ~09:30 (portable, sans coût). Coût estimé
+  à la suppression des serveurs : ~8 $.
