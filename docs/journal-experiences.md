@@ -469,3 +469,9 @@ facturé : il faut le supprimer.
   ne coûte presque rien. **Expérience candidate pour plus tard**, hors du plan
   de la nuit et à décider avec l'équipe : A avec `lateral_weight` relevé,
   ou un suivi de vitesse latérale nulle en cloche, à une variable.
+- **04:16** — D à 7,2 M (1000 pas, 2,37 m, latéral 0,82 m, cap −6°, appui
+  48/41 ; KL ~0,55) ; I à 9,2 M (1000 pas, 2,63 m, latéral −1,33 m, cap −10°,
+  appui 40/46, tronc 0,997 ; **KL jusqu'à 4**) ; A graine 7 à 6 M (850 pas,
+  80 %, latéral 0,55 m, cap −12°, appui 50/40). Le KL monte dans les trois
+  runs du cadre A, d'autant plus vite que le run est avancé. Fin de I vers
+  04:25, puis démarrage automatique de E. Coût ~5,90 $.
