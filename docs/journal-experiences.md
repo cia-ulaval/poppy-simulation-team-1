@@ -396,6 +396,27 @@ checkpoint, `criteres.py` :
   1,24 m selon le checkpoint ; A-7 : 0,16 à 0,97 m). C'est un défaut de la
   récompense, avec beaucoup de variance, pas une propriété stable.
 
+**E** (A avec les pénalités d'effort et d'à-coups du pilote 6), fini à 05:55 :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| 5 M | 100 % | 0,191 ✗ | 0,995 | 8,0° | 7,3 | 1,12 ✗ | 4/6 |
+| 7 M | 80 % ✗ | 0,249 | 0,990 | 5,7° | 11,9 ✗ | 1,22 ✗ | 3/6 |
+| 8 M | 100 % | 0,250 | 0,991 | 3,5° | 14,3 ✗ | 1,12 ✗ | 4/6 |
+| 9 M | 100 % | 0,262 | 0,989 | 2,7° | 13,4 ✗ | 1,24 ✗ | 4/6 |
+| final (10 M) | 90 % | 0,268 | 0,992 | 6,9° | 14,9 ✗ | 0,85 ✗ | 4/6 |
+| `best_model` (8,25 M) | 100 % | 0,251 | 0,990 | 2,7° | 12,0 ✗ | 1,26 ✗ | 4/6 |
+
+- **Verdict** (une graine) : les pénalités du pilote 6 **n'empêchent pas** la
+  marche dans le cadre de A (M1 à M4 tenus à partir de 8 M). L'hypothèse
+  « elles bloquaient les pilotes » est **réfutée**.
+- Elles **dégradent pourtant la qualité** : l'appui devient asymétrique (12 à
+  15 points d'écart, contre 0 à 6 pour A), la dérive latérale dépasse 1 m, et
+  la vitesse cible n'est atteinte qu'après 7 M. Plafond à 4/6.
+- Ce qui bloquait les pilotes reste donc à trouver parmi le **miroir** (F, en
+  cours) et les **réglages PPO** du nouveau cadre.
+- Vidéos : `exp-e-best.mp4`, `exp-e-best-profil.mp4`.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -579,3 +600,8 @@ facturé : il faut le supprimer.
   43/37. A graine 7 à 9,96 M, presque fini. Coût cumulé ~6,90 $.
 - **05:42** — A graine 7 fini et mesuré (§4.1) : **6/6 à 8 M, 9 M et au
   meilleur modèle**. G (A + `target_kl` 0,03) démarré sur le portable.
+- **05:58** — E fini, logs vérifiés fichier par fichier (141 sur 141) puis
+  **CCX43 supprimé** à 05:57 (7 h 09 allumé, 8 h dues, ~4,16 $). F à 4 M :
+  **1000 pas, 100 %, 2,82 m, latéral −0,16 m, appui 46/45**, tronc 0,993. G à
+  1,1 M sur le portable, KL ~0,03–0,04 comme voulu. Coût cumulé ~7,20 $ ; seul
+  le CPX62 reste, jusqu'à la fin de F (~07:25).
