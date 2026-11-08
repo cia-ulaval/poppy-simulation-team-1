@@ -81,6 +81,27 @@ class ReferenceMotion:
         qd = (1.0 - w) * self.qvel[i0] + w * self.qvel[i1]
         return q, qd
 
+    def base_at(self, phase: float) -> tuple[float, NDArray, NDArray]:
+        """Pose du bassin de référence à ``phase``, interpolée.
+
+        Returns:
+            ``(hauteur, quaternion, verticale)`` : hauteur au-dessus du sol (m),
+            orientation (w, x, y, z) normée, forme ``(4,)``, dans le monde où le
+            robot marche vers −y, et verticale du monde exprimée dans le repère
+            du bassin, forme ``(3,)`` — ce que mesure l'accéléromètre d'une IMU
+            au repos, indépendant du cap.
+        """
+        i0, i1, w = self._bracket(phase)
+        height = float((1.0 - w) * self.base_pos[i0, 2] + w * self.base_pos[i1, 2])
+        quat = (1.0 - w) * self.base_quat[i0] + w * self.base_quat[i1]
+        quat = quat / np.linalg.norm(quat)
+        qw, qx, qy, qz = quat
+        # Troisième ligne de la matrice de rotation : R^T · (0, 0, 1).
+        up = np.array([2.0 * (qx * qz - qw * qy),
+                       2.0 * (qy * qz + qw * qx),
+                       1.0 - 2.0 * (qx * qx + qy * qy)])
+        return height, quat, up
+
     def contacts_at(self, phase: float) -> NDArray:
         """Pieds au sol (1/0, ordre droit, gauche) à ``phase``, échantillon le plus proche."""
         i0, i1, w = self._bracket(phase)
