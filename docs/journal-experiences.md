@@ -610,3 +610,7 @@ facturé : il faut le supprimer.
   symétrique de la nuit à ce stade. G à 2,3 M (portable, ~1 020 pas/s grâce aux
   époques écourtées, fin vers 08:25) : 1000 pas, 0,88 m, appui 17/44, KL tenu à
   ~0,04. Coût cumulé ~7,40 $.
+- **06:36** — F à 6,6 M : 1000 pas, 100 %, 2,47 m, latéral −0,21 m, **cap
+  +0,7°**, appui 45/47, tronc 0,997. G à 3,8 M : 1000 pas, 100 %, 2,52 m,
+  latéral 0,49 m, cap +12°, appui 50/39, KL ~0,045. Fin de F vers 07:20, fin de
+  G vers 08:05. Coût cumulé ~7,60 $.
