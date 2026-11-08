@@ -237,6 +237,9 @@ class PoppyEnvironmentConfig:
     # Le genou gauche du MJCF plie à l'envers : voir PoppyHumanoidEnv.
     # Faux par défaut, c'est un changement de physique.
     fix_left_knee_axis: bool = False
+    # Bras du MJCF orientés comme dans l'URDF, pose debout bras le long du
+    # corps : voir PoppyHumanoidEnv. Faux par défaut, changement de physique.
+    fix_arm_frames: bool = False
     # Horloge de marche : période (s) d'un cycle de deux pas. 0 = pas
     # d'horloge, observation de 63 dimensions. Au-delà, l'observation gagne
     # sin et cos de la phase (65 dimensions) : c'est un changement du contrat

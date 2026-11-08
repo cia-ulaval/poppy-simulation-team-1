@@ -129,6 +129,7 @@ def make_poppy_env(
                 terrain=config.terrain,
                 pushes=config.pushes,
                 fix_left_knee_axis=config.fix_left_knee_axis,
+                fix_arm_frames=config.fix_arm_frames,
                 gait_period=config.gait_period,
             )
             env = TimeLimit(env, max_episode_steps=_MAX_EPISODE_STEPS)

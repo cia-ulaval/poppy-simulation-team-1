@@ -1,0 +1,157 @@
+# ============================================================
+# Expérience H — témoin A + actions bornées + miroir + target_kl
+#
+# EXPÉRIMENTAL — 8 novembre 2026, vague 1 après la nuit (docs/journal-experiences.md §4.2-4.3).
+# Copie de exp_a_ancien_cadre_nouvelle_recompense.yaml avec les trois correctifs validés un par un
+# la nuit du 8 nov. : actions bornées (D), miroir (F), target_kl 0,03 (G),
+# et les bras du MJCF corrigés (fix_arm_frames, voir tests/test_bras_urdf.py).
+# Question : les trois correctifs se cumulent-ils ? Témoin sans imitation de H-Placo.
+# Graines 42 et 7 (--seed 7 pour la seconde).
+# ============================================================
+
+algorithm: PPO          # PPO | SAC | TD3 | A2C
+
+# ── Training ─────────────────────────────────────────────────
+training:
+  total_timesteps: 10_000_000
+  seed: 42
+  checkpoint_freq: 500_000
+  eval_freq: 50_000          # 10_000 dans poppy_robust.yaml
+  n_eval_episodes: 5
+  log_dir: ./logs/exp_h
+
+# ── Environment ──────────────────────────────────────────────
+environment:
+  n_envs: 8
+  frame_skip: 5                    # Sim steps per policy step (dt = 0.002 * 5 = 10 ms)
+  terminate_when_unhealthy: true
+  healthy_z_range: [0.25, 0.70]   # Pelvis height [m] considered healthy
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  fix_left_knee_axis: true
+  fix_arm_frames: true             # bras orientés comme l'URDF, pose debout bras le long du corps
+  gait_period: 0.7
+  normalize_action_space: true     # H : actions bornées (D)
+
+# ── Domain Randomization (floor) ─────────────────────────────
+domain_randomization:
+  enabled: true
+  friction_range: [0.4, 2.0]       # Slide friction coefficient at reset
+  restitution_range: [0.0, 0.5]    # Bounciness coefficient at reset
+
+# ── Récompense, par pas de 10 ms ─────────────────────────────
+# Valeur de configs/palier1.yaml en commentaire.
+reward:
+  # Suivre une vitesse cible au lieu de payer la vitesse brute. La cloche
+  # paie 1,5 à 0,25 m/s, ~0,3 à l'arrêt, et presque rien au-delà de
+  # 0,6 m/s : une chute vers l'avant ne rapporte plus. 0,25 m/s est une
+  # marche lente, à confronter à ce que les servos du vrai robot tiennent.
+  forward_weight: 0.0           # 5.0
+  max_forward_vel: 0.8          # sans effet quand forward_weight vaut 0
+  vel_tracking_weight: 1.5      # 0
+  target_vel: 0.25              # —
+  vel_tracking_sigma: 0.2       # —
+  # Vitesse moyennée sur ~1 s. Pilote n° 1 (2 M de pas, sans filtre) : le
+  # robot tenait 10 s debout mais se balançait d'avant en arrière, touchant
+  # la cible à chaque oscillation pour 7 cm d'avance. Filtrée, seule
+  # l'avance réelle paie.
+  vel_tracking_tau: 1.0         # —
+  # Socle de 1,0 par pas : à l'arrêt, ~1,3 ; en marchant à la cible, ~2,5.
+  # Tomber fait perdre tout ce qui restait de l'épisode. Pilote n° 1 à 1,0 de
+  # bonus (socle 1,5) : l'immobilité était trop confortable.
+  healthy: 0.5                  # 0.5
+  upright_weight: 0.25
+  torso_upright_weight: 0.25
+  # Pilote n° 4 : ne pas se jeter en avant. robust-genou marche 10 s mais la
+  # poitrine penchée de ~25° (verticalité du tronc 0,905), et le bonus
+  # ci-dessus n'y perd que ~0,02 par pas. Cette pénalité coûte ~0,5 par pas à
+  # 25°, ~0,08 à 10°, rien droit. Mesurable : IMU du bassin + encodeurs du buste.
+  torso_tilt_weight: 5.0        # 0
+  # Pilote n° 5 : les termes courants des humanoïdes de legged_gym / Unitree
+  # (unitree_rl_lab), à l'échelle de nos poids (suivi de vitesse à 1,5).
+  # Hauteur du bassin : ~0,41 m debout ; un plongeon le fait descendre.
+  base_height_weight: 20.0      # 0
+  base_height_target: 0.40
+  # Roulis et tangage du bassin : contre le balancement et le jeté en avant.
+  # Mesurable par le gyroscope de l'IMU.
+  ang_vel_xy_weight: 0.1        # 0
+  # Pied qui glisse au sol : un pas doit poser le pied, pas le traîner.
+  feet_slide_weight: 0.25       # 0
+  # Alternance imposée par l'horloge : chaque pied au sol 55 % de son cycle,
+  # décalé d'un demi-cycle de l'autre. Poids à l'échelle d'unitree_rl_gym
+  # (0,18 pour un suivi de vitesse à 1,0).
+  phase_contact_weight: 0.5     # 0
+  phase_stance_ratio: 0.55
+  # Pilote n° 2 (sans prime d'appui) : avance à la vitesse cible en basculant
+  # d'un bloc, sans lever un pied. La prime d'appui simple, qui a appris les
+  # pas au modèle du 19 sept., revient. Elle repose sur les contacts des
+  # pieds, déjà observés : capteurs de pression sous les pieds sur le robot.
+  gait_single: 0.3              # 0.0 dans palier1_marche.yaml
+  gait_double: 0.0
+  # Temps de vol sans pénalité : cible à 0, chaque pas rapporte en
+  # proportion du temps passé en l'air, un pas court rapporte peu mais ne
+  # coûte rien. Le total reste borné par le temps d'épisode.
+  air_time_weight: 10.0         # 50.0
+  air_time_target: 0.0          # 0.25
+  air_time_max: 0.5
+  # Pénalité de virage gardée. Elle n'est calculée qu'en simulation ; la
+  # politique perçoit la rotation par la vitesse angulaire du bassin, déjà
+  # observée, que le gyroscope de l'IMU mesure sur le robot.
+  yaw_rate_weight: 20.0
+  yaw_rate_tau: 2.0
+  # Butées : protège les articulations du robot.
+  joint_limit_weight: 2.0
+  joint_limit_soft: 0.95
+  lateral_weight: 0.5
+  # Gestes doux. Avec l'espace d'action normalisé à [-1, 1], l'effort et les
+  # à-coups sont devenus ~10 fois plus faibles qu'avec l'ancienne récompense
+  # (mesuré sur palier1-v2 : effort 0,01 par pas contre 0,13 pour le
+  # 19 sept.). On les relève pour qu'ils pèsent à nouveau. La vitesse
+  # articulaire reste à sa valeur : marcher exige de bouger les jambes, et le
+  # pilote n° 1 à 0,01 la payait ~0,1 par pas pour ne pas marcher.
+  # Expérience A : ancien cadre, action NON normalisée. Les valeurs ×5 et ×10
+  # des pilotes étaient calibrées pour l'action normalisée, où ces coûts
+  # sont ~10 fois plus faibles ; ici on revient aux valeurs d'origine.
+  ctrl_weight: 0.1              # 0.5 dans palier1_marche_horloge.yaml
+  action_rate_weight: 0.05      # 0.5 dans palier1_marche_horloge.yaml
+  joint_vel_weight: 0.005       # 0.005
+
+
+# ── PPO hyperparameters ───────────────────────────────────────
+ppo:
+  learning_rate: 2.5e-5
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+  symmetry_loss_weight: 1.0      # H : miroir (F)
+  target_kl: 0.03                # H : mises à jour bridées (G)
+
+# ── SAC hyperparameters ───────────────────────────────────────
+sac:
+  learning_rate: 3.0e-4
+  buffer_size: 1_000_000
+  learning_starts: 10_000
+  batch_size: 1024
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+
+# ── Network architecture ──────────────────────────────────────
+network:
+  hidden_layers: [256, 256]
+  activation: relu
+  log_std_init: -2                # Start with small action noise (std≈0.14)
+  ortho_init: false
+
+# ── Output ───────────────────────────────────────────────────
+figs_dir: ./figs/exp_h

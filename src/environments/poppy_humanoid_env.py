@@ -104,6 +104,51 @@ _STANDING_POSE_OVERRIDES: Dict[str, float] = {
     "l_ankle_y":      0.026,
 }
 
+# ── Arm frames as in the URDF (``fix_arm_frames``) ──────────
+# The MJCF copied the URDF ``rpy="π 0 ±π/2"`` of both ``*_shoulder_motor``
+# into ``euler``, which MuJoCo reads as intrinsic x-y-z; URDF rpy is
+# extrinsic (R = Rz·Ry·Rx).  The two differ by 180°: at qpos = 0 the MJCF
+# arms cross the chest, the URDF ones point outwards.  Every other body
+# frame of the MJCF matches the URDF (checked body by body).
+_ARM_FRAME_RPY: Dict[str, Tuple[float, float, float]] = {
+    "l_shoulder_motor": (np.pi, 0.0, np.pi / 2),
+    "r_shoulder_motor": (np.pi, 0.0, -np.pi / 2),
+}
+
+# Standing pose with URDF arm frames: arms hanging at the sides, about 10°
+# outwards, hands 4 cm in front of the shoulders, elbows bent 14° (15° away
+# from their stop).  The right arm is the mirror image of the left one.
+# Torso and ankles found again by grid search, as for the original pose,
+# but kept mirror-symmetric (the ankle_y axes are mirror images, so equal
+# values tilt the feet opposite ways — as the original 0.026 / 0.026 do):
+# the best is the plain one, torso and ankles at 0.  With action = 0 the
+# robot stands 480 steps on average (seeds 0-2, knee fixed), against 291
+# for the original pose.
+_STANDING_POSE_OVERRIDES_URDF_ARMS: Dict[str, float] = {
+    "bust_y":        -0.008,
+    "l_shoulder_y":   1.525,
+    "l_shoulder_x":   1.600,
+    "l_arm_z":       -0.400,
+    "l_elbow_y":     -0.250,
+    "r_shoulder_y":  -1.525,
+    "r_shoulder_x":   1.600,
+    "r_arm_z":        0.400,
+    "r_elbow_y":      0.250,
+}
+
+
+def _urdf_rpy_to_quat(rpy: Tuple[float, float, float]) -> NDArray:
+    """Quaternion (w, x, y, z) of a URDF ``rpy``: R = Rz(yaw)·Ry(pitch)·Rx(roll)."""
+    quat = np.array([1.0, 0.0, 0.0, 0.0])
+    for axis, angle in ((2, rpy[2]), (1, rpy[1]), (0, rpy[0])):
+        q = np.zeros(4)
+        q[0] = np.cos(angle / 2)
+        q[1 + axis] = np.sin(angle / 2)
+        out = np.zeros(4)
+        mujoco.mju_mulQuat(out, quat, q)
+        quat = out
+    return quat
+
 # ── Initial pelvis height ───────────────────────────────────
 # Chosen so the feet just touch the ground at the standing pose.
 _INIT_PELVIS_Z = 0.41
@@ -277,6 +322,12 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         opposite: the right knee flexes, the left one can only hyperextend
         (it bends backwards, up to 134°, and flexes 3.5° at most).  Flipping
         the axis keeps the URDF range, hence its angle convention.
+    fix_arm_frames : bool
+        Orient both ``*_shoulder_motor`` bodies as in the URDF (the MJCF
+        reads their URDF ``rpy`` in the wrong Euler convention, which
+        crosses the arms at qpos = 0), and use a standing pose with the
+        arms along the body.  Changes the physics: old models do not
+        transfer.
     """
 
     metadata = {
@@ -307,6 +358,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         pushes: Optional[PushConfig] = None,
         fix_left_knee_axis: bool = False,
         gait_period: float = 0.0,
+        fix_arm_frames: bool = False,
     ):
         EzPickle.__init__(
             self,
@@ -331,8 +383,10 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             pushes=pushes,
             fix_left_knee_axis=fix_left_knee_axis,
             gait_period=gait_period,
+            fix_arm_frames=fix_arm_frames,
         )
         self._fix_left_knee_axis = fix_left_knee_axis
+        self._fix_arm_frames = fix_arm_frames
         # Gait clock: 0 keeps the 63-dimension observation. Above 0, sin and
         # cos of the phase are appended (65 dimensions).
         self._gait_period = float(gait_period)
@@ -394,7 +448,9 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         self.init_qpos[2] = _INIT_PELVIS_Z
         joint_names = [self.model.joint(i).name
                        for i in range(1, self.model.njnt)]
-        for jname, value in _STANDING_POSE_OVERRIDES.items():
+        overrides = (_STANDING_POSE_OVERRIDES_URDF_ARMS if fix_arm_frames
+                     else _STANDING_POSE_OVERRIDES)
+        for jname, value in overrides.items():
             idx = joint_names.index(jname)
             self.init_qpos[7 + idx] = value
 
@@ -476,12 +532,18 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         """
         self._terrain: Optional[TerrainGrid] = None
         self._terrain_dirty = False
-        if not self._terrain_config.enabled and not self._fix_left_knee_axis:
+        if (not self._terrain_config.enabled and not self._fix_left_knee_axis
+                and not self._fix_arm_frames):
             return super()._initialize_simulation()
         spec = mujoco.MjSpec.from_file(self.fullpath)
         if self._fix_left_knee_axis:
             knee = spec.joint(_LEFT_KNEE)
             knee.axis = -np.asarray(knee.axis)
+        if self._fix_arm_frames:
+            for body_name, rpy in _ARM_FRAME_RPY.items():
+                body = spec.body(body_name)
+                body.alt.type = mujoco.mjtOrientation.mjORIENTATION_QUAT
+                body.quat = _urdf_rpy_to_quat(rpy)
         if self._terrain_config.enabled:
             self._terrain = add_terrain(spec, self._terrain_config)
         model = spec.compile()
