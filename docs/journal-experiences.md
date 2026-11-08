@@ -447,3 +447,10 @@ facturé : il faut le supprimer.
   doute de lever un bras au-dessus de la tête comme A. I marche genoux
   fléchis, comme la référence Placo, avec les bras tenus vers l'avant. Coût
   cumulé ~5,40 $.
+- **03:36** — D à 4,5 M (1000 pas, 2,60 m, latéral 0,58 m, cap −26°, appui
+  43/41, tronc 0,992) ; I à 5 M (1000 pas, 2,65 m, **latéral −0,91 m**, cap
+  −11°, appui 41/44, tronc 0,996) ; A graine 7 à 3,5 M (1000 pas, 2,34 m,
+  100 %, latéral 0,51 m, appui 39/52, tronc 0,992). Les trois tiennent les
+  10 s. **La dérive latérale reste le défaut commun**, ainsi que le cap pour D.
+  Pas de plantage ; `approx_kl` de D et de I entre 0,26 et 0,29, à
+  surveiller.
