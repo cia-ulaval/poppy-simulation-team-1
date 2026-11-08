@@ -417,6 +417,28 @@ checkpoint, `criteres.py` :
   cours) et les **réglages PPO** du nouveau cadre.
 - Vidéos : `exp-e-best.mp4`, `exp-e-best-profil.mp4`.
 
+**F** (A avec la perte de symétrie miroir), fini à 07:28 :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| **5 M** | 100 % | 0,260 | 0,997 | 6,2° | 1,0 | **0,02** (0,05) | **6/6** |
+| 6 M | 100 % | 0,276 | 0,994 | 1,3° | 9,6 | 0,43 ✗ | 5/6 |
+| **7 M** | 100 % | 0,256 | 0,994 | 3,2° | 2,6 | 0,16 (0,21) | **6/6** |
+| **8 M** | 100 % | 0,218 | 0,990 | 3,6° | 4,7 | 0,11 (0,17) | **6/6** |
+| **9 M** | 100 % | 0,226 | 0,987 | 0,9° | 3,1 | 0,14 (0,18) | **6/6** |
+| final (10 M) | 100 % | 0,166 ✗ | 0,988 | 6,1° | 9,4 | 0,14 | 5/6 |
+| **`best_model` (6,5 M)** | 100 % | 0,247 | 0,997 | **0,9°** | 2,6 | 0,21 (0,22) | **6/6** |
+
+- **Le meilleur run de la nuit** : 6/6 à quatre checkpoints sur cinq entre 5
+  et 9 M, plus `best_model`. Cap quasi nul, dérive latérale faible et stable.
+- **Le miroir aide**, au lieu de gêner. C'est l'inverse de ce qui était
+  soupçonné : il corrige justement le défaut commun des autres runs, la
+  dérive latérale. Une graine seulement.
+- **La fin de run ralentit** (0,166 m/s au modèle final) : même tendance
+  qu'A-42 et E, une dégradation en fin d'entraînement, plus douce ici.
+- Posture (`exp-f-best-profil.mp4`) : droit, les bras le long du corps,
+  légèrement vers l'avant.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -622,3 +644,8 @@ facturé : il faut le supprimer.
   +0,4°, appui 47/44, tronc 0,987. G à 6,8 M : 1000 pas, 100 %, 2,98 m, latéral
   −0,24 m, cap +1°, **appui 46/47**, tronc 0,990, KL ~0,04. Coût cumulé
   ~7,60 $.
+- **07:36** — F fini, mesuré : **6/6** (§4.1). Logs du CPX62 vérifiés
+  (248 fichiers sur 248), puis **CPX62 supprimé à 07:37. Plus aucun serveur.**
+  Coût final de Hetzner : **~7,90 $** (zero-v2 1,04 + CCX43 8 h × 0,52 = 4,16 +
+  CPX62 11 h × 0,245 = 2,70), sous le plafond de 15 $. G à 8,2 M sur le
+  portable, fin vers 08:00.
