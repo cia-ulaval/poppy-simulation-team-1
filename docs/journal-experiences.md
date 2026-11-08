@@ -454,3 +454,18 @@ facturé : il faut le supprimer.
   10 s. **La dérive latérale reste le défaut commun**, ainsi que le cap pour D.
   Pas de plantage ; `approx_kl` de D et de I entre 0,26 et 0,29, à
   surveiller.
+- **03:56** — D à 5,9 M (1000 pas, 2,64 m, latéral 0,93 m, cap −15°, appui
+  45/44, tronc 0,993) ; I à 7,2 M (1000 pas, 2,61 m, **latéral −1,58 m**, cap
+  −13°, appui 39/46, tronc 0,997), dont le **KL monte à 1,4–1,7**, même schéma
+  que A avant sa dégradation ; A graine 7 à 5 M (875 pas, 80 %, latéral
+  0,74 m, appui 46/46).
+
+  **Observation** : dans les trois runs, la dérive latérale **augmente** au
+  fil de l'entraînement (I : 0,48 → 0,91 → 1,58 m ; D : 0,16 → 0,58 →
+  0,93 m), alors que la vitesse vers l'avant reste à la cible. Une dérive qui
+  croît de façon systématique ressemble plus à un défaut de récompense qu'à du
+  bruit. Le terme `lateral_weight: 0.5 × |v_lat|` coûte au plus ~0,05 par pas
+  à 0,1 m/s de côté, contre ~1,5 pour le suivi de vitesse : marcher en crabe
+  ne coûte presque rien. **Expérience candidate pour plus tard**, hors du plan
+  de la nuit et à décider avec l'équipe : A avec `lateral_weight` relevé,
+  ou un suivi de vitesse latérale nulle en cloche, à une variable.
