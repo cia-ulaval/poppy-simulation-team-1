@@ -6,7 +6,7 @@ modèle d'IA. Il sépare **ce qui est mesuré**, **ce qui est supposé** et **ce
 qui reste à décider**. Les nombres viennent de `scripts/evaluate.py`
 (5 épisodes de 10 s, graine 1, sauf mention contraire).
 
-Dernière mise à jour : nuit du 7 au 8 novembre 2026.
+Dernière mise à jour : 8 novembre 2026, 08:10. **Pour aller vite : §4.2, la synthèse.**
 
 ---
 
@@ -439,6 +439,78 @@ checkpoint, `criteres.py` :
 - Posture (`exp-f-best-profil.mp4`) : droit, les bras le long du corps,
   légèrement vers l'avant.
 
+**G** (A avec `ppo.target_kl: 0.03`, graine 42 comme A), fini à 08:02 sur le
+portable :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| 5 M | 100 % | 0,226 | 0,984 ✗ | 4,4° | 5,2 | 0,66 ✗ | 4/6 |
+| **6 M** | 100 % | 0,243 | 0,991 | 0,6° | 3,2 | 0,23 (0,29) | **6/6** |
+| **7 M** | 100 % | 0,304 | 0,988 | 3,0° | 6,2 | 0,14 (0,20) | **6/6** |
+| 8 M | 100 % | 0,294 | 0,989 | 3,8° | 1,5 | 0,67 ✗ | 5/6 |
+| **9 M** | 100 % | 0,292 | 0,996 | 7,0° | 5,8 | 0,18 (0,22) | **6/6** |
+| **final (10 M)** | 100 % | 0,285 | 0,990 | 3,5° | 7,0 | 0,20 (0,24) | **6/6** |
+| `best_model` (8,85 M) | 100 % | 0,283 | 0,997 | 6,2° | 1,8 | 0,36 ✗ | 5/6 |
+
+- **`target_kl` supprime la dégradation de fin de run** : le KL ne dépasse
+  jamais 0,10 (contre 3 pour A, 64 pour I), et le **modèle final passe les
+  six critères**. C'est le seul run de la nuit dont on peut prendre le
+  dernier modèle les yeux fermés. Le portable a aussi tourné plus vite
+  (~1 150 pas/s contre ~800), parce que les époques s'arrêtent tôt.
+- **Mais il lève le bras au-dessus de la tête, comme A-42**
+  (`exp-g-final-profil.mp4`). Même graine, même posture : c'est la graine
+  qui choisit la posture des bras, pas `target_kl`. **Les critères M1 à M6 ne
+  voient pas ce défaut**, alors qu'il disqualifie le modèle pour le robot.
+
+## 4.2 Synthèse de la nuit du 8 novembre
+
+| Run | Ce qui change par rapport à A | Meilleur score M1–M6 | Modèle final | Posture |
+|---|---|---|---|---|
+| A (graine 42) | — | 5/6 | **2/6**, dégradé | bras levé |
+| A (graine 7) | graine | **6/6** (8 M, 9 M, best) | 5/6 | bras vers l'avant |
+| B | nouveau cadre + ancienne récompense | 3/6 | 3/6 | voûté (~32°) |
+| D | actions bornées | 5/6 | 5/6 | **bras le long du corps** |
+| I | imitation Placo | 5/6 | 5/6 | genoux fléchis, bras vers l'avant |
+| E | pénalités du pilote 6 | 4/6 | 4/6 | — |
+| **F** | **miroir** | **6/6** (5, 7, 8, 9 M, best) | 5/6 (ralentit) | droit, bras bas |
+| **G** | **`target_kl`** | **6/6** (6, 7, 9 M, final) | **6/6** | bras levé (graine 42) |
+
+**Ce qu'on sait maintenant** (une graine par variante, sauf A) :
+1. **La récompense « marche + horloge » dans le cadre de A apprend une marche
+   lente, droite et stable**, reproductible sur deux graines.
+2. **Rien de ce qu'on a testé ne bloque** : ni les actions bornées (D), ni les
+   pénalités lourdes (E), ni le miroir (F). Ce qui faisait échouer les
+   pilotes se trouve donc dans les **réglages PPO** du nouveau cadre (lr 3e-4
+   décroissant, 5 époques, clip 0,2, entropie 0,005), non testés un par un.
+   B prouve que ce cadre peut apprendre avec l'ancienne récompense : c'est une
+   interaction.
+3. **Trois ingrédients améliorent A, chacun seul** : le miroir (dérive
+   latérale corrigée), `target_kl` (fin de run stable), les actions bornées
+   (cibles dans la course, bras sobres). **Leur combinaison n'a pas été
+   testée.**
+4. **La dérive latérale** est le défaut principal sans miroir. Elle est
+   systématique (I : toujours du même côté), et le terme `lateral_weight` est
+   trop faible pour la retenir.
+5. **La posture du haut du corps n'est tenue par rien** dans la récompense de
+   A : une graine sur deux lève un bras au-dessus de la tête. Il faut **un
+   critère M7** (bras près de la pose debout, ou amplitude des épaules) et,
+   probablement, un terme de récompense, comme `imitation_upper_weight` chez
+   I.
+
+**Prochaines expériences proposées**, à décider avec l'équipe :
+- **H = A + miroir + `target_kl` + actions bornées**, avec deux graines (42 et
+  7). C'est le candidat pour le robot. Chaque ingrédient a été validé seul ;
+  on teste ici leur combinaison.
+- **Ajouter un critère M7 de posture du haut du corps** au banc de mesure,
+  puis, si H lève encore un bras, un terme qui tient les bras.
+- Pour comprendre l'échec des pilotes (intérêt scientifique, pas pratique) :
+  A avec le lr du nouveau cadre, puis avec ses 5 époques, chacun séparément.
+- **Évaluation plus dure** du candidat : épisodes de 30 s, poussées
+  (`--push`), friction variée, et mesures pour le robot (saturation des
+  moteurs, couples maximaux).
+- **Décision d'équipe** : retirer de l'observation la hauteur et la vitesse
+  linéaire exactes du bassin, que le robot ne mesure pas (voir §6).
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -649,3 +721,7 @@ facturé : il faut le supprimer.
   Coût final de Hetzner : **~7,90 $** (zero-v2 1,04 + CCX43 8 h × 0,52 = 4,16 +
   CPX62 11 h × 0,245 = 2,70), sous le plafond de 15 $. G à 8,2 M sur le
   portable, fin vers 08:00.
+- **08:02** — G fini sur le portable : **6/6 au modèle final**, KL au plus
+  0,10, mais le bras est levé (même graine que A). Synthèse écrite (§4.2). Fin
+  de la nuit : **plus aucun serveur, plus aucun run en cours**, surveillance
+  arrêtée. Coût Hetzner total de la nuit et de la veille : ~7,90 $.
