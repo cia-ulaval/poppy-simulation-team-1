@@ -614,3 +614,7 @@ facturé : il faut le supprimer.
   +0,7°**, appui 45/47, tronc 0,997. G à 3,8 M : 1000 pas, 100 %, 2,52 m,
   latéral 0,49 m, cap +12°, appui 50/39, KL ~0,045. Fin de F vers 07:20, fin de
   G vers 08:05. Coût cumulé ~7,60 $.
+- **06:56** — F à 7,9 M : 1000 pas, 100 %, 2,18 m, **latéral −0,04 m**, cap
+  +8°, appui 47/44, tronc 0,994. G à 5,3 M : 1000 pas, 100 %, 2,28 m, latéral
+  0,67 m, cap +4°, appui 45/40, KL ~0,02. Fin de F vers 07:28, puis suppression
+  du CPX62. Coût cumulé ~7,60 $.
