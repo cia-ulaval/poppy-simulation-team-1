@@ -320,6 +320,31 @@ vidéos de face et de profil, un tableau final face à la référence du
 **supprime tous les serveurs** (au plus tard vers 08:00), et aucun serveur ne
 reste plus de 30 min sans run.
 
+### 4.1 Résultats de la vague 1
+
+**I** (imitation Placo dans le cadre de A), fini à 04:25. 10 épisodes par
+checkpoint, `criteres.py` :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| 3 M | 100 % | 0,285 | 0,995 | 10,2° | 2,4 | 0,47 ✗ (0,50) | 5/6 |
+| 5 M | 100 % | 0,266 | 0,996 | 11,3° | 3,5 | 0,91 ✗ (0,94) | 5/6 |
+| 7 M | 100 % | 0,262 | 0,997 | 12,8° | 6,5 | 1,57 ✗ (1,61) | 5/6 |
+| 8 M | 100 % | 0,265 | 0,996 | 11,9° | 0,5 | 1,50 ✗ (1,55) | 5/6 |
+| final (10 M) = `best_model` | 100 % | 0,263 | 0,997 | 9,2° | 6,5 | 1,35 ✗ (1,37) | 5/6 |
+
+- **I est le run le plus régulier** : 5/6 à **tous** les checkpoints mesurés,
+  100 % sans chute, le tronc le plus droit (0,997). Il ne se dégrade pas en fin
+  de run, bien que son `approx_kl` ait atteint **64** à la dernière mise à jour.
+  Contrairement à A, son modèle final est utilisable.
+- **Sa dérive latérale est systématique** : la moyenne et le maximum sur
+  10 épisodes sont presque égaux, et elle part toujours du même côté (signe
+  négatif). Le robot ne vacille pas : il marche **en crabe, dans une direction
+  fixe**. Elle grandit de 0,47 m à 3 M jusqu'à ~1,5 m vers 7–8 M. C'est
+  l'argument le plus net pour l'hypothèse d'une **récompense latérale trop
+  faible** (voir la ligne de 03:56 dans le journal de la nuit).
+- Vidéos : `exp-i-final.mp4` (face), `exp-i-final-profil.mp4`.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -475,3 +500,7 @@ facturé : il faut le supprimer.
   80 %, latéral 0,55 m, cap −12°, appui 50/40). Le KL monte dans les trois
   runs du cadre A, d'autant plus vite que le run est avancé. Fin de I vers
   04:25, puis démarrage automatique de E. Coût ~5,90 $.
+- **04:36** — I fini et rapatrié ; mesure ci-dessus (§4.1). **E a démarré
+  automatiquement** sur le CCX43 (1,2 M de pas à 04:36, durée moyenne de 641
+  pas en entraînement, ~1 810 pas/s, fin vers 06:05). D à 8,6 M (KL ~0,6–0,7),
+  A graine 7 à 7,1 M (KL 1,3). Coût cumulé ~6,40 $.
