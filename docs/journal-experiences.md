@@ -423,12 +423,12 @@ facturé : il faut le supprimer.
   réfuté, et §3.5 et §4 sont réécrits. La piste 3 est replacée dans le cadre
   de A (I) ; E (pénalités du pilote 6) passe en tête de la vague 2. I est
   programmé pour démarrer automatiquement sur le CCX43 dès la fin de A.
-- **03:10** — A fini et rapatrié (`best_model` à 6,15 M, modèle final).
+- **03:00** — A fini et rapatrié (`best_model` à 6,15 M, modèle final).
   Mesure par checkpoint : 5/6 au mieux, le modèle final dégradé (2/6), et un
   bras levé en permanence (vidéo). D à 1,85 M (durée moyenne de 765 pas en
   entraînement, à ~1 120 pas/s, fin vers 04:55) ; I à 1,43 M (878 pas, fin
   vers 04:30) ; A, graine 7, à 2,16 M (803 pas). Coût cumulé ~5,40 $.
-- **03:25** — Vague 2 préparée et testée (2 048 pas chacune, sans erreur) :
+- **03:06** — Vague 2 préparée et testée (2 048 pas chacune, sans erreur) :
   E (`5f763f2`), F et G (`55f0723`), chacune à une variable de A. Les
   enchaînements sont automatiques : E démarre sur le CCX43 à la fin de I, F sur
   le CPX62 à la fin de D, G sur le portable à la fin de A graine 7. Fins
