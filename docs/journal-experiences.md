@@ -434,3 +434,16 @@ facturé : il faut le supprimer.
   le CPX62 à la fin de D, G sur le portable à la fin de A graine 7. Fins
   prévues : E ~06:15, F ~07:30, G ~09:30 (portable, sans coût). Coût estimé
   à la suppression des serveurs : ~8 $.
+- **03:16** — À 3 M de pas, **les trois runs de la vague 1 marchent déjà** (5
+  épisodes, sans conclusion avant 8 M) :
+  - D : 1000 pas, 2,15 m, 100 % sans chute, latéral 0,16 m, cap −22°, appui
+    40/41, tronc 0,988 ;
+  - I : 1000 pas, 2,85 m, 100 %, latéral 0,48 m, cap −10°, appui 45/42, tronc
+    0,995 ;
+  - A graine 7 : 839 pas, 1,81 m, 80 %, cap −6°, appui 45/43, tronc 0,971.
+
+  Vidéos de profil à 3 M (`exp-d-3M-profil.mp4`, `exp-i-3M-profil.mp4`) :
+  **D garde les bras le long du corps**. Ses cibles bornées l'empêchent sans
+  doute de lever un bras au-dessus de la tête comme A. I marche genoux
+  fléchis, comme la référence Placo, avec les bras tenus vers l'avant. Coût
+  cumulé ~5,40 $.
