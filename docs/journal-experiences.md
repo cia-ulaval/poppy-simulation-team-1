@@ -603,5 +603,5 @@ facturé : il faut le supprimer.
 - **05:58** — E fini, logs vérifiés fichier par fichier (141 sur 141) puis
   **CCX43 supprimé** à 05:57 (7 h 09 allumé, 8 h dues, ~4,16 $). F à 4 M :
   **1000 pas, 100 %, 2,82 m, latéral −0,16 m, appui 46/45**, tronc 0,993. G à
-  1,1 M sur le portable, KL ~0,03–0,04 comme voulu. Coût cumulé ~7,20 $ ; seul
+  1,1 M sur le portable, KL ~0,03–0,04 comme voulu. Coût cumulé ~7,40 $ ; seul
   le CPX62 reste, jusqu'à la fin de F (~07:25).
