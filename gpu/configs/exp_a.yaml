@@ -1,0 +1,27 @@
+# ============================================================
+# Témoin A porté sur GPU (mjlab + MuJoCo Warp + rsl_rl).
+#
+# Rien de ce qu'on apprend n'est recopié ici : environnement, récompense,
+# randomisation de domaine, hyperparamètres PPO et réseau sont lus dans
+# base_config, le YAML exact du run CPU. Ce fichier ne dit que comment
+# répartir les mêmes 4096 transitions par mise à jour sur le GPU.
+# ============================================================
+
+base_config: configs/exp_a_ancien_cadre_nouvelle_recompense.yaml
+
+gpu:
+  # Sur CPU : 8 environnements × 512 pas = 4096 transitions par mise à jour,
+  # découpées en 16 mini-lots de 256, 20 époques. Ici : 128 × 32 = 4096,
+  # mêmes mini-lots, mêmes époques, même taux. Seul l'horizon de chaque
+  # tranche change (32 pas au lieu de 512) ; avec gamma 0,99 et lambda 0,95,
+  # le poids de l'avantage au-delà de 32 pas est de 0,94^32 ≈ 0,14.
+  num_envs: 128
+  num_steps_per_env: 32
+  # Un checkpoint tous les ~500 000 pas, comme training.checkpoint_freq.
+  checkpoint_freq: 500_000
+
+# Miroir (symétrie de rsl_rl) : coupé pour A, qui n'en a pas.
+mirror:
+  use_data_augmentation: false
+  use_mirror_loss: false
+  mirror_loss_coeff: 0.0
