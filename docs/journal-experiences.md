@@ -154,6 +154,37 @@ B, aux critères : il passe M1 et M5. Il **échoue** à M3 (tronc penché d'envi
 manqué par le meilleur, qui va trop vite. Vidéos :
 `logs/videos/2026-11-08/exp-b-final.mp4` et `exp-b-final-profil.mp4`.
 
+**A, mesure finale** (fini à 02:42), avec 10 épisodes par checkpoint, sur les
+critères M1 à M6 (`criteres.py`, dérive latérale et cap en valeur absolue
+épisode par épisode) :
+
+| Checkpoint | M1 sans chute | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| | Score |
+|---|---|---|---|---|---|---|---|
+| 3 M | 100 % | 0,277 | 0,990 | 5,2° | 17,2 ✗ | 1,24 ✗ | 4/6 |
+| 5 M | 100 % | 0,260 | 0,993 | 4,6° | 11,3 ✗ | 1,20 ✗ | 4/6 |
+| 6 M | 100 % | 0,265 | 0,994 | 3,8° | 5,8 | 0,43 ✗ | 5/6 |
+| **6,15 M (`best_model`)** | 90 % | 0,265 | 0,992 | 5,6° | 11,0 ✗ | **0,24** | 5/6 |
+| 7 M | 100 % | 0,288 | 0,994 | 5,1° | 0,5 | 0,30 ✗ (max 0,80) | 5/6 |
+| 8 M | 70 % ✗ | 0,308 | 0,993 | 14,8° | 0,9 | 0,49 ✗ | 4/6 |
+| 9 M | 100 % | 0,250 | 0,997 | 7,3° | 6,2 | 0,46 ✗ | 5/6 |
+| **final (10 M)** | **50 %** ✗ | 0,338 | 0,979 ✗ | 33,5° ✗ | 1,3 | 0,47 ✗ | **2/6** |
+
+- **Aucun checkpoint ne passe les six critères.** Les meilleurs (6 M,
+  6,15 M, 7 M, 9 M) en passent cinq ; le critère manqué est la dérive
+  latérale, ou la symétrie d'appui pour `best_model`.
+- **La fin du run se dégrade** : le modèle final tombe dans la moitié des
+  épisodes. Ça confirme l'instabilité que montrait le KL (jusqu'à 3). Le
+  modèle final de A **ne doit pas** servir ; c'est l'argument de
+  l'expérience `target_kl`.
+- **Vidéo** (`exp-a-best-6M-profil.mp4`, images à 1, 3, 5, 7 et 9 s) : le
+  robot marche droit, mais **un bras levé au-dessus de la tête pendant tout
+  l'épisode**, sans doute comme balancier. C'est probablement ce qui donne
+  l'impression d'une marche « statique ». Sur un vrai robot, c'est à
+  proscrire : rien dans la récompense de A ne tient le haut du corps. La
+  récompense d'imitation de I le tient (`imitation_upper_weight`). B, au
+  contraire, garde les bras le long du corps, mais marche voûté
+  (`exp-b-final-profil.mp4`).
+
 Autres observations :
 - A dérive latéralement de **0,45 m pour 2,66 m d'avance** à 6 M : il marche
   en crabe, à ~10° de son cap. **Il échoue au critère M6.**
@@ -392,3 +423,8 @@ facturé : il faut le supprimer.
   réfuté, et §3.5 et §4 sont réécrits. La piste 3 est replacée dans le cadre
   de A (I) ; E (pénalités du pilote 6) passe en tête de la vague 2. I est
   programmé pour démarrer automatiquement sur le CCX43 dès la fin de A.
+- **03:10** — A fini et rapatrié (`best_model` à 6,15 M, modèle final).
+  Mesure par checkpoint : 5/6 au mieux, le modèle final dégradé (2/6), et un
+  bras levé en permanence (vidéo). D à 1,85 M (durée moyenne de 765 pas en
+  entraînement, à ~1 120 pas/s, fin vers 04:55) ; I à 1,43 M (878 pas, fin
+  vers 04:30) ; A, graine 7, à 2,16 M (803 pas). Coût cumulé ~5,40 $.
