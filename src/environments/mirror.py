@@ -168,6 +168,12 @@ def build_mirror_spec(env) -> MirrorSpec:
         _REFLECT, _REFLECT_PSEUDO, sign,
         [1.0, 1.0],
     ])
+    # Horloge de marche : le miroir d'un instant du cycle est le même instant
+    # pour l'autre jambe, soit un demi-cycle plus loin. sin et cos changent
+    # de signe.
+    if getattr(env, "_gait_period", 0.0) > 0.0:
+        obs_perm = np.concatenate([obs_perm, [63, 64]])
+        obs_sign = np.concatenate([obs_sign, [-1.0, -1.0]])
     return MirrorSpec(
         joint_perm=perm,
         joint_sign=sign,

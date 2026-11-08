@@ -126,6 +126,41 @@ class RewardConfig:
             articulation est pénalisée.
         torso_upright_weight: Poids de la verticalité de la poitrine, mesurée
             par rapport à la pose debout.
+        vel_tracking_weight: Poids du suivi d'une vitesse cible : le terme
+            vaut ``poids * exp(-((v - cible) / largeur)²)``, maximal à la
+            cible et qui retombe aussi bien plus lent que plus vite. Une chute
+            vers l'avant, trop rapide, n'y rapporte presque rien.
+        target_vel: Vitesse d'avance visée (m/s), projetée sur le cap.
+        vel_tracking_sigma: Largeur de la cloche (m/s). Trop étroite, un robot
+            immobile ne reçoit aucun signal pour se mettre en marche.
+        vel_tracking_tau: Constante de temps (s) du filtre appliqué à la
+            vitesse avant le suivi. 0 : vitesse instantanée, qu'un robot qui
+            se balance d'avant en arrière touche à chaque oscillation sans
+            avancer (pilote du 7 nov. 2026). Filtrée, seule l'avance paie.
+        torso_tilt_weight: Pénalité d'inclinaison de la poitrine,
+            ``poids * (1 - verticalité)``, soit ~θ²/2. Contrairement à
+            ``torso_upright_weight``, un bonus qui gonfle aussi la prime pour
+            rester debout, elle ne coûte rien droit et pèse dès que le robot
+            se penche pour se jeter en avant. Sur le robot, l'IMU du bassin et
+            les encodeurs du buste donnent cette inclinaison.
+        base_height_weight: Pénalité ``poids * (z - cible)²`` sur la hauteur
+            du bassin (termes courants de legged_gym / Unitree) : un robot qui
+            plonge ou s'accroupit descend.
+        base_height_target: Hauteur visée du bassin (m) ; ~0,41 debout.
+        ang_vel_xy_weight: Pénalité ``poids * (ωx² + ωy²)`` sur le roulis et
+            le tangage du bassin : contre le balancement et le jeté en avant.
+            Mesurable par le gyroscope de l'IMU.
+        feet_slide_weight: Pénalité ``poids * Σ |v_pied|`` sur la vitesse
+            horizontale d'un pied au sol : un pas doit poser le pied, pas le
+            traîner.
+        phase_contact_weight: Prime d'alternance, active seulement avec
+            l'horloge de marche (``environment.gait_period``). Chaque pied a sa
+            phase, décalée d'un demi-cycle ; il doit être au sol pendant
+            ``phase_stance_ratio`` du cycle et en l'air le reste. Le terme
+            vaut ``poids * fraction des pieds conformes`` (recette des
+            humanoïdes G1 / H1 d'unitree_rl_gym).
+        phase_stance_ratio: Part du cycle où un pied doit être au sol ; un peu
+            plus de 0,5 laisse un court double appui.
     """
 
     forward_weight: float = 5.0
@@ -146,6 +181,17 @@ class RewardConfig:
     joint_limit_weight: float = 0.0
     joint_limit_soft: float = 0.95
     torso_upright_weight: float = 0.0
+    vel_tracking_weight: float = 0.0
+    target_vel: float = 0.25
+    vel_tracking_sigma: float = 0.2
+    vel_tracking_tau: float = 0.0
+    torso_tilt_weight: float = 0.0
+    base_height_weight: float = 0.0
+    base_height_target: float = 0.41
+    ang_vel_xy_weight: float = 0.0
+    feet_slide_weight: float = 0.0
+    phase_contact_weight: float = 0.0
+    phase_stance_ratio: float = 0.55
 
 
 @dataclass(frozen=True)
@@ -191,6 +237,12 @@ class PoppyEnvironmentConfig:
     # Le genou gauche du MJCF plie à l'envers : voir PoppyHumanoidEnv.
     # Faux par défaut, c'est un changement de physique.
     fix_left_knee_axis: bool = False
+    # Horloge de marche : période (s) d'un cycle de deux pas. 0 = pas
+    # d'horloge, observation de 63 dimensions. Au-delà, l'observation gagne
+    # sin et cos de la phase (65 dimensions) : c'est un changement du contrat
+    # d'observation, les modèles entraînés sans horloge ne s'y chargent pas.
+    # Sur le robot, la phase vient de l'horloge de l'ordinateur de bord.
+    gait_period: float = 0.0
 
 
 @dataclass(frozen=True)

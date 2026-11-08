@@ -70,12 +70,63 @@ def test_nouveaux_termes_presents_et_finis() -> None:
         _, reward, _, _, info = env.step(np.zeros(25, dtype=np.float32))
         assert np.isfinite(reward)
         for term in ("air_time_reward", "yaw_rate_cost", "joint_limit_cost",
-                     "torso_upright_reward"):
+                     "torso_upright_reward", "vel_tracking_reward",
+                     "torso_tilt_cost", "base_height_cost", "ang_vel_xy_cost",
+                     "feet_slide_cost"):
             assert info[term] == 0.0, term
         # Debout à la pose de départ, la poitrine est droite par construction.
         assert info["torso_uprightness"] == pytest.approx(1.0, abs=0.02)
     finally:
         env.close()
+
+
+def test_suivi_de_vitesse_en_cloche() -> None:
+    """Le suivi de vitesse paie au plus à la cible, et presque rien à l'arrêt
+    comme à la vitesse d'une chute : c'est ce qui retire l'intérêt du plongeon."""
+    weights = RewardConfig(vel_tracking_weight=1.5, target_vel=0.25,
+                           vel_tracking_sigma=0.2)
+    env = PoppyHumanoidEnv(floor_noise=False, reward=weights)
+    try:
+        env.reset(seed=0)
+        _, _, _, _, info = env.step(np.zeros(25, dtype=np.float32))
+        expected = 1.5 * np.exp(-((info["forward_vel"] - 0.25) / 0.2) ** 2)
+        assert info["vel_tracking_reward"] == pytest.approx(expected)
+    finally:
+        env.close()
+
+    def cloche(v: float) -> float:
+        return 1.5 * float(np.exp(-((v - 0.25) / 0.2) ** 2))
+
+    assert cloche(0.25) == pytest.approx(1.5)
+    assert cloche(0.0) < 0.5 * cloche(0.25)
+    assert cloche(0.8) < 0.01
+
+
+def test_suivi_de_vitesse_filtre() -> None:
+    """Avec un filtre, le suivi porte sur la vitesse lissée, partie de zéro au
+    reset : un balancement d'avant en arrière ne touche plus la cible."""
+    weights = RewardConfig(vel_tracking_weight=1.5, target_vel=0.25,
+                           vel_tracking_sigma=0.2, vel_tracking_tau=1.0)
+    env = PoppyHumanoidEnv(floor_noise=False, reward=weights)
+    try:
+        env.reset(seed=0)
+        _, _, _, _, info = env.step(np.zeros(25, dtype=np.float32))
+        alpha = env.dt / (1.0 + env.dt)
+        smoothed = alpha * info["forward_vel"]
+        expected = 1.5 * np.exp(-((smoothed - 0.25) / 0.2) ** 2)
+        assert info["vel_tracking_reward"] == pytest.approx(expected)
+    finally:
+        env.close()
+
+
+def test_palier1_marche_se_charge() -> None:
+    """La config révisée active le suivi de vitesse et coupe la vitesse brute."""
+    cfg = load_yaml(_CONFIGS / "palier1_marche.yaml")
+    weights = make_reward_config(cfg.get("reward"))
+    assert weights.forward_weight == 0.0
+    assert weights.vel_tracking_weight > 0.0
+    assert weights.air_time_target == 0.0
+    assert weights.vel_tracking_tau > 0.0
 
 
 def test_restitution_vers_amortissement() -> None:

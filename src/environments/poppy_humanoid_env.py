@@ -306,6 +306,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         terrain: Optional[TerrainConfig] = None,
         pushes: Optional[PushConfig] = None,
         fix_left_knee_axis: bool = False,
+        gait_period: float = 0.0,
     ):
         EzPickle.__init__(
             self,
@@ -329,8 +330,13 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             terrain=terrain,
             pushes=pushes,
             fix_left_knee_axis=fix_left_knee_axis,
+            gait_period=gait_period,
         )
         self._fix_left_knee_axis = fix_left_knee_axis
+        # Gait clock: 0 keeps the 63-dimension observation. Above 0, sin and
+        # cos of the phase are appended (65 dimensions).
+        self._gait_period = float(gait_period)
+        self._phase_time = 0.0
 
         # Read by _initialize_simulation, which MujocoEnv.__init__ calls.
         self._terrain_config = terrain or TerrainConfig()
@@ -363,11 +369,13 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
         # Per-episode state of the palier-1 reward terms, reset in reset_model
         self._yaw_rate_filtered = 0.0
+        self._forward_vel_filtered = 0.0
         self._air_time = np.zeros(2)          # (right, left), seconds
         self._was_in_contact = np.ones(2, dtype=bool)
 
+        obs_dim = _OBS_DIM + (2 if self._gait_period > 0.0 else 0)
         obs_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(_OBS_DIM,), dtype=np.float64
+            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float64
         )
 
         MujocoEnv.__init__(
@@ -611,6 +619,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
     def step(self, action: NDArray) -> Tuple[NDArray, float, bool, bool, Dict]:
         xy_before = self.data.qpos[:2].copy()
+        feet_xy_before = self.data.xpos[[self._r_foot_id, self._l_foot_id], :2].copy()
 
         # Random external push (domain randomization)
         if self._floor_noise:
@@ -642,6 +651,25 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         forward_vel = float(velocity @ forward_dir)
         capped_vel = np.clip(forward_vel, -w.max_forward_vel, w.max_forward_vel)
         forward_reward = w.forward_weight * capped_vel
+
+        # ── Target speed tracking (palier 1, walking at constant speed) ──
+        # Peaks at target_vel and falls off on both sides, so a fall forward,
+        # far too fast, earns almost nothing — unlike forward_reward above.
+        # Optionally on a low-pass filtered speed: rocking back and forth
+        # touches target_vel at every swing without going anywhere, and
+        # averages out to zero once filtered.
+        if w.vel_tracking_weight > 0.0:
+            if w.vel_tracking_tau > 0.0:
+                alpha = dt / (w.vel_tracking_tau + dt)
+                self._forward_vel_filtered += alpha * (
+                    forward_vel - self._forward_vel_filtered)
+            else:
+                self._forward_vel_filtered = forward_vel
+            vel_error = ((self._forward_vel_filtered - w.target_vel)
+                         / w.vel_tracking_sigma)
+            vel_tracking_reward = w.vel_tracking_weight * float(np.exp(-vel_error ** 2))
+        else:
+            vel_tracking_reward = 0.0
 
         # ── Alive bonus ─────────────────────────────────────────
         healthy_reward = w.healthy if self.is_healthy else 0.0
@@ -723,13 +751,44 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         # ── Torso uprightness (palier 1, proposal 4) ────────────
         torso_uprightness = self._get_torso_uprightness()
         torso_upright_reward = w.torso_upright_weight * torso_uprightness
+        # Penalty, not bonus: zero when upright, so it does not also raise
+        # the reward for merely staying alive.
+        torso_tilt_cost = w.torso_tilt_weight * (1.0 - torso_uprightness)
+
+        # ── Standard legged_gym / Unitree terms (palier 1, pilote 5) ──
+        # Pelvis height, pelvis roll/pitch rate, feet sliding on the ground.
+        base_height_cost = w.base_height_weight * (
+            float(self.data.qpos[2]) - w.base_height_target) ** 2
+        rotation = self.data.xmat[_PELVIS_BODY_ID].reshape(3, 3)
+        ang_vel_world = rotation @ self.data.qvel[3:6]
+        ang_vel_xy_cost = w.ang_vel_xy_weight * float(
+            ang_vel_world[0] ** 2 + ang_vel_world[1] ** 2)
+        feet_xy_after = self.data.xpos[[self._r_foot_id, self._l_foot_id], :2]
+        feet_speed = np.linalg.norm(feet_xy_after - feet_xy_before, axis=1) / dt
+        feet_slide_cost = w.feet_slide_weight * float(np.sum(feet_speed * in_contact))
+
+        # ── Gait clock: alternating stance (palier 1, piste 2) ──
+        # Right foot at phase, left foot half a cycle later. Each must be on
+        # the ground for phase_stance_ratio of its cycle, in the air otherwise.
+        phase_contact_reward = 0.0
+        if self._gait_period > 0.0:
+            self._phase_time += dt
+            if w.phase_contact_weight > 0.0:
+                phase = self._gait_phase()
+                leg_phase = (phase + np.array([0.0, 0.5])) % 1.0  # (right, left)
+                is_stance = leg_phase < w.phase_stance_ratio
+                phase_contact_reward = w.phase_contact_weight * float(
+                    np.mean(in_contact == is_stance))
 
         reward = (forward_reward + healthy_reward + upright_reward
                   + gait_reward
                   - lateral_cost - ctrl_cost
                   - action_rate_cost - joint_vel_cost
                   + air_time_reward + torso_upright_reward
-                  - yaw_rate_cost - joint_limit_cost)
+                  - yaw_rate_cost - joint_limit_cost
+                  + vel_tracking_reward - torso_tilt_cost
+                  - base_height_cost - ang_vel_xy_cost - feet_slide_cost
+                  + phase_contact_reward)
 
         observation = self._get_obs()
         terminated = self.terminated
@@ -747,6 +806,12 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             "yaw_rate_cost": yaw_rate_cost,
             "joint_limit_cost": joint_limit_cost,
             "torso_upright_reward": torso_upright_reward,
+            "vel_tracking_reward": vel_tracking_reward,
+            "torso_tilt_cost": torso_tilt_cost,
+            "base_height_cost": base_height_cost,
+            "ang_vel_xy_cost": ang_vel_xy_cost,
+            "feet_slide_cost": feet_slide_cost,
+            "phase_contact_reward": phase_contact_reward,
             # Gait measurements, read by scripts/evaluate.py
             "torso_uprightness": torso_uprightness,
             "yaw_rate": yaw_rate,
@@ -767,7 +832,15 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         qpos = self.data.qpos[2:].copy()       # shape (30,)
         qvel = self.data.qvel.copy()            # shape (31,)
         foot_contacts = self._get_foot_contacts()  # shape (2,)
+        if self._gait_period > 0.0:
+            angle = 2.0 * np.pi * self._gait_phase()
+            return np.concatenate([qpos, qvel, foot_contacts,
+                                   [np.sin(angle), np.cos(angle)]])
         return np.concatenate([qpos, qvel, foot_contacts])
+
+    def _gait_phase(self) -> float:
+        """Phase of the gait clock in [0, 1), 0 at reset."""
+        return (self._phase_time / self._gait_period) % 1.0
 
     def _maybe_apply_push(self) -> None:
         """Apply a random external force to the pelvis with low probability.
@@ -857,8 +930,10 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
 
         # Reset palier-1 reward state: standing on both feet, not turning
         self._yaw_rate_filtered = 0.0
+        self._forward_vel_filtered = 0.0
         self._air_time = np.zeros(2)
         self._was_in_contact = np.ones(2, dtype=bool)
+        self._phase_time = 0.0
 
         return self._get_obs()
 
