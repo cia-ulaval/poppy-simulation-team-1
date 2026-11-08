@@ -545,3 +545,10 @@ facturé : il faut le supprimer.
   31/22). A graine 7 à 8,9 M (1000 pas, 2,41 m, latéral −0,04 m, cap −14°,
   appui 47/44). Prévu : supprimer le CCX43 à la fin de E (~06:05), rien d'autre
   n'y est planifié avant 08:00. Coût cumulé ~6,60 $.
+- **05:36** — E à 8 M : **1000 pas, 100 %, 2,49 m**, latéral 1,12 m, cap +3°,
+  appui 54/39, tronc 0,991. À 8 M, E marche : **les pénalités de douceur du
+  pilote 6 n'empêchent pas la marche dans le cadre de A.** Ce n'est pas ce qui
+  bloquait les pilotes. Restent suspects : le miroir (F) et les réglages PPO
+  du nouveau cadre (lr 3e-4 linéaire, 5 époques, clip 0,2, entropie 0,005),
+  pas encore testés un par un. F à 2,5 M : 872 pas, 60 %, 2,05 m, appui
+  43/37. A graine 7 à 9,96 M, presque fini. Coût cumulé ~6,90 $.
