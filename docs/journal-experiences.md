@@ -540,6 +540,48 @@ graine 1) sur le sol du palier 2 (`terrain` de `configs/palier2.yaml`),
   PPO, celui qui a cassé les pilotes. Il faudra le réécrire dans le cadre
   de A avant de s'en servir.
 
+### 4.4 Bras du MJCF corrigés avant la vague 1 (8 nov., après-midi)
+
+Décision du lead modèle : corriger les bras seulement, avant de relancer,
+puisque la posture des bras était l'un des défauts relevés ; le reste du lot
+« MJCF v2 » attend des mesures sur le robot.
+
+- **Cause** : le MJCF a recopié le `rpy` URDF des deux `*_shoulder_motor`
+  dans `euler`, que MuJoCo lit en convention intrinsèque x-y-z, alors que
+  l'URDF est extrinsèque. Les deux repères sont tournés de 180° ; tous les
+  autres corps du MJCF coïncident avec l'URDF (vérifié corps par corps).
+- **Correction** : option `environment.fix_arm_frames`, fausse par défaut,
+  appliquée au chargement comme `fix_left_knee_axis` (`assets/` inchangé).
+  Elle prend une pose debout bras le long du corps, symétrique au miroir.
+  Commit ac9dc72, test `tests/test_bras_urdf.py`.
+- **Pose debout** : tronc et chevilles à 0 après recherche sur grille. À
+  action nulle, le robot tient 480 pas en moyenne, contre 291 avec la pose
+  d'origine.
+- **Trouvé au passage** : la pose d'origine met les deux `ankle_y` à 0,026.
+  Leurs axes sont en miroir, donc les deux pieds y penchent en sens opposés.
+  Ce n'est pas corrigé pour les anciennes configs.
+- **Piste Placo** : référence régénérée sur le modèle corrigé
+  (`reference_walk_bras_urdf.npz`, commit 550eaa1 sur
+  `claude/piste3-placo-4cdd4e`). Elle va toujours à 0,25 m/s avec des pas de
+  8,75 cm, mais le genou monte à **80 % de son couple maximal** (69 % avant)
+  et elle tient 1,29 s en boucle ouverte (1,45 s avant). À surveiller pour
+  le robot, surtout s'il est alimenté en 12 V.
+- **Hypothèse non vérifiée** : le robot suit l'URDF officiel. Une photo du
+  robot à angles nuls la confirmera (tâche 1 de `spec/sim2real-a-corriger.md`).
+
+**Reste du lot MJCF v2, pour plus tard (il faut le robot)** :
+- masse (2,61 kg simulés, 3,5 kg annoncés) et centre de masse : pesée ;
+- couples maximaux selon la tension réelle, et perte de couple avec la
+  vitesse : références des moteurs et tension de l'alimentation ;
+- identification des moteurs (kp, kd, inertie, frottement, retard), puis un
+  modèle d'actionneur dans l'environnement ;
+- observation limitée aux capteurs du robot (BNO055, 4 FSR, encodeurs) :
+  acteur/critique asymétrique, décision d'équipe ;
+- randomisation pour le transfert, pont en boucle fermée, mesure de l'écart
+  simulation/réel.
+
+Le détail est dans `spec/sim2real-a-corriger.md` (branche Placo).
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
