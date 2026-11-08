@@ -113,6 +113,7 @@ def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
         terrain=_make_section(TerrainConfig, cfg.get("terrain"), "terrain"),
         pushes=_make_section(PushConfig, cfg.get("pushes"), "pushes"),
         fix_left_knee_axis=bool(env_cfg.get("fix_left_knee_axis", False)),
+        fix_arm_frames=bool(env_cfg.get("fix_arm_frames", False)),
         gait_period=float(env_cfg.get("gait_period", 0.0)),
         reference_init=float(env_cfg.get("reference_init", 0.0)),
     )

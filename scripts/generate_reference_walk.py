@@ -70,6 +70,9 @@ _ASSETS = _ROOT / "assets" / "poppy_humanoid"
 _URDF_SOURCE = _ASSETS / "poppy_humanoid.urdf"
 _URDF_PLACO = _ASSETS / "poppy_humanoid_placo.urdf"
 _OUTPUT = _ASSETS / "reference_walk.npz"
+# Avec --fix-arm-frames : modèle aux bras orientés comme l'URDF.
+_URDF_PLACO_ARMS = _ASSETS / "poppy_humanoid_placo_bras_urdf.urdf"
+_OUTPUT_ARMS = _ASSETS / "reference_walk_bras_urdf.npz"
 
 # ── Ce que la copie de l'URDF change ─────────────────────────────────
 # Centre de l'empreinte de la semelle, dans le repère du lien du pied
@@ -457,7 +460,8 @@ def extract_cycle(walk: dict[str, NDArray], params: WalkParams,
     }
 
 
-def save_reference(cycle: dict[str, NDArray], params: WalkParams, path: Path) -> None:
+def save_reference(cycle: dict[str, NDArray], params: WalkParams, path: Path,
+                   fix_arm_frames: bool = False) -> None:
     """Écrit la référence en ``.npz`` compressé, tableaux flottants sur 32 bits.
 
     Les réglages sont joints en JSON (``params_json``) : le fichier dit
@@ -468,6 +472,7 @@ def save_reference(cycle: dict[str, NDArray], params: WalkParams, path: Path) ->
         for k, v in cycle.items()
     }
     arrays["params_json"] = np.array(json.dumps(asdict(params), sort_keys=True))
+    arrays["fix_arm_frames"] = np.array(fix_arm_frames)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **arrays)
 
@@ -475,7 +480,12 @@ def save_reference(cycle: dict[str, NDArray], params: WalkParams, path: Path) ->
 def _parse_args() -> argparse.Namespace:
     defaults = WalkParams()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--output", type=Path, default=_OUTPUT)
+    parser.add_argument("--output", type=Path, default=None,
+                        help="Défaut : assets/poppy_humanoid/reference_walk.npz, "
+                             "ou reference_walk_bras_urdf.npz avec --fix-arm-frames.")
+    parser.add_argument("--fix-arm-frames", action="store_true",
+                        help="Modèle aux bras orientés comme l'URDF, pose debout bras "
+                             "le long du corps (environment.fix_arm_frames).")
     parser.add_argument("--urdf-only", action="store_true",
                         help="Écrit seulement la copie de l'URDF pour Placo.")
     for name in _CLI_PARAMS:
@@ -488,17 +498,21 @@ def main() -> None:
     from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
 
     args = _parse_args()
-    env = PoppyHumanoidEnv(floor_noise=False, fix_left_knee_axis=True)
-    _URDF_PLACO.write_text(build_placo_urdf(env.model), encoding="utf-8")
-    print(f"URDF pour Placo : {_URDF_PLACO.relative_to(_ROOT)}")
+    env = PoppyHumanoidEnv(floor_noise=False, fix_left_knee_axis=True,
+                           fix_arm_frames=args.fix_arm_frames)
+    urdf_placo = _URDF_PLACO_ARMS if args.fix_arm_frames else _URDF_PLACO
+    if args.output is None:
+        args.output = _OUTPUT_ARMS if args.fix_arm_frames else _OUTPUT
+    urdf_placo.write_text(build_placo_urdf(env.model), encoding="utf-8")
+    print(f"URDF pour Placo : {urdf_placo.relative_to(_ROOT)}")
     if args.urdf_only:
         return
     params = WalkParams(**{k: getattr(args, k) for k in _CLI_PARAMS})
     names = [env.model.joint(i).name for i in range(1, env.model.njnt)]
     standing = dict(zip(names, env.init_qpos[7:].tolist(), strict=True))
-    walk = run_placo_walk(params, _URDF_PLACO, standing)
+    walk = run_placo_walk(params, urdf_placo, standing)
     cycle = extract_cycle(walk, params, names)
-    save_reference(cycle, params, args.output)
+    save_reference(cycle, params, args.output, fix_arm_frames=args.fix_arm_frames)
     print(f"Référence : {args.output} ({args.output.stat().st_size / 1024:.1f} Ko)")
     print(f"  vitesse {float(cycle['speed']):.3f} m/s, pas {params.step_length * 100:.2f} cm, "
           f"cycle {params.period} s, {len(cycle['qpos'])} échantillons")

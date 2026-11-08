@@ -47,6 +47,7 @@ from scripts.generate_reference_walk import (
 )
 from src.environments.poppy_humanoid_env import CAMERAS, PoppyHumanoidEnv, set_camera
 from src.environments.reference_motion import (
+    ARMS_URDF_REFERENCE_PATH,
     DEFAULT_REFERENCE_PATH,
     ReferenceMotion,
     load_reference,
@@ -356,7 +357,10 @@ def report(env: PoppyHumanoidEnv, reference: ReferenceMotion,
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--reference", type=Path, default=DEFAULT_REFERENCE_PATH)
+    parser.add_argument("--reference", type=Path, default=None,
+                        help="Défaut : celle qui correspond à --fix-arm-frames.")
+    parser.add_argument("--fix-arm-frames", action="store_true",
+                        help="Modèle aux bras orientés comme l'URDF (environment.fix_arm_frames).")
     parser.add_argument("--video", type=Path, default=None,
                         help="Rejeu cinématique en .mp4")
     parser.add_argument("--cycles", type=int, default=4,
@@ -370,9 +374,13 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
+    if args.reference is None:
+        args.reference = (ARMS_URDF_REFERENCE_PATH if args.fix_arm_frames
+                          else DEFAULT_REFERENCE_PATH)
     reference = load_reference(args.reference)
     render = args.video is not None or args.open_loop_video is not None
     env = PoppyHumanoidEnv(floor_noise=False, fix_left_knee_axis=True,
+                           fix_arm_frames=args.fix_arm_frames,
                            render_mode="rgb_array" if render else None)
     set_camera(env, args.camera)
     kinematics = kinematic_check(env, reference)

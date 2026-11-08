@@ -23,6 +23,9 @@ from numpy.typing import NDArray
 DEFAULT_REFERENCE_PATH = (
     Path(__file__).parent.parent.parent / "assets" / "poppy_humanoid" / "reference_walk.npz"
 )
+# Même marche, générée sur le modèle aux bras orientés comme l'URDF
+# (``environment.fix_arm_frames``), pose debout bras le long du corps.
+ARMS_URDF_REFERENCE_PATH = DEFAULT_REFERENCE_PATH.with_name("reference_walk_bras_urdf.npz")
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class ReferenceMotion:
             ``(N, 2)``, ordre (droit, gauche).
         period: Durée du cycle, s.
         speed: Vitesse d'avance moyenne, m/s.
+        fix_arm_frames: Vrai si elle a été générée avec ``fix_arm_frames``.
     """
 
     joint_names: tuple[str, ...]
@@ -56,6 +60,7 @@ class ReferenceMotion:
     feet_height: NDArray
     period: float
     speed: float
+    fix_arm_frames: bool = False
 
     @property
     def n_samples(self) -> int:
@@ -132,6 +137,7 @@ def load_reference(path: Path = DEFAULT_REFERENCE_PATH) -> ReferenceMotion:
             feet_height=data["feet_height"].astype(np.float64),
             period=float(data["period"]),
             speed=float(data["speed"]),
+            fix_arm_frames=bool(data["fix_arm_frames"]) if "fix_arm_frames" in data else False,
         )
     n = reference.n_samples
     expected = {
