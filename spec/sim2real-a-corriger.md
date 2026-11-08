@@ -155,7 +155,7 @@ Que la simulation n'autorise pas plus de couple que les moteurs n'en donnent.
   et MX-64 **en 14,8 V**. En 12 V : environ 2,5 N·m et 6 N·m.
 - Ce sont des couples de **blocage** : le couple disponible baisse avec la vitesse,
   jusqu'à zéro à la vitesse maximale. La simulation l'ignore. La marche de référence
-  demande 2,17 N·m au genou, surtout pendant le vol, quand il tourne vite.
+  demande 2,13 N·m au genou, surtout pendant le vol, quand il tourne vite.
 - Un servo qui tient longtemps près de son couple de blocage chauffe.
 
 ### À faire
@@ -182,7 +182,7 @@ Remplacer le régulateur inventé de la simulation par des valeurs mesurées.
 
 - `_KP = 8.0` et `_KD = 0.5` (`poppy_humanoid_env.py` l. 115) ont été choisis « pour que
   ça marche ». Avec eux, la marche de référence exige 16° d'erreur de suivi au genou, et
-  elle tombe en 1,2 s rejouée en boucle ouverte. Un Dynamixel en position est
+  elle tombe en 1,5 s rejouée en boucle ouverte. Un Dynamixel en position est
   probablement bien plus raide.
 - Le registre de gain P du Dynamixel ne se convertit pas de façon fiable en N·m/rad :
   on mesure.
@@ -325,12 +325,12 @@ incertitudes, mesurées le 8 novembre 2026 :
 
 | Point | Valeur | Ce qui le corrige |
 | --- | --- | --- |
-| Couple max du genou | 2,17 N·m, 70 % de 3,1 (87 % de 2,5 si 12 V) | tâches 4 et 5 |
+| Couple max du genou | 2,13 N·m, 69 % de 3,1 (85 % de 2,5 si 12 V) | tâches 4 et 5 |
 | Part due à l'`armature` | l'essentiel du couple du genou | tâche 5 |
 | Masse | 2,61 kg simulés | tâche 3 |
 | Centre de pression | sort de 7 % de la demi-semelle 10 ms par transfert d'appui | accepté |
-| Rejeu en boucle ouverte | tombe à 1,2 s | tâches 5 et 6, puis la politique |
-| Démarche | accroupie (genoux 35° à 60°), légèrement asymétrique | tâche 2 (pose des bras) |
+| Rejeu en boucle ouverte | tombe à 1,5 s | tâches 5 et 6, puis la politique |
+| Démarche | accroupie (genoux 35° à 60°), bassin et haut du corps roulant de ±6° à chaque pas | tâche 2 (pose des bras), tâche 3 (masse) |
 | Validité | sol plat, `fix_left_knee_axis`, cycle de 0,7 s | — |
 
 ### À faire

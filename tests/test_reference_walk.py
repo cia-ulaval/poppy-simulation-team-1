@@ -49,6 +49,22 @@ def test_reference_dans_les_butees(env: PoppyHumanoidEnv) -> None:
     assert np.all(reference.qpos >= low) and np.all(reference.qpos <= high)
 
 
+def test_bassin_roule_autour_de_la_verticale() -> None:
+    """Le bassin roule à chaque pas, mais autour de zéro, et le tronc reste droit.
+
+    Garde-fou contre une dérive du solveur cinématique : on a eu une
+    référence au bassin penché de 12° en permanence, tronc tordu de 32° pour
+    compenser, que ni les couples ni le rejeu ne signalaient.
+    """
+    reference = load_reference()
+    roll = np.array([np.arcsin(reference.base_at(k / reference.n_samples)[2][0])
+                     for k in range(reference.n_samples)])
+    assert abs(np.degrees(roll.mean())) < 1.0
+    assert np.degrees(np.abs(roll).max()) < 10.0
+    torso = [reference.joint_names.index(n) for n in ("abs_x", "bust_x")]
+    assert np.degrees(np.abs(reference.qpos[:, torso]).max()) < 1.0
+
+
 def test_interpolation_periodique() -> None:
     reference = load_reference()
     q_end, _ = reference.joints_at(1.0 - 1e-9)

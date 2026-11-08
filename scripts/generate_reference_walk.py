@@ -244,9 +244,6 @@ class WalkParams:
         ik_iterations: Résolutions du solveur par pas de temps.
         planning_refine: Pas de la grille de planification de Placo par
             double appui.
-        upright_chest: Poids d'une tâche qui garde la poitrine orientée comme
-            debout, roulis du tronc (``abs_x``, ``bust_x``) libéré pour cela.
-            0 : tronc figé à la pose debout, la poitrine roule avec le bassin.
     """
 
     speed: float = 0.25
@@ -262,7 +259,6 @@ class WalkParams:
     ik_dt: float = 0.005
     ik_iterations: int = 3
     planning_refine: int = 5
-    upright_chest: float = 1.0
 
     @property
     def step_length(self) -> float:
@@ -271,8 +267,7 @@ class WalkParams:
 
 
 _CLI_PARAMS = ("speed", "period", "double_support", "com_height", "foot_height",
-               "foot_rise_ratio", "feet_spacing", "trunk_pitch", "zmp_margin",
-               "upright_chest")
+               "foot_rise_ratio", "feet_spacing", "trunk_pitch", "zmp_margin")
 
 
 def _placo_parameters(placo: Any, params: WalkParams) -> Any:
@@ -318,8 +313,15 @@ def run_placo_walk(params: WalkParams, urdf: Path,
     l'environnement. Le **roulis du bassin est laissé libre** : sans roulis de
     cheville, c'est le seul moyen pour Poppy de déporter son centre de masse
     au-dessus du pied d'appui en gardant le pied à plat — il roule autour de
-    la hanche d'appui. Roulis bloqué, le CoM manque sa trajectoire latérale de
-    1,3 cm et la marche est irréalisable.
+    la hanche d'appui, de ±6° environ, et le haut du corps roule avec lui.
+    Roulis bloqué, le CoM manque sa trajectoire latérale de 1,3 cm et la
+    marche est irréalisable.
+
+    Essayé et abandonné : garder la poitrine droite (tâche d'orientation sur
+    ``chest``, roulis du tronc ``abs_x`` / ``bust_x`` libéré). Sans rappel du
+    tronc, le solveur dérive vers un bassin penché de 12° en permanence et un
+    tronc tordu de 32° ; avec rappel, le bassin ne roule plus et le centre de
+    pression reste hors de la semelle tout le cycle.
 
     Args:
         params: Réglages de la marche.
@@ -345,11 +347,9 @@ def run_placo_walk(params: WalkParams, urdf: Path,
     tasks = placo.WalkTasks()
     tasks.initialize_tasks(solver, robot)
     tasks.trunk_orientation_task.mask.set_axises("yz", "local")   # roulis libre
-    free = [n for n in names if n[2:].startswith(("hip", "knee", "ankle"))]
-    if params.upright_chest > 0.0:
-        free += ["abs_x", "bust_x"]
+    legs = [n for n in names if n[2:].startswith(("hip", "knee", "ankle"))]
     upper_body = solver.add_joints_task()
-    upper_body.set_joints({n: v for n, v in standing.items() if n not in free})
+    upper_body.set_joints({n: v for n, v in standing.items() if n not in legs})
     upper_body.configure("upper_body", "soft", 10.0)
 
     for name, value in standing.items():
@@ -359,9 +359,6 @@ def run_placo_walk(params: WalkParams, urdf: Path,
     robot.set_joint("l_knee_y", 0.5)
     robot.update_kinematics()
     tasks.reach_initial_pose(np.eye(4), p.feet_spacing, p.walk_com_height, p.walk_trunk_pitch)
-    if params.upright_chest > 0.0:
-        chest = solver.add_orientation_task("chest", robot.get_T_world_frame("chest")[:3, :3])
-        chest.configure("chest", "soft", params.upright_chest)
     solver.enable_velocity_limits(True)
 
     planner = placo.FootstepsPlannerRepetitive(p)
