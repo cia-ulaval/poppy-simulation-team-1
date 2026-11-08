@@ -605,3 +605,8 @@ facturé : il faut le supprimer.
   **1000 pas, 100 %, 2,82 m, latéral −0,16 m, appui 46/45**, tronc 0,993. G à
   1,1 M sur le portable, KL ~0,03–0,04 comme voulu. Coût cumulé ~7,40 $ ; seul
   le CPX62 reste, jusqu'à la fin de F (~07:25).
+- **06:16** — F à 5,2 M : 1000 pas, 100 %, 2,59 m, **latéral −0,02 m**, cap
+  −7°, appui 46/45, tronc 0,997 : la marche la plus droite et la plus
+  symétrique de la nuit à ce stade. G à 2,3 M (portable, ~1 020 pas/s grâce aux
+  époques écourtées, fin vers 08:25) : 1000 pas, 0,88 m, appui 17/44, KL tenu à
+  ~0,04. Coût cumulé ~7,40 $.
