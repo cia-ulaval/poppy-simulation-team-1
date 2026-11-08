@@ -1,0 +1,13 @@
+# Image GPU (gpu/Dockerfile) : entraînement sur MuJoCo Warp avec mjlab et rsl_rl.
+# torch est installé à part dans le Dockerfile, depuis l'index CUDA.
+#
+# mjlab 1.6.0 épingle lui-même mujoco ~= 3.11, mujoco-warp ~= 3.11 et
+# rsl-rl-lib == 5.4.2 : on ne les répète pas, pour ne pas les contredire.
+mjlab==1.6.0
+# Les deux suivants, aux versions de requirements/train.lock : gpu/parite.py
+# fait tourner PoppyHumanoidEnv (Gymnasium) à côté de MuJoCo Warp, et
+# gpu/export_sb3.py écrit un .zip que l'image CPU doit pouvoir relire.
+gymnasium==1.3.0
+stable_baselines3==2.9.0
+pyyaml
+pytest
