@@ -345,6 +345,32 @@ checkpoint, `criteres.py` :
   faible** (voir la ligne de 03:56 dans le journal de la nuit).
 - Vidéos : `exp-i-final.mp4` (face), `exp-i-final-profil.mp4`.
 
+**D** (A avec actions bornées à `[-1, 1]`), fini à 04:57 :
+
+| Checkpoint | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 appui D−G | M6 \|latéral\| (max) | Score |
+|---|---|---|---|---|---|---|---|
+| 3 M | 90 % | 0,222 | 0,989 | 24,3° ✗ | 1,4 | **0,15** (0,18) | 5/6 |
+| 5 M | 100 % | 0,264 | 0,992 | 23,7° ✗ | 6,4 | 0,93 ✗ | 4/6 |
+| 6 M | 80 % ✗ | 0,244 | 0,990 | 14,7° | 14,0 ✗ | 0,88 ✗ | 3/6 |
+| 7 M | 100 % | 0,236 | 0,993 | 6,0° | 8,1 | 0,81 ✗ | 5/6 |
+| 8 M | 100 % | 0,261 | 0,994 | 2,8° | 7,0 | 0,91 ✗ | 5/6 |
+| 9 M | 100 % | 0,244 | 0,993 | 2,0° | 5,9 | 0,59 ✗ | 5/6 |
+| **final (10 M)** | 100 % | 0,225 | 0,994 | 2,8° | 4,7 | 0,54 ✗ (0,73) | **5/6** |
+| `best_model` (9,75 M) | 100 % | 0,242 | 0,993 | 3,2° | 5,2 | 0,71 ✗ | 5/6 |
+
+- **Borner les actions n'empêche pas d'apprendre la marche** : D atteint le
+  même niveau que A (5/6), avec un cap mieux tenu en fin de run (2 à 3°).
+  L'hypothèse de la vague 1 est confirmée, pour cette graine.
+- **Son modèle final est bon**, contrairement à celui de A, bien que son KL
+  soit monté jusqu'à 1,2.
+- **Posture** (`exp-d-final-profil.mp4`) : droit, les bras le long du corps.
+  C'est la posture la plus « robot réel » des runs de la nuit : ni bras levé
+  (A), ni bras tendus vers l'avant (I), ni dos voûté (B).
+- **D est donc le meilleur candidat pour le robot à ce stade** : ses cibles
+  restent dans la course des articulations, sa fin de run est stable et sa
+  posture est sobre. Il reste à corriger la dérive latérale (M6), le défaut
+  commun à tous les runs.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -504,3 +530,11 @@ facturé : il faut le supprimer.
   automatiquement** sur le CCX43 (1,2 M de pas à 04:36, durée moyenne de 641
   pas en entraînement, ~1 810 pas/s, fin vers 06:05). D à 8,6 M (KL ~0,6–0,7),
   A graine 7 à 7,1 M (KL 1,3). Coût cumulé ~6,10 $.
+- **04:57** — D fini, mesuré (§4.1) et vidéos faites. **F (A + miroir) a
+  démarré automatiquement** sur le CPX62 (fin vers ~07:15). E à 3,5 M :
+  **1000 pas, 100 % sans chute, 2,37 m**, latéral 1,21 m, cap +8°, appui
+  52/40, tronc 0,989. Avec les pénalités de douceur du pilote 6, **A marche
+  toujours**. L'hypothèse « ces pénalités bloquaient les pilotes » est donc
+  en mauvaise posture, à confirmer à 8 M. A graine 7 à 8 M : 1000 pas, 100 %,
+  2,42 m, **latéral 0,20 m**, cap −14°, appui 47/46, tronc 0,991 : **A est
+  reproductible** sur une deuxième graine. Coût cumulé ~6,40 $.
