@@ -511,6 +511,35 @@ portable :
 - **Décision d'équipe** : retirer de l'observation la hauteur et la vitesse
   linéaire exactes du bassin, que le robot ne mesure pas (voir §6).
 
+### 4.3 Test sur sol accidenté (8 nov., après la nuit, sans entraînement)
+
+Les quatre meilleurs modèles ont été mesurés avec M1–M6 (10 épisodes,
+graine 1) sur le sol du palier 2 (`terrain` de `configs/palier2.yaml`),
+à quatre difficultés. Aucun n'a jamais été entraîné sur ce sol.
+
+| Modèle | Difficulté 0 (sol plat, en champ de hauteur) | 0,3 | 0,6 | 1,0 |
+|---|---|---|---|---|
+| F, meilleur | **6/6**, 90 % sans chute | 1/6, 30 % | 2/6, 0 % | 2/6, 0 % |
+| G, final | 5/6, 70 % | 4/6, 20 % | 2/6, 0 % | 2/6, 0 % |
+| A graine 7, meilleur | **2/6**, 40 %, tronc 0,907 | 1/6, 0 % | 3/6, 0 % | 4/6, 0 % |
+| D, final | 4/6, 80 % | 3/6, **60 %** | 3/6, 10 % | 3/6, 0 % |
+
+- **Aucun modèle ne tient sur le relief** : 0 % sans chute à partir de 0,6.
+  C'est attendu, puisqu'aucun n'a vu de relief.
+- **Résultat inattendu à la difficulté 0.** Le terrain y est parfaitement
+  plat (toutes les amplitudes sont multipliées par la difficulté), avec la
+  même friction et le même `condim` que le plan. Seule la géométrie de
+  contact change : un champ de hauteur au lieu d'un plan. A graine 7 passe
+  pourtant de 6/6 à 2/6. Les politiques dépendent donc des détails du modèle
+  de contact, ce qui est un mauvais signe pour le transfert au robot. Cause
+  probable, non vérifiée : MuJoCo génère les contacts pied/champ de hauteur
+  autrement que pied/plan (nombre de points, pénétration).
+- F (miroir) est le plus robuste à ce changement, D le plus robuste au
+  relief faible (60 % à 0,3).
+- **Pour le palier 2** : `configs/palier2.yaml` utilise le nouveau cadre
+  PPO, celui qui a cassé les pilotes. Il faudra le réécrire dans le cadre
+  de A avant de s'en servir.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
