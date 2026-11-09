@@ -734,6 +734,78 @@ modèle de contact, déjà vue au §4.5).
 contre 24 pour MuJoCo C ; les modèles du palier 2 y survivent à 40-50 % au
 relief 0,3 contre 90 % sur CPU). Paliers 2 et 3 restent sur CPU.
 
+### 4.7 Palier 3 sur H-Placo : poussées (9 nov., 01:15–06:13)
+
+`configs/palier3_hplaco.yaml` (commit 99a5b22) : `--init-from` les finals du
+palier 2 (s7 et s42), 20 M de pas. Deux choses changent par rapport au palier 2 :
+- **des poussées qui sont de vraies forces** (`push_as_force`), ~5 par épisode,
+  de 3 à 20 N pendant 0,15 s. Leur intensité monte de 20 % à 100 % sur 14 M ;
+- **le relief tiré à chaque épisode** (`difficulty_mix`, idée du lead modèle) :
+  un tiers plat, un tiers au hasard entre 0 et 1, un tiers au maximum.
+
+CCX43, ~1 150 pas/s par run, ~2,80 $. Logs vérifiés (174 fichiers sur 174),
+serveur supprimé. Un premier lancement, avec la config sans `difficulty_mix`, a
+tourné 9 min avant d'être arrêté. Ses logs ne sont pas gardés.
+
+**Pendant l'entraînement** : la récompense et la durée des épisodes baissent
+tant que la force monte (~6 900 → ~4 500, 1 000 → ~720 pas), puis remontent
+après 14 M (~5 100, ~820 pas à 20 M), toujours en hausse à la fin.
+
+**Choix du modèle**, selon une règle fixée avant la mesure : par graine, le
+checkpoint (14 M à final) qui a la meilleure survie moyenne à 15 N, sur plan et
+sur relief 0,5 (20 épisodes chacun). À égalité, on prend le plus récent. Les
+deux graines donnent **final** (100 % et 100 %).
+
+**Critères** (20 épisodes, graine 1, poussée à 3 s ; « plan » = config du
+palier 1) :
+
+| | Départ s7 | **Final s7** | Départ s42 | **Final s42** |
+|---|---|---|---|---|
+| plan, 15 N (critère ≥ 80 %) | 45 % | **100 %** | 45 % | **100 %** |
+| relief 0,5, 15 N (critère ≥ 80 %) | 25 % | **100 %** | 35 % | **100 %** |
+| plan, 10 N | 90 % | 100 % | 100 % | 100 % |
+| relief 0,5, 10 N | 70 % | 100 % | 80 % | 100 % |
+| plan, 20 N (sans seuil) | 5 % | 85 % | 5 % | 90 % |
+| relief 0,5, 20 N (sans seuil) | 0 % | 85 % | 0 % | 85 % |
+| relief maximal, sans poussée | 95 % | 95 % | 90 % | 90 % |
+| plan, sans poussée | 6/6 + M7 | **5/6 + M7** | 5/6 + M7 | 5/6 + M7 |
+
+**Le critère principal est atteint largement** : 100 % de survie à 15 N, sur
+plan comme sur relief 0,5. À 20 N, au-dessus de tout ce qui était demandé, le
+robot reste debout 85 à 90 % du temps. La survie au relief maximal ne régresse
+pas.
+
+**Une régression sur sol plat** : la dérive latérale (M6). Mesurée sur 50
+épisodes sur plan sans poussée (une politique déterministe varie peu d'un
+épisode à l'autre, la mesure est stable) :
+
+| Modèle | Dérive latérale | Vitesse |
+|---|---|---|
+| palier 2 final s7 | 0,22 m ✓ | 0,260 m/s |
+| palier 2 final s42 | 0,31 m ✗ | 0,259 m/s |
+| **palier 3 final s7** | **0,43 m ✗** | 0,227 m/s |
+| **palier 3 final s42** | **0,38 m ✗** | 0,248 m/s |
+| palier 3 s7 à 18 M | 0,12 m ✓ | 0,256 m/s |
+| palier 3 s42 à 18 M | 0,41 m ✗ | 0,271 m/s |
+
+Le critère « aucune régression : 6/6 + M7 sur plan » **n'est donc pas tenu par
+les finals**. Seul M6 manque, et M1-M5 et M7 passent. La dérive varie beaucoup
+d'un checkpoint à l'autre (0,12 à 0,61 m pour s7 entre 16 et 20 M) : rien dans
+la récompense ne la pénalise directement. Le checkpoint s7 à 18 M passe 6/6 sur
+plan et 100 % / 95 % à 15 N, mais il ne tient que 50 % / 65 % à 20 N et 90 % au
+relief maximal. Il a été repéré **après** avoir vu les résultats : ce n'est pas
+le modèle de la règle.
+
+**Correction du §4.6** : sur 20 et 50 épisodes, le final s42 du palier 2 dérive
+de 0,31 m sur plan, et fait donc 5/6 et non 6/6 (0,28 m sur les 10 épisodes
+mesurés alors).
+
+**Vidéos** (`logs/videos/2026-11-09/`) : `poppy-palier3-poussees.mp4` (montage
+avant/après pour le groupe), `p2-final-s7-plat-poussee15N.mp4` (tombe à 4,1 s),
+`p3-final-s7-plat-poussee15N.mp4`, `p3-final-s7-relief05-poussee15N.mp4`,
+`p3-final-s42-plat-poussee20N.mp4` (tiennent les 10 s), courbe
+`courbe-p3-hplaco-final.png`.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -846,6 +918,7 @@ facturé : il faut le supprimer.
 | Nuit du 8 nov. | prévu ~7 $, plafond 15 $ |
 | 8 nov. après-midi (vague H / H-Placo) | ~1,55 $ (CCX43 ~2 h, CPX62 ~2 h) |
 | 8-9 nov. soir (palier 2 sur H-Placo) | ~2,75 $ (CCX43 ~5 h 15) |
+| 9 nov. nuit (palier 3 sur H-Placo) | ~2,80 $ (CCX43 ~5 h 20) |
 
 ---
 
