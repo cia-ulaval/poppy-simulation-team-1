@@ -656,6 +656,64 @@ filme le robot **de face** et `face` (azimut 180°) **de profil**. Les vidéos
 `CAMERAS` ne sont pas corrigés : c'est à décider avec l'équipe. Les vidéos
 `*-profil.mp4` de la nuit sont à revoir avec ça en tête.
 
+### 4.6 Palier 2 sur H-Placo : sol accidenté (8-9 nov., 19:14–00:25)
+
+`configs/palier2_hplaco.yaml` : la config de H-Placo, plus le terrain (champ de
+hauteur régénéré à chaque épisode) avec un curriculum de relief de 0,1 à 1,0 sur
+14 M de pas, puis 6 M au relief maximal. 20 M de pas, `--init-from` le meilleur
+modèle H-Placo de chaque graine (7 et 42). CCX43, ~1 070 pas/s par run (le terrain
+coûte ~50 % du débit), ~2,75 $. Logs vérifiés (174 fichiers sur 174), serveur
+supprimé.
+
+**Pendant l'entraînement** : épisodes entre 940 et 1000 pas pendant la montée du
+relief, récompense en légère baisse (~7 000 → ~6 400), puis les deux remontent
+après 14 M, au relief maximal.
+
+**Survie au relief maximal** (20 épisodes, graine 1, criteres.py) :
+
+| Checkpoint | Graine 7 | Graine 42 |
+|---|---|---|
+| départ (H-Placo palier 1) | 30 % (2/6) | — |
+| 3 M | 35 % | 40 % |
+| 6 M | 60 % | 65 % |
+| 11,5 M | 75 % | 80 % |
+| 14 M | 80 % | 80 % |
+| 16 M | 90 % | 85 % |
+| 17 à 19 M | 90 % | 90 % |
+| **final (20 M)** | **95 %, 5/6 + M7** | **90 %, 5/6 + M7** |
+
+Au relief maximal, seul **M6 manque** : dérive latérale de 0,33 à 0,41 m (limite
+0,30). Vitesse 0,24 à 0,31 m/s, tronc ≥ 0,992, cap ≤ 6°, appui équilibré, bras bas.
+
+**Sur sol plat, aucune régression** (config du palier 1, 10 épisodes) : les deux
+modèles finaux font **6/6 + M7**, avec une dérive plus faible qu'au palier 1
+(0,24 et 0,28 m).
+
+**Vidéos** (`logs/videos/2026-11-08/` et `2026-11-09/`) : sur le terrain où le
+modèle du palier 1 tombe à 4,8 s, le modèle du palier 2 tient les 10 s. Sur 8
+terrains tirés au hasard, le palier 1 tombe 5 fois, le palier 2 à 10 M jamais.
+
+**Modèles de départ du palier 3**, selon la règle fixée avant la mesure
+(meilleure survie au relief maximal, puis le plus de critères, puis le plus
+récent) : **final s7** et **final s42**.
+
+**Résistance aux poussées de ces modèles** (avant tout entraînement aux
+poussées ; 20 épisodes, 10 N pendant 0,15 s à 3 s) :
+
+| | Graine 7 | Graine 42 |
+|---|---|---|
+| sol plat, 10 N | 90 % | 100 % |
+| relief 0,5, 10 N | 70 % | 80 % |
+
+Le critère du palier 3 sur sol plat (≥ 80 % à 10 N) est donc déjà atteint au
+départ ; sur relief 0,5, il manque 10 points à la graine 7. Les modèles ont
+déjà subi des « poussées » pendant tout l'entraînement : l'ancien code les
+écrit comme un couple sur le bassin, pas comme une force.
+
+**GPU** : le terrain ne passe pas sur MuJoCo Warp (6 contacts terrain–robot
+contre 24 pour MuJoCo C ; les modèles du palier 2 y survivent à 40-50 % au
+relief 0,3 contre 90 % sur CPU). Paliers 2 et 3 restent sur CPU.
+
 ## 5. Erreurs de méthode, et ce qu'on en a appris
 
 1. **Des pilotes de 2 M de pas** ne détectent pas la marche, qui apparaît
@@ -767,6 +825,7 @@ facturé : il faut le supprimer.
 | 7-8 nov., jusqu'à 01:40 | ~3,80 $ (CCX43 zero-v2 1 h 27, CPX62 4 h 37, CCX43 2 h 55) |
 | Nuit du 8 nov. | prévu ~7 $, plafond 15 $ |
 | 8 nov. après-midi (vague H / H-Placo) | ~1,55 $ (CCX43 ~2 h, CPX62 ~2 h) |
+| 8-9 nov. soir (palier 2 sur H-Placo) | ~2,75 $ (CCX43 ~5 h 15) |
 
 ---
 
