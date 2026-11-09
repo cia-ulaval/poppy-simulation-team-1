@@ -1,0 +1,134 @@
+# ============================================================
+# Poppy Humanoid — Palier 3 sur H-Placo : poussées
+#
+# Repart du meilleur modèle du palier 2 (choisi par sa mesure sur terrain,
+# pas par best_model, choisi sur sol plat). Exactement la config du palier 2
+# (configs/palier2_hplaco.yaml), une seule variable changée : les poussées.
+#   - push_as_force : une vraie force horizontale sur le bassin, à la place
+#     de l'ancien « coup » écrit comme un couple (défaut de TECHNIQUE.md §8) ;
+#   - pushes : ~5 par épisode de 10 s, 3 à 15 N pendant 0,15 s. Sur le robot
+#     simulé (2,61 kg), 10 N font +0,57 m/s ; le vrai Poppy est annoncé à
+#     3,5 kg, on garde la masse simulée (décision du lead modèle) ;
+#   - curriculum : l'intensité monte de 20 % à 100 % sur les 70 premiers %
+#     (14 M de pas), puis 6 M à pleine intensité ;
+#   - relief maximal (difficulté 1,0) d'un bout à l'autre, acquis au palier 2.
+# Inchangés : imitation Placo, restitution_in_solref, PPO, n_envs.
+#
+# Critères fixés avant le run (journal) :
+#   - ≥ 80 % sans chute après une poussée de 10 N (0,15 s, à 3 s, direction
+#     au hasard), sur sol plat et sur relief 0,5 ;
+#   - aucune régression : 6/6 + M7 sur sol plat sans poussée, et survie au
+#     relief maximal au moins égale à celle du modèle de départ.
+#
+# Usage :
+#   python scripts/train_poppy.py --config configs/palier3_hplaco.yaml \
+#     --init-from <modèle du palier 2>.zip
+# ============================================================
+algorithm: PPO
+training:
+  total_timesteps: 20000000
+  seed: 7
+  checkpoint_freq: 500000
+  eval_freq: 50000
+  n_eval_episodes: 5
+  log_dir: ./logs/palier3_hp
+environment:
+  n_envs: 8
+  frame_skip: 5
+  terminate_when_unhealthy: true
+  healthy_z_range:
+  - 0.25
+  - 0.7
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  normalize_action_space: true
+  fix_left_knee_axis: true
+  fix_arm_frames: true
+  gait_period: 0.7
+  reference_init: 0.75
+domain_randomization:
+  enabled: true
+  friction_range:
+  - 0.4
+  - 2.0
+  restitution_range:
+  - 0.0
+  - 0.5
+  restitution_in_solref: false
+  push_as_force: true
+reward:
+  imitation_pos_weight: 2.0
+  imitation_pos_scale: 5.0
+  imitation_upper_weight: 0.5
+  imitation_vel_weight: 0.5
+  imitation_vel_scale: 0.05
+  imitation_contact_weight: 1.0
+  imitation_base_weight: 1.0
+  imitation_height_scale: 200.0
+  imitation_tilt_scale: 20.0
+  forward_weight: 0.0
+  max_forward_vel: 0.8
+  vel_tracking_weight: 1.5
+  target_vel: 0.25
+  vel_tracking_sigma: 0.2
+  vel_tracking_tau: 1.0
+  healthy: 0.5
+  upright_weight: 0.25
+  torso_upright_weight: 0.25
+  torso_tilt_weight: 5.0
+  yaw_rate_weight: 20.0
+  yaw_rate_tau: 2.0
+  lateral_weight: 0.5
+  joint_limit_weight: 2.0
+  joint_limit_soft: 0.95
+  feet_slide_weight: 0.25
+  base_height_weight: 0.0
+  ang_vel_xy_weight: 0.0
+  phase_contact_weight: 0.0
+  gait_single: 0.0
+  gait_double: 0.0
+  air_time_weight: 0.0
+  ctrl_weight: 0.0
+  action_rate_weight: 0.5
+  joint_vel_weight: 0.001
+ppo:
+  learning_rate: 2.5e-05
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+  symmetry_loss_weight: 1.0
+  target_kl: 0.03
+network:
+  hidden_layers:
+  - 256
+  - 256
+  activation: relu
+  log_std_init: -2
+  ortho_init: false
+figs_dir: ./figs/palier3_hp
+terrain:
+  enabled: true
+  difficulty: 1.0
+  size: 20.0
+  resolution: 0.05
+  slope_amplitude: 0.05
+  bump_height: 0.04
+  step_height: 0.03
+  roughness: 0.005
+  flat_radius: 0.6
+pushes:
+  probability: 0.005    # par pas sans poussée en cours : ~5 par épisode de 10 s
+  force_range: [3.0, 15.0]
+  duration: 0.15
+  scale: 0.2            # départ ; le curriculum le fait monter
+curriculum:
+  push_scale: [0.2, 1.0]
+  ramp_fraction: 0.7
