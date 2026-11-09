@@ -36,6 +36,7 @@ from src.config import load_yaml, make_poppy_env_config
 from src.environments.env_factory import make_eval_env, single_env
 from src.environments.floor_display import color_floor
 from src.environments.poppy_humanoid_env import CAMERAS
+from src.environments.push_display import PushMarker
 
 # Ordre d'essai pour retrouver l'algorithme d'un fichier .zip. Stable-Baselines3
 # n'y enregistre pas son nom de façon exploitable : PPO et A2C partagent la même
@@ -322,6 +323,8 @@ def run_episodes(
             bare = single_env(env).unwrapped
             color_floor(bare, bare._friction_range)
     tint_floor()
+    # Poussées visibles : flèche cyan qui arrive sur le bassin, et impact.
+    push_marker = PushMarker(dt) if video_path is not None else None
 
     while len(episodes) < n_episodes:
         if push is not None and steps == push_step:
@@ -338,7 +341,10 @@ def run_episodes(
                 current[key].append(float(value))
         current["reward"].append(float(rewards[0]))
 
-        if video_path is not None and not episodes:
+        if push_marker is not None and not episodes:
+            bare = single_env(env).unwrapped
+            push_marker.update(bare.data)
+            push_marker.draw(bare.mujoco_renderer._get_viewer(bare.render_mode), bare.data)
             frames.append(single_env(env).render())
 
         if dones[0]:
