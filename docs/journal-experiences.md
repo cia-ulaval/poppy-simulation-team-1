@@ -617,7 +617,7 @@ appui 0,7 pt, latéral 0,12 m.
 
 **Conclusions** :
 - **H-Placo est le premier candidat qui passe 6/6 + M7 sur les deux graines**,
-  et presque à chaque checkpoint (9 points sur 10). C'est la variante la plus
+  et presque à chaque checkpoint (8 points sur 10 : la graine 42 rate 2,5 M et 7,5 M de peu). C'est la variante la plus
   reproductible mesurée jusqu'ici ; la référence n'est plus une graine
   chanceuse.
 - **H tient debout partout mais dérive de côté** (M6 raté à 8 points sur 10),
