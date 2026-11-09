@@ -20,6 +20,10 @@ sur cette marche (``reference_init``), les bras orientés comme l'URDF
 (``normalize_action_space``). La référence est **lue** sur la
 ``PoppyHumanoidEnv`` CPU, comme le reste ; elle n'est pas rechargée ici.
 
+Palier 2 : le sol à relief est un champ de hauteur en tuiles, une par
+environnement (``gpu/terrain.py``) ; la hauteur du sol sous le bassin entre
+dans la terminaison, le terme ``healthy`` et l'imitation, comme sur CPU.
+
 Les grandeurs dérivées (``xpos``, ``xmat``, ``cfrc_ext``) lues par la
 récompense ont un sous-pas de retard sur ``qpos``, exactement comme dans
 Gymnasium, qui ne refait pas ``mj_forward`` après ``mj_step``. Les
@@ -59,7 +63,8 @@ from mjlab.managers.event_manager import requires_model_fields
 from mjlab.scene import SceneCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 
-from src.config.settings import PoppyEnvironmentConfig
+from gpu.terrain import TiledTerrain, TileLayout, add_tiled_terrain
+from src.config.settings import PoppyEnvironmentConfig, TerrainConfig
 from src.environments.poppy_humanoid_env import (
     _ARM_FRAME_RPY,
     _CONTACT_THRESHOLD,
@@ -126,9 +131,8 @@ def check_supported(config: PoppyEnvironmentConfig) -> None:
     """Refuse les options que ce portage ne reproduit pas encore.
 
     Mieux vaut échouer au lancement qu'entraîner silencieusement une autre
-    physique : le sol accidenté (palier 2) et les deux corrections de
-    ``docs/TECHNIQUE.md`` §8 (restitution dans ``solref``, poussée en force)
-    ne sont pas portés.
+    physique : les deux corrections de ``docs/TECHNIQUE.md`` §8 (restitution
+    dans ``solref``, poussée en force) ne sont pas portées.
 
     Raises:
         NotImplementedError: Si la configuration en demande une.
@@ -136,7 +140,6 @@ def check_supported(config: PoppyEnvironmentConfig) -> None:
     dr = config.domain_randomization
     missing = [
         name for name, used in (
-            ("terrain.enabled", config.terrain.enabled),
             ("domain_randomization.restitution_in_solref", dr.restitution_in_solref),
             ("domain_randomization.push_as_force", dr.push_as_force),
         ) if used
@@ -148,11 +151,16 @@ def check_supported(config: PoppyEnvironmentConfig) -> None:
         )
 
 
-def _poppy_spec(fix_left_knee_axis: bool, fix_arm_frames: bool = False) -> mujoco.MjSpec:
+def _poppy_spec(
+    fix_left_knee_axis: bool,
+    fix_arm_frames: bool = False,
+    terrain: TerrainConfig | None = None,
+    layout: TileLayout | None = None,
+) -> mujoco.MjSpec:
     """Charge le MJCF Poppy, corrigé comme dans ``PoppyHumanoidEnv._initialize_simulation``.
 
-    Genou gauche retourné, et épaules orientées comme l'URDF (même quaternion,
-    calculé par la même fonction que sur CPU).
+    Genou gauche retourné, épaules orientées comme l'URDF (même quaternion,
+    calculé par la même fonction que sur CPU), et sol à relief en tuiles.
     """
     spec = mujoco.MjSpec.from_file(str(_MODEL_PATH))
     if fix_left_knee_axis:
@@ -163,6 +171,8 @@ def _poppy_spec(fix_left_knee_axis: bool, fix_arm_frames: bool = False) -> mujoc
             body = spec.body(body_name)
             body.alt.type = mujoco.mjtOrientation.mjORIENTATION_QUAT
             body.quat = _urdf_rpy_to_quat(rpy)
+    if terrain is not None and terrain.enabled:
+        add_tiled_terrain(spec, terrain, layout)
     return spec
 
 
@@ -313,6 +323,10 @@ class PoppyState:
     reference: ReferenceTables | None = None
     reference_init: float = 0.0
     leg_mask: torch.Tensor | None = None  # (25,) articulations des jambes
+    # Palier 2 : sol à relief en tuiles (None sur sol plat).
+    terrain: TiledTerrain | None = None
+    terrain_geom_id: int = -1
+    terrain_offset: torch.Tensor | None = None  # (N, 2) position du geom par monde
     # Tampons, (N, …).
     action: torch.Tensor = field(init=False)
     prev_action: torch.Tensor = field(init=False)
@@ -387,6 +401,7 @@ def build_state(
             )
 
         floor = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, f"{ROBOT}/floor")
+        terrain_geom = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, f"{ROBOT}/terrain")
         reference = None
         if ref._reference is not None:
             r = ref._reference
@@ -425,6 +440,7 @@ def build_state(
             reference=reference,
             reference_init=float(ref._reference_init),
             leg_mask=torch.as_tensor(ref._leg_mask, device=device),
+            terrain_geom_id=terrain_geom,
         )
     finally:
         ref.close()
@@ -452,6 +468,16 @@ class PoppyPdAction(ActionTerm):
         super().__init__(cfg, env)
         state = build_state(cfg.config, env.sim.mj_model, env.device)
         state.allocate(env.num_envs, env.device)
+        terrain_cfg = cfg.config.terrain
+        if terrain_cfg.enabled:
+            layout = TileLayout.for_envs(terrain_cfg, env.num_envs)
+            hfield = mujoco.mj_name2id(env.sim.mj_model, mujoco.mjtObj.mjOBJ_HFIELD,
+                                       f"{ROBOT}/terrain")
+            state.terrain = TiledTerrain(
+                terrain_cfg, layout, env.sim.model.hfield_data,
+                int(env.sim.mj_model.hfield_adr[hfield]))
+            state.terrain_offset = layout.geom_offset(
+                torch.arange(env.num_envs, device=env.device))
         env.poppy_state = state  # type: ignore[attr-defined]
         self._state = state
         self._raw = torch.zeros((env.num_envs, _N_JOINTS), device=env.device)
@@ -565,8 +591,17 @@ def poppy_fallen(env: ManagerBasedRlEnv) -> torch.Tensor:
     s = poppy_state(env)
     if not s.terminate_when_unhealthy:
         return torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
-    z = env.sim.data.qpos[:, 2]
+    qpos = env.sim.data.qpos
+    z = qpos[:, 2] - ground_height(s, qpos)
     return ~((s.healthy_z[0] < z) & (z < s.healthy_z[1]))
+
+
+def ground_height(s: PoppyState, qpos: torch.Tensor) -> torch.Tensor:
+    """``_ground_height`` : hauteur du sol sous le bassin ``(N,)``, 0 sur sol plat."""
+    if s.terrain is None:
+        return torch.zeros(qpos.shape[0], device=qpos.device)
+    ids = torch.arange(qpos.shape[0], device=qpos.device)
+    return s.terrain.height_at(ids, qpos[:, 0:2])
 
 
 # ── Récompense : tous les termes de PoppyHumanoidEnv.step ──────────────────
@@ -611,6 +646,7 @@ class PoppyReward:
             feet_xy=data.xpos[:, s.feet_ids, 0:2],
             foot_force=torch.linalg.norm(data.cfrc_ext[:, s.feet_ids, 3:6], dim=-1),
             phase=phase,
+            ground=ground_height(s, data.qpos),
         )
 
 
@@ -634,6 +670,7 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
     feet_xy: torch.Tensor,
     foot_force: torch.Tensor,
     phase: torch.Tensor | None,
+    ground: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Récompense d'un pas, à partir des grandeurs que lit ``PoppyHumanoidEnv.step``.
 
@@ -651,6 +688,7 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
         feet_xy: ``(N, 2, 2)`` position horizontale des pieds (droit, gauche), m.
         foot_force: ``(N, 2)`` norme de la force de contact des pieds, N.
         phase: ``(N,)`` phase de l'horloge après le pas, ou ``None`` sans horloge.
+        ground: ``(N,)`` hauteur du sol sous le bassin, m (``None`` : sol plat).
 
     Returns:
         ``(N,)`` la récompense ; le détail va dans ``s.info``.
@@ -682,9 +720,11 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
     else:
         vel_tracking_reward = torch.zeros_like(forward_vel)
 
-    # Debout, verticalité du bassin.
+    # Debout (au-dessus du sol sous le bassin), verticalité du bassin.
     z = qpos[:, 2]
-    healthy = (s.healthy_z[0] < z) & (z < s.healthy_z[1])
+    if ground is None:
+        ground = torch.zeros_like(z)
+    healthy = (s.healthy_z[0] < z - ground) & (z - ground < s.healthy_z[1])
     healthy_reward = torch.where(healthy, w.healthy, 0.0)
     quat = qpos[:, 3:7]
     uprightness = 1.0 - 2.0 * (quat[:, 1] ** 2 + quat[:, 2] ** 2)
@@ -768,7 +808,8 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
     # Imitation de la marche de référence, à la phase après le pas.
     imitation_reward = torch.zeros_like(z)
     if s.reference is not None and w.uses_imitation and phase is not None:
-        imitation_reward = _imitation_reward(s, qpos, qvel, pelvis_rot, in_contact, phase)
+        imitation_reward = _imitation_reward(
+            s, qpos, qvel, pelvis_rot, in_contact, phase, ground)
         reward = reward + imitation_reward
 
     s.info = {
@@ -800,12 +841,13 @@ def _imitation_reward(
     pelvis_rot: torch.Tensor,
     in_contact: torch.Tensor,
     phase: torch.Tensor,
+    ground: torch.Tensor,
 ) -> torch.Tensor:
     """``PoppyHumanoidEnv._imitation_reward`` en lot, terme pour terme.
 
     Noyaux exponentiels sur les angles des jambes et du haut du corps, les
-    vitesses des jambes, les contacts des pieds, la hauteur et l'inclinaison
-    du bassin (sol plat : hauteur du sol nulle).
+    vitesses des jambes, les contacts des pieds, la hauteur du bassin au-dessus
+    du sol et son inclinaison.
 
     Returns:
         ``(N,)`` la somme des termes d'imitation actifs.
@@ -829,7 +871,7 @@ def _imitation_reward(
     if w.imitation_base_weight > 0.0:
         height_ref, _, up_ref = ref.base_at(phase)
         up = pelvis_rot[:, 2, :]
-        dz = qpos[:, 2] - height_ref
+        dz = qpos[:, 2] - ground - height_ref
         total = total + w.imitation_base_weight * torch.exp(
             -w.imitation_height_scale * dz ** 2
             - w.imitation_tilt_scale * ((up - up_ref) ** 2).sum(-1))
@@ -837,7 +879,11 @@ def _imitation_reward(
 
 
 def reference_start(
-    s: PoppyState, qpos: torch.Tensor, qvel: torch.Tensor, phase: torch.Tensor
+    s: PoppyState,
+    qpos: torch.Tensor,
+    qvel: torch.Tensor,
+    phase: torch.Tensor,
+    ground: torch.Tensor | None = None,
 ) -> None:
     """``PoppyHumanoidEnv._reference_start`` en lot, sur place.
 
@@ -849,12 +895,13 @@ def reference_start(
         qpos: ``(n, nq)`` état initial tiré, modifié.
         qvel: ``(n, nv)``, modifié.
         phase: ``(n,)`` phases tirées, dans [0, 1).
+        ground: ``(n,)`` hauteur du sol sous le bassin, m (``None`` : 0).
     """
     ref = s.reference
     q_ref, qd_ref = ref.joints_at(phase)
     height, quat_ref, _ = ref.base_at(phase)
     qpos[:, 7:] = q_ref + (qpos[:, 7:] - s.init_qpos[7:])
-    qpos[:, 2] = height
+    qpos[:, 2] = height if ground is None else height + ground
     heading = qpos[:, 3:7] / torch.linalg.norm(qpos[:, 3:7], dim=-1, keepdim=True)
     qpos[:, 3:7] = _quat_mul(heading, quat_ref)
     qvel[:, 6:] = qd_ref + qvel[:, 6:]
@@ -865,7 +912,7 @@ def reference_start(
 # ── Reset et randomisation de domaine ──────────────────────────────────────
 
 
-@requires_model_fields("geom_friction", "geom_solimp", "body_mass")
+@requires_model_fields("geom_friction", "geom_solimp", "body_mass", "geom_pos")
 def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     """``reset_model`` : état initial bruité, lacet, sol et masses randomisés.
 
@@ -881,6 +928,10 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     référence à une phase tirée au hasard (:func:`reference_start`) ; leur
     horloge et leur vitesse filtrée partent de cette phase et de la vitesse
     de la référence, comme sur CPU.
+
+    Palier 2 : la tuile de chaque environnement remis à zéro est retirée en
+    premier, à la difficulté courante, comme dans ``reset_model`` ; friction et
+    ``solimp`` vont au plan et au terrain, comme dans ``_randomize_floor``.
     """
     s = poppy_state(env)
     if env_ids is None:
@@ -890,6 +941,9 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     data = env.sim.data
     model = env.sim.model
     nq, nv = s.init_qpos.shape[0], data.qvel.shape[1]
+    if s.terrain is not None:
+        s.terrain.regenerate(env_ids)
+        model.geom_pos[env_ids, s.terrain_geom_id, 0:2] = s.terrain_offset[env_ids]
 
     def uniform(low: float, high: float, *shape: int) -> torch.Tensor:
         return torch.empty((n, *shape), device=device).uniform_(low, high)
@@ -907,7 +961,10 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
         start = torch.rand(n, device=device) < s.reference_init
         phase = torch.rand(n, device=device)
         moved_qpos, moved_qvel = qpos.clone(), qvel.clone()
-        reference_start(s, moved_qpos, moved_qvel, phase)
+        ground = None
+        if s.terrain is not None:
+            ground = s.terrain.height_at(env_ids, qpos[:, 0:2])
+        reference_start(s, moved_qpos, moved_qvel, phase, ground)
         qpos = torch.where(start[:, None], moved_qpos, qpos)
         qvel = torch.where(start[:, None], moved_qvel, qvel)
         s.phase_offset[env_ids] = torch.where(start, phase, 0.0)
@@ -918,12 +975,14 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     data.ctrl[env_ids] = 0.0
 
     if s.floor_noise:
-        floor = s.floor_geom_id
         friction = uniform(*s.friction_range)
-        model.geom_friction[env_ids, floor] = torch.stack(
-            [friction, 0.005 * friction, 0.0001 * friction], dim=-1
-        )
-        model.geom_solimp[env_ids, floor, 4] = uniform(*s.restitution_range)
+        restitution = uniform(*s.restitution_range)
+        floors = [s.floor_geom_id] + ([s.terrain_geom_id] if s.terrain is not None else [])
+        for floor in floors:
+            model.geom_friction[env_ids, floor] = torch.stack(
+                [friction, 0.005 * friction, 0.0001 * friction], dim=-1
+            )
+            model.geom_solimp[env_ids, floor, 4] = restitution
         nbody = s.init_body_mass.shape[0]
         scale = uniform(*_MASS_SCALE, nbody - 1)
         model.body_mass[env_ids, 1:] = s.init_body_mass[1:] * scale
@@ -958,9 +1017,11 @@ def make_env_cfg(
 
     fix_knee = config.fix_left_knee_axis
     fix_arms = config.fix_arm_frames
+    terrain = config.terrain if config.terrain.enabled else None
+    layout = TileLayout.for_envs(terrain, num_envs) if terrain is not None else None
     # La pose initiale vient de poppy_reset ; init_state ne sert qu'au keyframe
     # que mjlab ajoute à la scène, et que rien ici ne relit.
-    robot = EntityCfg(spec_fn=lambda: _poppy_spec(fix_knee, fix_arms))
+    robot = EntityCfg(spec_fn=lambda: _poppy_spec(fix_knee, fix_arms, terrain, layout))
 
     return ManagerBasedRlEnvCfg(
         decimation=config.frame_skip,
@@ -1007,6 +1068,7 @@ __all__ = [
     "PoppyState",
     "ReferenceTables",
     "check_supported",
+    "ground_height",
     "make_env_cfg",
     "option_fields",
     "poppy_observation",

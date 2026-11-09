@@ -1,0 +1,21 @@
+# ============================================================
+# Palier 2 sur H-Placo, porté sur GPU (mjlab + MuJoCo Warp + rsl_rl).
+#
+# Tout ce qu'on apprend vient de base_config, le YAML exact des runs
+# Hetzner p2_hp_s{7,42} : H-Placo à l'identique, plus le terrain (champ de
+# hauteur retiré à chaque reset) et le curriculum de difficulté 0,1 → 1,0
+# sur 70 % de 20 M de pas. Comme sur CPU, l'entraînement repart du
+# best_model H-Placo de la même graine : --init-from.
+# ============================================================
+
+base_config: configs/palier2_hplaco.yaml
+
+gpu:
+  # 256 × 16 = 4096 transitions par mise à jour, comme les 8 × 512 du CPU :
+  # le curriculum avance donc au même rythme, collecte par collecte.
+  # 256 tuiles de 20 m font un champ de hauteur de 165 Mo (gpu/terrain.py).
+  num_envs: 256
+  num_steps_per_env: 16
+  # Un checkpoint tous les ~500 000 pas, comme training.checkpoint_freq :
+  # la comparaison se fait checkpoint par checkpoint avec les runs CPU.
+  checkpoint_freq: 500_000

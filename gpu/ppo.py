@@ -66,6 +66,13 @@ class _AdamPair:
     def state(self) -> dict:
         return {k: v for opt in self.parts for k, v in opt.state.items()}
 
+    def owner(self, param: torch.nn.Parameter) -> torch.optim.Adam:
+        """L'Adam qui tient ``param``."""
+        for opt in self.parts:
+            if any(p is param for g in opt.param_groups for p in g["params"]):
+                return opt
+        raise KeyError("paramètre inconnu des deux Adam")
+
     def zero_grad(self, set_to_none: bool = False) -> None:
         for opt in self.parts:
             opt.zero_grad(set_to_none=set_to_none)
@@ -248,11 +255,18 @@ class SB3PPO(PPO):
         self._idx = torch.arange(mini, device=dev)
 
     def _capture(self) -> None:
-        """Capture les morceaux du pas, sans modifier les poids ni l'état d'Adam."""
+        """Capture les morceaux du pas, sans modifier les poids ni l'état d'Adam.
+
+        Un état d'Adam déjà présent (repris d'un modèle SB3, ``--init-from``)
+        est restauré tel quel après l'échauffement ; celui que l'échauffement
+        crée est remis à zéro.
+        """
         bodies = {"grad": self._ppo_grad, "step": self._ppo_step}
         if self._mirror is not None:
             bodies["sym"] = self._sym_step
         saved = [p.detach().clone() for p in self._params]
+        saved_state = {id(p): {k: v.clone() for k, v in st.items()}
+                       for p, st in self.optimizer.state.items()}
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):
@@ -270,9 +284,13 @@ class SB3PPO(PPO):
         with torch.no_grad():
             for p, value in zip(self._params, saved, strict=True):
                 p.copy_(value)
-            for state in self.optimizer.state.values():
-                for tensor in state.values():
-                    tensor.zero_()
+            for p, state in self.optimizer.state.items():
+                before = saved_state.get(id(p), {})
+                for key, tensor in state.items():
+                    if key in before:
+                        tensor.copy_(before[key].to(tensor.device, tensor.dtype).reshape(tensor.shape))
+                    else:
+                        tensor.zero_()
 
     def _run(self, name: str) -> None:
         if self._graphs is not None:

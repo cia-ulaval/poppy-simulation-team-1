@@ -4,12 +4,18 @@ Usage (image GPU) ::
 
     python -m gpu.train --config gpu/configs/exp_a.yaml
     python -m gpu.train --config gpu/configs/exp_a.yaml --num-envs 64 --timesteps 200000
+    python -m gpu.train --config gpu/configs/palier2_hplaco.yaml --seed 7 \
+        --init-from logs/hetzner/poppy-hplaco/exp_hp_s7/<run>/best_model/best_model.zip
 
 L'environnement, la récompense et la randomisation viennent du YAML CPU
 désigné par ``base_config``. Ses sections ``ppo`` et ``network`` sont
 traduites en réglages rsl_rl, terme à terme (voir :func:`runner_cfg`).
 Les checkpoints ``model_<itération>.pt`` contiennent les statistiques de
 normalisation ; ``gpu/export_sb3.py`` les convertit en ``.zip`` SB3.
+
+Comme ``train_poppy.py`` : ``--init-from`` repart d'un modèle SB3
+(``gpu/import_sb3.py``), et la section ``curriculum:`` du YAML fait monter la
+difficulté du terrain avec l'avancement, réglée avant chaque collecte.
 """
 
 from __future__ import annotations
@@ -25,9 +31,11 @@ import yaml
 from mjlab.envs import ManagerBasedRlEnv
 from rsl_rl.runners import OnPolicyRunner
 
-from gpu.poppy_env import make_env_cfg
+from gpu.import_sb3 import load_into
+from gpu.poppy_env import make_env_cfg, poppy_state
 from gpu.vecnormalize import OBS_GROUP, VecNormalizeWrapper
 from src.config import load_yaml, make_poppy_env_config
+from src.training.curriculum import CurriculumConfig
 
 _ACTIVATIONS = {"relu": "relu", "tanh": "tanh", "elu": "elu"}
 
@@ -134,6 +142,44 @@ class PoppyRunner(OnPolicyRunner):
         super().save(path, infos)
 
 
+def install_curriculum(runner: PoppyRunner, curriculum: CurriculumConfig, total: int) -> None:
+    """``CurriculumCallback`` : difficulté réglée avant chaque collecte.
+
+    Sur CPU, ``_on_rollout_start`` lit ``num_timesteps / total_timesteps``
+    avant chaque collecte de 4096 transitions. Ici, la première collecte part
+    de l'avancement 0, et chaque mise à jour fixe la difficulté de la
+    collecte suivante. La difficulté est prise en compte aux resets suivants.
+
+    Raises:
+        NotImplementedError: Pour ``push_scale``, pas porté.
+    """
+    if curriculum.push_scale is not None:
+        raise NotImplementedError("curriculum.push_scale n'est pas porté sur GPU.")
+    if curriculum.terrain_difficulty is None:
+        return
+    state = poppy_state(runner.env.unwrapped)
+    if state.terrain is None:
+        raise ValueError("curriculum.terrain_difficulty sans terrain activé.")
+    batch = runner.env.num_envs * runner.cfg["num_steps_per_env"]
+    done = {"steps": 0}
+
+    def apply() -> float:
+        value = curriculum.at(done["steps"] / total)["terrain_difficulty"]
+        state.terrain.difficulty = float(value)
+        return float(value)
+
+    apply()
+    update = runner.alg.update
+
+    def update_then_advance() -> dict[str, float]:
+        out = update()
+        done["steps"] += batch
+        out["terrain_difficulty"] = apply()
+        return out
+
+    runner.alg.update = update_then_advance
+
+
 def build(
     gpu_cfg: dict, base_cfg: dict, num_envs: int, seed: int, device: str
 ) -> VecNormalizeWrapper:
@@ -161,6 +207,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--log-dir", type=Path, default=None)
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--init-from", type=Path, default=None,
+                        help="Repart d'un modèle SB3 (.zip) : poids, Adam, normalisation des observations")
     return parser.parse_args()
 
 
@@ -182,9 +230,16 @@ def main() -> None:
     (log_dir / "config.json").write_text(json.dumps(
         {"gpu_config": str(args.config), "base_config": gpu_cfg["base_config"],
          "num_envs": num_envs, "num_steps_per_env": num_steps, "iterations": iterations,
-         "seed": seed, "runner": cfg}, indent=2, default=str), encoding="utf-8")
+         "seed": seed, "init_from": str(args.init_from) if args.init_from else None,
+         "runner": cfg}, indent=2, default=str), encoding="utf-8")
 
     runner = PoppyRunner(env, cfg, log_dir=str(log_dir), device=args.device)
+    if args.init_from is not None:
+        copied = load_into(runner, args.init_from)
+        print(f"Init from {args.init_from} : {copied}")
+    curriculum = CurriculumConfig.from_yaml(base_cfg.get("curriculum"))
+    if curriculum is not None:
+        install_curriculum(runner, curriculum, timesteps)
     start = time.time()
     runner.learn(num_learning_iterations=iterations)
     elapsed = time.time() - start
