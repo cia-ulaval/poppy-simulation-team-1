@@ -182,7 +182,7 @@ def test_cuda_graph_update_equals_eager_update(env) -> None:
     runner = PoppyRunner(wrapper, cfg, log_dir=None, device=_DEVICE)
     runner.learn(num_learning_iterations=1)  # capture le graphe et fait une mise à jour
     alg = runner.alg
-    assert alg._graph is not None
+    assert alg._graphs is not None
 
     def snapshot() -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         params = [p.detach().clone() for p in alg._params]
@@ -205,7 +205,8 @@ def test_cuda_graph_update_equals_eager_update(env) -> None:
     start = snapshot()
     for idx in ([0, 3, 5, 7, 9, 11, 13, 15], [1, 2, 4, 6, 8, 10, 12, 14]):
         alg._idx.copy_(torch.tensor(idx, device=_DEVICE))
-        alg._graph.replay()
+        alg._graphs["grad"].replay()
+        alg._graphs["step"].replay()
     graph_params = [p.detach().clone() for p in alg._params]
     restore(*start)
     for idx in ([0, 3, 5, 7, 9, 11, 13, 15], [1, 2, 4, 6, 8, 10, 12, 14]):
