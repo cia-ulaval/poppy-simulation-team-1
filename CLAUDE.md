@@ -74,10 +74,17 @@ Preuve que la physique et la récompense n'ont pas bougé :
 git diff archive/avant-clean-2026-09-18 -- assets configs
 ```
 
-Sur `configs`, ce diff doit être **vide**. Sur `assets`, il ne doit montrer que le
-damier du sol, qui ne touche qu'au rendu : la `texture` `floor_checker`, le
-`material` `floor_mat`, et sur le geom `floor` l'attribut `material` à la place de
-`rgba`. `src/environments/poppy_humanoid_env.py` n'y est plus :
+Sur `configs` comme sur `assets`, des fichiers **ajoutés** sont permis (configs
+d'expériences des paliers, marche de référence Placo) ; aucun fichier existant ne
+doit changer, sauf `poppy_humanoid.xml`, dont le diff ne doit toucher qu'au rendu :
+- le damier du sol : la `texture` `floor_checker`, le `material` `floor_mat`, et sur
+  le geom `floor` l'attribut `material` à la place de `rgba` ;
+- les couleurs du robot : les `material` `red_piece_mat`, `yellow_piece_mat` et
+  `black_motor_mat`, l'attribut `material` à la place de `rgba` sur les geoms `_v`,
+  et `group="3"` sur les geoms `_c`, pour que les maillages de collision ne soient
+  plus dessinés par-dessus.
+
+`src/environments/poppy_humanoid_env.py` n'y est plus :
 il a reçu les réglages de caméra, qui ne touchent qu'au rendu. Un diff sur ce fichier
 ne doit montrer que le bloc `CAMERAS`, l'argument `default_camera_config` et la ligne
 `camera_id = None`.
