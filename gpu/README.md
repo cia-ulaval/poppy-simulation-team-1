@@ -8,7 +8,7 @@ et H-Placo, candidat principal du palier 1 (imitation de la marche Placo,
 bras corrigés, `gpu/configs/h_placo_cpu.yaml`). Le chemin CPU
 (`scripts/train_poppy.py`) n'est pas touché.
 
-> **État au 8 novembre 2026 : deux portes de parité passées sur la RTX 3050.**
+> **État au 8 novembre 2026 : deux portes de parité passées sur la RTX 3050 (sol plat) ; le terrain du palier 2 est porté mais échoue à la porte croisée (voir la fin).**
 > Le témoin A porté atteint 5/6 sur M1–M6 (7, 8 et 9 M de pas), comme A sur CPU.
 > H-Placo porté atteint 6/6 + M7 aux meilleurs modèles des deux graines, et à 8
 > checkpoints sur 10, comme H-Placo sur CPU. Chaque run de 10 M de pas prend
@@ -97,11 +97,18 @@ pas les droits d'écriture (vidéo, `--json`).
 | `export_sb3.py` | Checkpoint rsl_rl → `.zip` SB3 + `_vecnormalize.pkl` |
 | `criteres.py` | M1–M7 du journal (§2) sur le banc CPU ; choix du meilleur checkpoint |
 | `parite.py` | Parité modèle, dynamique et randomisation, CPU contre GPU |
+| `sonde_champ.py` | Contacts pied-sol MuJoCo C contre MuJoCo Warp, champ plat et plan |
 | `configs/exp_a.yaml` | Le témoin A : désigne le YAML CPU, ne fixe que la répartition GPU |
 | `configs/h_placo.yaml` | H-Placo, même principe |
 | `configs/h_placo_cpu.yaml` | Configuration CPU exacte des runs Hetzner d'H-Placo, jamais versionnée jusqu'ici |
 | `tests/test_portage.py` | 8 tests (image GPU), témoin A |
 | `tests/test_h_placo.py` | 12 tests (image GPU), H-Placo |
+| `terrain.py` | Terrain du palier 2 en tuiles : un champ partagé, une tuile par environnement |
+| `eval_gpu.py` | Évalue un modèle SB3 dans le simulateur GPU, mêmes critères que `criteres.py` |
+| `import_sb3.py` | `--init-from` : poids, état d'Adam et normalisation d'un `.zip` SB3 |
+| `configs/palier2_hplaco.yaml` | Palier 2 sur H-Placo |
+| `tests/test_terrain.py` | 12 tests (image GPU), terrain, curriculum, `--init-from` |
+| `runpod/` | Kit pour un run de test sur une carte louée ([README](runpod/README.md)) |
 
 ## Ce qui est reproduit, et comment c'est vérifié
 
@@ -253,9 +260,10 @@ normalisation comprise (`test_sb3_export_reproduces_policy`).
    (`gpu/criteres.py --select-best`). Sur CPU, il est cherché tous les
    50 000 pas, pendant l'entraînement.
 
-Non portés, et refusés au lancement plutôt que simulés de travers : le sol
-accidenté (`terrain`), `restitution_in_solref`, `push_as_force`, un taux
-d'apprentissage variable.
+Non portés, et refusés au lancement plutôt que simulés de travers :
+`restitution_in_solref`, `push_as_force`, un taux d'apprentissage variable. Le
+sol accidenté du palier 2 est porté, mais son contact diffère beaucoup plus que
+celui du sol plat : voir [Terrain du palier 2](#terrain-du-palier-2).
 
 ## Débit
 
@@ -419,3 +427,112 @@ Exports, `best.log`, `criteres.md` : `logs/gpu/h_placo_256x16_s42/`,
 proche des 8 × 512 du CPU. La commande d'entraînement plus haut, celle qui a
 passé la porte au plus grand nombre de checkpoints et qui est 1,5 fois plus
 rapide, précise `--num-envs 256 --steps-per-env 16`.
+
+## Terrain du palier 2
+
+> **État au 8 novembre 2026 : porté et vérifié, mais la porte croisée échoue.**
+> Le relief, la hauteur du sol et la récompense sont ceux du CPU. Le contact
+> pied-champ de MuJoCo Warp, lui, n'est pas celui de MuJoCo C. Les politiques
+> CPU du palier 2 y perdent la moitié de leur survie, dès la difficulté 0. Le
+> run de 20 M sur GPU n'est pas lancé.
+
+### Construction
+
+- **Un seul champ** (`hfield`) pour tous les environnements. MuJoCo Warp
+  partage `hfield_data` entre les mondes.
+- **T × T tuiles** de 401 × 401 cases, soit 20 m à 0,05 m, avec T = ⌈√N⌉.
+- **Décalage par monde :** le geom du champ est décalé dans chaque monde
+  (`geom_pos` **et** `geom_xpos`) pour centrer la tuile *i* sous le robot *i*.
+  Le robot part en (0, 0), comme sur CPU.
+- **Reset :** chaque reset régénère la tuile de l'environnement.
+- **Génération du relief :** même formule que `generate_heights`.
+  - Les bosses et les marches sont séparables en x et y, les ondes de rang 4 :
+    tout se calcule en `bmm`, sans TF32.
+  - Environ 1 ms par tuile en lot.
+- **Curriculum :** la difficulté est fixée avant chaque collecte, comme
+  `CurriculumCallback`.
+- **`--init-from` :** reprend les poids, l'état d'Adam et `obs_rms` d'un
+  `.zip` SB3, comme `load_pretrained`.
+
+> Piège : MuJoCo Warp ne calcule `geom_xpos` des geoms statiques qu'une fois,
+> dans `make_data`. Écrire `geom_pos` ne déplace que ce que lit la récompense.
+> Sans la ligne `geom_xpos` du reset, tous les robots marchent sur la même zone
+> du champ. `test_contacts_land_on_the_world_tile` le verrouille.
+
+### Ce qui est vérifié (`tests/test_terrain.py`)
+
+| Propriété | Écart |
+|---|---|
+| Relief, mêmes tirages, d = 0,1 / 0,6 / 1,0 | < 1e-9 m |
+| Loi des tirages torch contre numpy (écart type, extrêmes, part plate) | < 10 % |
+| Surface sous le robot, mesurée par MuJoCo C (`mj_rayHfield`) sur la scène en tuiles | < 1e-5 m |
+| Hauteur du sol lue par la récompense | < 1e-5 m |
+| Contacts de MuJoCo Warp sur la tuile de leur monde | médiane < 3 mm |
+| Récompense sur terrain, terme à terme, sur données MuJoCo C | < 1e-3 |
+| Curriculum, `--init-from` (13/13 états d'Adam, normalisation) | exact |
+
+### Porte croisée : modèles CPU dans le simulateur GPU
+
+Les checkpoints CPU du palier 2 à 9 M (Hetzner) sont rejoués par
+`gpu/eval_gpu.py`. Les critères et la graine d'évaluation sont ceux de
+`criteres.py`, avec 10 épisodes.
+
+| Modèle | Difficulté | Banc CPU | Simulateur GPU |
+|---|---|---|---|
+| s7 | 0 | 90 %, 5/6 | 80 %, 4/6 |
+| s7 | 0,3 | 90 %, 5/6 | 40 %, 2/6 |
+| s42 | 0 | non mesuré | 40 %, 2/6 |
+| s42 | 0,3 | 90 %, 6/6 | 50 %, 2/6 |
+
+Contrôles, avec le modèle s7 à 9 M :
+- **même modèle, sol plan dans le simulateur GPU** (terrain coupé) : 100 %, 5/6 ;
+- **H-Placo du palier 1 sur sol plan** : 100 %, 6/6. `eval_gpu.py` ne
+  dégrade donc rien.
+
+L'écart vient du contact champ-maillage.
+
+**Ce que fait le moteur.** Même modèle compilé, même état debout, champ plat
+(`gpu/sonde_champ.py`) :
+
+| | MuJoCo C | MuJoCo Warp |
+|---|---|---|
+| Plan | 6 contacts | 8 contacts, tous à la bonne hauteur |
+| Champ plat | **24 contacts**, un par prisme touché | **6 contacts** |
+
+- **MuJoCo C :** 14 contacts sous le pied gauche, 10 sous le droit, répartis
+  sur la semelle.
+- **MuJoCo Warp :** 3 par pied, un sous-ensemble choisi par le noyau (distance
+  minimale, puis le plus éloigné…). Certains sont mal placés : un point du pied
+  droit à z = +12 mm, quand le sol est à −10 mm.
+- **Version :** `collision_convex.py` le dit lui-même, `TODO(team): routine
+  for select subset of contacts`. Même code dans MuJoCo Warp 3.17 et 4.0.0 :
+  monter de version n'y change rien.
+- **Effet sur la politique :** l'appui ne dépend plus seulement de la forme
+  du sol, mais de la place du pied dans la grille. Avant le correctif
+  `geom_xpos`, le robot était à mi-case au lieu d'un sommet. Le même modèle
+  survivait alors à 20 % au lieu de 80 % sur champ plat.
+
+### Débit et mémoire (RTX 3050 4 Go)
+
+| | Sous-pas | Physique seule | Pas complet | Mémoire |
+|---|---|---|---|---|
+| Sol plat, 256 environnements | — | 7 857 pas/s | — | — |
+| Terrain, 256 environnements | 124 ms | 413 pas/s | 328 pas/s | 1 053 Mo, dont 165 Mo de champ |
+| Terrain, 1024 environnements | 265 ms | 773 pas/s | 997 pas/s | 3 450 Mo, dont 659 Mo de champ |
+
+- **4096 environnements :** le champ seul pèse 2,6 Go, et il faudrait environ
+  14 Go en tout. Ça ne tient pas sur la 3050.
+- **Cause :** le noyau champ-maillage de MuJoCo Warp, un fil par paire, qui
+  parcourt ses prismes en GJK/EPA. 26 maillages du robot touchent le champ.
+- **Ce que ça coûte :** un run de 20 M prendrait 6 à 17 h sur la 3050.
+
+### Ce qui reste ouvert
+
+- **Entraîner sur GPU quand même.** La politique apprendrait les contacts de
+  MuJoCo Warp, et la porte se jugerait sur le banc CPU, comme au palier 1.
+  Mais l'écart de contact est ici bien plus grand : 6 contre 24, et non plus
+  8 contre 6.
+- **Changer de représentation du sol.** MuJoCo Warp ne gère plusieurs
+  contacts par paire qu'entre boîtes et maillages.
+- **Garder le palier 2 sur CPU.** Le GPU servirait alors au sol plat, où sa
+  parité est établie.
