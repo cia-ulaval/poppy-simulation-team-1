@@ -128,11 +128,18 @@ def vec_normalize_for(model_zip: Path) -> Path | None:
     return None
 
 
-def measure(model_zip: Path, config: Path, episodes: int, seed: int) -> dict:
-    """Déroule ``episodes`` épisodes d'un modèle exporté et rend ses critères."""
+def measure(
+    model_zip: Path, config: Path, episodes: int, seed: int, terrain: float = 0.0
+) -> dict:
+    """Déroule ``episodes`` épisodes d'un modèle exporté et rend ses critères.
+
+    ``terrain`` : difficulté du relief (palier 2), 0 = sol plat. Le relief est
+    tiré par l'environnement d'évaluation, donc le même d'un modèle à
+    l'autre pour une graine donnée.
+    """
     env = make_eval_env(
         config=make_poppy_env_config(load_yaml(config)), seed=seed,
-        vec_normalize_path=vec_normalize_for(model_zip),
+        vec_normalize_path=vec_normalize_for(model_zip), terrain_difficulty=terrain,
     )
     try:
         recorder = _ArmRecorder(load_model(model_zip, "PPO"), env)
@@ -195,6 +202,8 @@ def main() -> None:
     parser.add_argument("--select-best", action="store_true",
                         help="Choisir le meilleur checkpoint comme l'EvalCallback (5 épisodes)")
     parser.add_argument("--train-seed", type=int, default=42)
+    parser.add_argument("--terrain", type=float, action="append", default=None,
+                        help="Difficulté du relief (palier 2) ; répétable. Défaut : sol plat")
     args = parser.parse_args()
     if args.select_best:
         select_best(args.model, args.config, args.train_seed)
@@ -204,10 +213,12 @@ def main() -> None:
     print("| Modèle | M1 | M2 vitesse | M3 tronc | M4 \\|cap\\| | M5 D−G | "
           "M6 \\|latéral\\| (max) | Score | M7 coude sous épaule |")
     print("|---|---|---|---|---|---|---|---|---|")
-    for model in args.model:
-        c = measure(model, args.config, args.episodes, args.seed)
-        results[str(model)] = c
-        print(_row(model.stem, c), flush=True)
+    for terrain in args.terrain or [0.0]:
+        for model in args.model:
+            c = measure(model, args.config, args.episodes, args.seed, terrain)
+            name = model.stem if args.terrain is None else f"{model.stem} @ {terrain:g}"
+            results[name if args.terrain else str(model)] = c
+            print(_row(name, c), flush=True)
     if args.json is not None:
         args.json.write_text(json.dumps(results, indent=2), encoding="utf-8")
 

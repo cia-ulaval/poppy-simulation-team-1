@@ -41,7 +41,7 @@ _FLOOR_GEOM_NAME = "floor"
 _N_WAVES = 2
 _N_BUMPS = 80
 _N_STEPS = 60
-_CHUNK = 16  # tuiles retirées à la fois : borne la mémoire temporaire
+_CHUNK = 64  # tuiles retirées à la fois : borne la mémoire temporaire
 
 
 def cells_per_side(config: TerrainConfig) -> int:
@@ -177,6 +177,13 @@ def build_heights(
 ) -> torch.Tensor:
     """``generate_heights`` en lot, à partir de tirages donnés.
 
+    Mêmes formules que le CPU, réécrites en produits de matrices : une
+    gaussienne et un rectangle se séparent en ``f(y) × g(x)``, et une
+    ondulation ``sin(kx·x + ky·y + φ)`` en deux tels produits (formule
+    d'addition). Les 80 bosses, 60 marches et 2 ondulations d'une tuile
+    deviennent trois produits ``(n × K) @ (K × n)`` au lieu de 140 passes sur
+    la grille. Résultat identique aux arrondis près (``test_terrain.py``).
+
     Calcule dans le type des tirages : float32 à l'entraînement, float64
     pour comparer au CPU case par case (en float32, une case tombant à 1e-7
     du bord d'une marche peut basculer d'un côté ou de l'autre).
@@ -187,39 +194,46 @@ def build_heights(
     batch = draws.rough.shape[0]
     device, dtype = draws.rough.device, draws.rough.dtype
     d = float(np.clip(difficulty, 0.0, 1.0))
-    heights = torch.zeros((batch, n, n), device=device, dtype=dtype)
     if d == 0.0:
-        return heights
+        return torch.zeros((batch, n, n), device=device, dtype=dtype)
     half = 0.5 * config.size
     axis = torch.linspace(-half, half, n, device=device, dtype=torch.float64).to(dtype)
-    y, x = torch.meshgrid(axis, axis, indexing="ij")
-    x, y = x[None], y[None]
+    ax = axis[None, None, :]  # (1, 1, n), sert pour x comme pour y
 
-    for k in range(_N_WAVES):
-        theta = draws.direction[:, k, None, None]
-        along = x * torch.cos(theta) + y * torch.sin(theta)
-        heights += 0.5 * d * config.slope_amplitude * torch.sin(
-            2.0 * math.pi * along / draws.wavelength[:, k, None, None]
-            + draws.phase[:, k, None, None])
+    # Ondulations : A sin(kx x + φ + ky y) = A [sin(kx x + φ) cos(ky y) + cos(kx x + φ) sin(ky y)].
+    k = 2.0 * math.pi / draws.wavelength                             # (B, 2)
+    kx = (k * torch.cos(draws.direction))[..., None]
+    ky = (k * torch.sin(draws.direction))[..., None]
+    arg_x = kx * ax + draws.phase[..., None]                          # (B, 2, n)
+    arg_y = ky * ax
+    amp = 0.5 * d * config.slope_amplitude
+    left = torch.cat([torch.cos(arg_y), torch.sin(arg_y)], dim=1)     # (B, 4, n) sur y
+    right = amp * torch.cat([torch.sin(arg_x), torch.cos(arg_x)], dim=1)
 
-    for k in range(_N_BUMPS):
-        cx = draws.bump_xy[:, k, 0, None, None]
-        cy = draws.bump_xy[:, k, 1, None, None]
-        sigma = draws.bump_sigma[:, k, None, None]
-        amplitude = draws.bump_amp[:, k, None, None] * d * config.bump_height
-        heights += amplitude * torch.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2.0 * sigma ** 2))
+    # Bosses : a exp(−(x−cx)²/2σ²) exp(−(y−cy)²/2σ²).
+    two_var = 2.0 * draws.bump_sigma[..., None] ** 2                 # (B, 80, 1)
+    bump_y = torch.exp(-(ax - draws.bump_xy[..., 1, None]) ** 2 / two_var)
+    bump_x = (draws.bump_amp[..., None] * d * config.bump_height) * torch.exp(
+        -(ax - draws.bump_xy[..., 0, None]) ** 2 / two_var)
 
-    for k in range(_N_STEPS):
-        cx = draws.step_xy[:, k, 0, None, None]
-        cy = draws.step_xy[:, k, 1, None, None]
-        wx = draws.step_wh[:, k, 0, None, None]
-        wy = draws.step_wh[:, k, 1, None, None]
-        inside = ((x - cx).abs() < wx / 2) & ((y - cy).abs() < wy / 2)
-        heights += inside * (draws.step_amp[:, k, None, None] * d * config.step_height)
+    # Marches : s · [|x−cx| < wx/2] · [|y−cy| < wy/2].
+    step_y = ((ax - draws.step_xy[..., 1, None]).abs() < draws.step_wh[..., 1, None] / 2).to(dtype)
+    step_x = ((ax - draws.step_xy[..., 0, None]).abs() < draws.step_wh[..., 0, None] / 2).to(dtype)
+    step_x = step_x * (draws.step_amp[..., None] * d * config.step_height)
+
+    left = torch.cat([left, bump_y, step_y], dim=1)                   # (B, K, n)
+    right = torch.cat([right, bump_x, step_x], dim=1)
+    tf32 = torch.backends.cuda.matmul.allow_tf32
+    torch.backends.cuda.matmul.allow_tf32 = False  # TF32 arrondirait à 1e-3 près
+    try:
+        heights = torch.bmm(left.transpose(1, 2), right)              # (B, n, n)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = tf32
 
     heights += draws.rough * d * config.roughness
 
-    radius = torch.hypot(x, y)
+    y, x = torch.meshgrid(axis, axis, indexing="ij")
+    radius = torch.hypot(x, y)[None]
     blend = torch.clamp((radius - config.flat_radius) / 0.4, 0.0, 1.0)
     heights *= blend * blend * (3.0 - 2.0 * blend)
     return torch.clamp(heights, -_HEIGHT_SPAN, _HEIGHT_SPAN)
