@@ -3,7 +3,8 @@
 #
 # Repart du meilleur modèle du palier 2 (choisi par sa mesure sur terrain,
 # pas par best_model, choisi sur sol plat). Exactement la config du palier 2
-# (configs/palier2_hplaco.yaml), une seule variable changée : les poussées.
+# (configs/palier2_hplaco.yaml), deux choses changées : les poussées, et le
+# relief tiré à chaque épisode.
 #   - push_as_force : une vraie force horizontale sur le bassin, à la place
 #     de l'ancien « coup » écrit comme un couple (défaut de TECHNIQUE.md §8) ;
 #   - pushes : ~5 par épisode de 10 s, 3 à 20 N pendant 0,15 s. Sur le robot
@@ -13,7 +14,10 @@
 #     déjà 10 N sur sol plat sans avoir vu de poussée ;
 #   - curriculum : l'intensité monte de 20 % à 100 % sur les 70 premiers %
 #     (14 M de pas), puis 6 M à pleine intensité ;
-#   - relief maximal (difficulté 1,0) d'un bout à l'autre, acquis au palier 2.
+#   - relief tiré à chaque épisode (difficulty_mix, décidé le 9 nov.) : un
+#     tiers plat, un tiers au hasard entre 0 et 1, un tiers au maximum. Le
+#     palier 3 porte sur les poussées ; le relief garde les trois sols des
+#     critères sous les yeux du réseau, pour qu'il n'en oublie aucun.
 # Inchangés : imitation Placo, restitution_in_solref, PPO, n_envs.
 #
 # Critères fixés avant le run (journal) :
@@ -130,6 +134,7 @@ terrain:
   step_height: 0.03
   roughness: 0.005
   flat_radius: 0.6
+  difficulty_mix: true  # par épisode : 1/3 plat, 1/3 au hasard entre 0 et 1, 1/3 au maximum
 pushes:
   probability: 0.005    # par pas sans poussée en cours : ~5 par épisode de 10 s
   force_range: [3.0, 20.0]

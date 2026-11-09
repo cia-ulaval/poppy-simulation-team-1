@@ -41,7 +41,9 @@ class TerrainGrid:
         hfield_id: Indice du champ de hauteur dans le modèle.
         n: Nombre de cases par côté.
         heights: Hauteurs en mètres, ``(n, n)``, ligne = y, colonne = x.
-        difficulty: Difficulté appliquée à la prochaine régénération.
+        difficulty: Difficulté appliquée à la prochaine régénération ; avec
+            ``config.difficulty_mix``, le maximum du tirage.
+        last_difficulty: Difficulté du terrain tiré en dernier.
     """
 
     config: TerrainConfig
@@ -49,6 +51,7 @@ class TerrainGrid:
     n: int
     heights: NDArray
     difficulty: float
+    last_difficulty: float = 0.0
 
     @property
     def half(self) -> float:
@@ -68,10 +71,36 @@ class TerrainGrid:
 
     def regenerate(self, model: mujoco.MjModel, rng: np.random.Generator) -> None:
         """Tire un nouveau terrain et l'écrit dans ``model.hfield_data``."""
-        self.heights = generate_heights(self.config, self.difficulty, self.n, rng)
+        self.last_difficulty = (
+            mixed_difficulty(self.difficulty, rng) if self.config.difficulty_mix
+            else self.difficulty
+        )
+        self.heights = generate_heights(self.config, self.last_difficulty, self.n, rng)
         normalised = (self.heights + _HEIGHT_SPAN) / (2.0 * _HEIGHT_SPAN)
         adr = model.hfield_adr[self.hfield_id]
         model.hfield_data[adr: adr + self.n * self.n] = normalised.ravel()
+
+
+def mixed_difficulty(maximum: float, rng: np.random.Generator) -> float:
+    """Tire le relief d'un épisode en trois tiers : plat, au hasard, maximal.
+
+    Le plat et le maximal gardent chacun un tiers des épisodes : un réseau
+    oublie ce qu'il ne pratique plus, et ce sont les deux sols des critères
+    (sol plat, survie au relief maximal). Le tiers du milieu couvre le reste.
+
+    Args:
+        maximum: Relief le plus fort du tirage, dans ``[0, 1]``.
+        rng: Générateur aléatoire de l'environnement.
+
+    Returns:
+        La difficulté du prochain terrain.
+    """
+    third = int(rng.integers(3))
+    if third == 0:
+        return 0.0
+    if third == 1:
+        return float(rng.uniform(0.0, maximum))
+    return float(maximum)
 
 
 def generate_heights(

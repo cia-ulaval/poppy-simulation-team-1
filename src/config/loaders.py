@@ -149,5 +149,6 @@ def as_evaluation_config(
         reference_init=0.0,
         normalize_reward=False,
         domain_randomization=replace(config.domain_randomization, enabled=floor_noise),
-        terrain=replace(config.terrain, difficulty=terrain_difficulty),
+        # Relief fixé : le tirage en trois tiers ne sert qu'à l'entraînement.
+        terrain=replace(config.terrain, difficulty=terrain_difficulty, difficulty_mix=False),
     )

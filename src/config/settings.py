@@ -57,10 +57,15 @@ class TerrainConfig:
         step_height: Hauteur maximale des petites marches (m).
         roughness: Rugosité case par case (m).
         flat_radius: Rayon de la zone plate au départ (m).
+        difficulty_mix: À chaque ``reset()``, tire le relief en trois tiers :
+            plat, au hasard entre 0 et ``difficulty``, ou ``difficulty``
+            (palier 3 : les poussées sur tous les sols, sans oublier aucun
+            d'eux). Désactivé, tous les terrains sont à ``difficulty``.
     """
 
     enabled: bool = False
     difficulty: float = 0.0
+    difficulty_mix: bool = False
     size: float = 20.0
     resolution: float = 0.05
     slope_amplitude: float = 0.05

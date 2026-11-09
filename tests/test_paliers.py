@@ -15,9 +15,10 @@ import numpy as np
 import pytest
 
 from src.config import load_yaml, make_poppy_env_config
+from src.config.loaders import as_evaluation_config
 from src.config.settings import PushConfig, TerrainConfig
 from src.environments.poppy_humanoid_env import PoppyHumanoidEnv
-from src.environments.terrain import generate_heights
+from src.environments.terrain import generate_heights, mixed_difficulty
 from src.training.curriculum import CurriculumConfig
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -102,6 +103,35 @@ def test_terrain_accidente_mais_depart_plat() -> None:
         assert not terminated, "Le robot tombe au repos sur la zone de départ"
     finally:
         env.close()
+
+
+def test_relief_tire_en_trois_tiers() -> None:
+    """Un tiers plat, un tiers au hasard, un tiers au maximum ; jamais au-delà."""
+    rng = np.random.default_rng(0)
+    draws = np.array([mixed_difficulty(0.8, rng) for _ in range(3000)])
+    flat, top = np.mean(draws == 0.0), np.mean(draws == 0.8)
+    assert flat == pytest.approx(1 / 3, abs=0.03)
+    assert top == pytest.approx(1 / 3, abs=0.03)
+    assert np.all((draws >= 0.0) & (draws <= 0.8))
+    middle = draws[(draws > 0.0) & (draws < 0.8)]
+    assert middle.mean() == pytest.approx(0.4, abs=0.03)
+
+
+def test_relief_melange_a_l_entrainement_fixe_a_l_evaluation() -> None:
+    """L'environnement tire bien le relief à chaque reset ; l'évaluation, jamais."""
+    config = TerrainConfig(enabled=True, difficulty=1.0, difficulty_mix=True)
+    env = PoppyHumanoidEnv(floor_noise=False, terrain=config)
+    try:
+        seen = set()
+        for seed in range(12):
+            env.reset(seed=seed)
+            seen.add(round(env._terrain.last_difficulty, 6))
+        assert {0.0, 1.0} <= seen and len(seen) > 2
+    finally:
+        env.close()
+    p3 = make_poppy_env_config(load_yaml(_CONFIGS / "palier3_hplaco.yaml"))
+    assert p3.terrain.difficulty_mix is True
+    assert as_evaluation_config(p3, terrain_difficulty=0.5).terrain.difficulty_mix is False
 
 
 def test_poussee_est_une_force() -> None:
