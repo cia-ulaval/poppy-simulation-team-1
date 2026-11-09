@@ -111,6 +111,17 @@ reste toujours mesuré.
 
 ## Les trois paliers
 
+> **État au 9 novembre 2026 : les trois paliers ont été faits**, sur la piste
+> H-Placo (imitation d'une marche de référence Placo) plutôt qu'avec les changements
+> proposés ci-dessous, qui restent ici pour l'historique. Les critères chiffrés ont
+> été fixés avant chaque run ; résultats dans
+> [`docs/journal-experiences.md`](../docs/journal-experiences.md) :
+> - palier 1 (§4.5) : 6/6 critères + M7 sur sol plat, deux graines ;
+> - palier 2 (§4.6) : 90-95 % de survie au relief maximal ;
+> - palier 3 (§4.7) : 100 % debout après une poussée de 15 N, sur plat et sur
+>   relief 0,5 ; 85-90 % à 20 N. Reste une dérive de côté sur sol plat (M6) au-delà
+>   du seuil, à trancher en équipe.
+
 Chaque palier ajoute **une** difficulté. On ne passe au suivant que quand le précédent
 est réussi sur le banc d'essai. Idée : un palier repart du meilleur modèle du palier
 précédent, plutôt que de zéro.

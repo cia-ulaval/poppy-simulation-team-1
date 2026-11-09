@@ -84,7 +84,11 @@ doit changer, sauf `poppy_humanoid.xml`, dont le diff ne doit toucher qu'au rend
   et `group="3"` sur les geoms `_c`, pour que les maillages de collision ne soient
   plus dessinés par-dessus.
 
-`src/environments/poppy_humanoid_env.py` n'y est plus :
-il a reçu les réglages de caméra, qui ne touchent qu'au rendu. Un diff sur ce fichier
-ne doit montrer que le bloc `CAMERAS`, l'argument `default_camera_config` et la ligne
-`camera_id = None`.
+`src/environments/poppy_humanoid_env.py` n'y est plus. Il a reçu les réglages de
+caméra (bloc `CAMERAS`, `default_camera_config`, `camera_id = None`), puis les
+nouveautés des paliers, toutes en options **désactivées par défaut** et activées par
+les YAML qui en ont besoin : `fix_left_knee_axis`, `fix_arm_frames`, `gait_period`
+(horloge de marche), terrain, `push_as_force`, poids `imitation_*` et
+`reference_init` (marche de référence Placo). Un YAML qui n'active aucune de ces
+options doit donc donner l'environnement d'avant ; toute autre différence de
+comportement par défaut est un bug.
