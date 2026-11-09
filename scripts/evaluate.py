@@ -44,8 +44,9 @@ _ALGO_CLASSES = {"PPO": PPO, "SAC": SAC, "TD3": TD3, "A2C": A2C}
 
 # Les termes que la récompense additionne, dans l'ordre où ils apparaissent
 # dans PoppyHumanoidEnv.step. Les coûts sont comptés positifs ici, alors qu'ils
-# sont retranchés dans la somme. Les quatre derniers sont ceux du palier 1 :
-# ils valent 0 avec une configuration qui ne les active pas.
+# sont retranchés dans la somme. Ceux qui suivent joint_vel_cost sont ceux du
+# palier 1 et de la piste 3 (imitation) : ils valent 0 avec une configuration
+# qui ne les active pas.
 _REWARD_TERMS = (
     "healthy_reward",
     "gait_reward",
@@ -65,6 +66,7 @@ _REWARD_TERMS = (
     "ang_vel_xy_cost",
     "feet_slide_cost",
     "phase_contact_reward",
+    "imitation_reward",
 )
 
 

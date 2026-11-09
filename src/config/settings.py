@@ -161,6 +161,32 @@ class RewardConfig:
             humanoïdes G1 / H1 d'unitree_rl_gym).
         phase_stance_ratio: Part du cycle où un pied doit être au sol ; un peu
             plus de 0,5 laisse un court double appui.
+        imitation_pos_weight: Imitation de la marche de référence (piste 3),
+            active seulement avec l'horloge de marche. Angles des dix
+            articulations des jambes : ``poids * exp(-échelle * Σ (q - q̂)²)``,
+            q̂ lu dans ``assets/poppy_humanoid/reference_walk.npz`` à la phase
+            courante. Noyau exponentiel de DeepMimic (Peng et al. 2018) ;
+            Disney (BDX) et Open Duck imitent les mêmes grandeurs.
+        imitation_pos_scale: Échelle du noyau des angles (1/rad²). 5 : une
+            erreur de 0,1 rad sur chacune des dix articulations rapporte 0,61.
+        imitation_upper_weight: Même noyau, même échelle, sur les quinze
+            articulations du haut du corps (tronc, tête, bras), que la
+            référence tient près de la pose debout.
+        imitation_vel_weight: Vitesses articulaires des jambes :
+            ``poids * exp(-échelle * Σ (q̇ - q̇̂)²)``.
+        imitation_vel_scale: Échelle du noyau des vitesses (s²/rad²).
+        imitation_contact_weight: Contacts des pieds : ``poids * fraction des
+            pieds dont le contact est celui de la référence``. Mesurable par
+            les capteurs de pression sous les pieds.
+        imitation_base_weight: Hauteur et inclinaison du bassin :
+            ``poids * exp(-échelle_h * (z - ẑ)² - échelle_i * |g - ĝ|²)``, g étant
+            la verticale exprimée dans le repère du bassin (ce que mesure
+            l'IMU, indépendant du cap). La référence fait rouler le bassin de
+            ±10° à chaque pas : c'est ainsi que Poppy, sans roulis de
+            cheville, porte son poids sur le pied d'appui.
+        imitation_height_scale: Échelle de la hauteur du bassin (1/m²).
+        imitation_tilt_scale: Échelle de l'inclinaison du bassin (sans unité ;
+            |g - ĝ|² vaut à peu près l'angle d'écart au carré, en rad²).
     """
 
     forward_weight: float = 5.0
@@ -192,6 +218,23 @@ class RewardConfig:
     feet_slide_weight: float = 0.0
     phase_contact_weight: float = 0.0
     phase_stance_ratio: float = 0.55
+    imitation_pos_weight: float = 0.0
+    imitation_pos_scale: float = 5.0
+    imitation_upper_weight: float = 0.0
+    imitation_vel_weight: float = 0.0
+    imitation_vel_scale: float = 0.05
+    imitation_contact_weight: float = 0.0
+    imitation_base_weight: float = 0.0
+    imitation_height_scale: float = 200.0
+    imitation_tilt_scale: float = 20.0
+
+    @property
+    def uses_imitation(self) -> bool:
+        """Vrai si un terme d'imitation de la marche de référence est actif."""
+        return any(weight > 0.0 for weight in (
+            self.imitation_pos_weight, self.imitation_upper_weight,
+            self.imitation_vel_weight, self.imitation_contact_weight,
+            self.imitation_base_weight))
 
 
 @dataclass(frozen=True)
@@ -246,6 +289,12 @@ class PoppyEnvironmentConfig:
     # d'observation, les modèles entraînés sans horloge ne s'y chargent pas.
     # Sur le robot, la phase vient de l'horloge de l'ordinateur de bord.
     gait_period: float = 0.0
+    # Départ sur la marche de référence (piste 3) : probabilité qu'un épisode
+    # commence à une phase tirée au hasard, dans la pose de la référence à
+    # cette phase (« reference state initialization » de DeepMimic). Les
+    # autres partent de la pose debout, phase nulle, comme le vrai robot.
+    # 0 par défaut ; toujours 0 en évaluation (as_evaluation_config).
+    reference_init: float = 0.0
 
 
 @dataclass(frozen=True)
