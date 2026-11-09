@@ -11,12 +11,12 @@
 | # | Problème | Il faut le robot ? | Change la physique ? |
 | --- | --- | :---: | :---: |
 | 1 | Conventions des articulations jamais vérifiées sur le robot | oui | non |
-| 2 | Bras du MJCF tournés autrement que dans l'URDF | après 1 | **oui** |
-| 3 | Masse simulée 2,61 kg, robot annoncé à 3,5 kg | oui (balance) | **oui** |
+| 2 | Bras du MJCF tournés autrement que dans l'URDF — **fait le 8 nov.** (option `fix_arm_frames`) | après 1 | **oui** |
+| 3 | Masse simulée 2,61 kg, robot annoncé à 3,5 kg — **gardée telle quelle pour l'instant** (décision du 8 nov.) | oui (balance) | **oui** |
 | 4 | Limites de couple : valeurs 14,8 V, pas de courbe couple-vitesse | oui (lire les moteurs) | **oui** |
 | 5 | Moteurs : kp = 8 inventé, inertie de rotor, frottement, retard non mesurés | oui | — |
 | 6 | Modèle d'actionneur dans l'environnement | non (après 5) | **oui** |
-| 7 | La politique observe des grandeurs que le robot ne mesure pas | non | contrat obs |
+| 7 | La politique observe des grandeurs que le robot ne mesure pas, et n'a aucune mémoire | non | contrat obs |
 | 8 | Randomisation trop pauvre pour le transfert | non | entraînement |
 | 9 | Le pont : 5 s par commande, boucle ouverte, sans genou corrigé | non | non |
 | 10 | Pas de mesure de l'écart simulation / réel | oui | non |
@@ -242,7 +242,7 @@ Que la politique embarquée ne dépende que de ses capteurs.
 | --- | --- |
 | angles et vitesses des 25 moteurs | oui, encodeurs |
 | inclinaison et rotation du bassin | oui, IMU avec gyroscope |
-| contacts des pieds (en N) | seulement avec des capteurs de pression |
+| contacts des pieds (en N) | avec les capteurs de pression : 4 FSR commandés (avant et arrière de chaque pied, via un ADS1115) |
 | hauteur du bassin | **non** |
 | vitesse d'avance | **non**, estimation imprécise |
 | cap absolu | dérive |
@@ -256,11 +256,26 @@ Que la politique embarquée ne dépende que de ses capteurs.
 2. Contacts en **tout-ou-rien** (pied posé ou non) plutôt qu'en newtons.
 3. Bruit et retard sur les capteurs simulés : biais et bruit de l'IMU, quantification
    des encodeurs, quelques millisecondes de retard.
+4. **Donner une mémoire courte à l'acteur.** Vérifié le 8 nov. : la politique ne
+   voit que l'instant présent (65 valeurs, réseau 256×256 sans mémoire) ; elle ne
+   voit même pas l'action qu'elle vient d'envoyer, qui n'est que pénalisée. En
+   simulation ce n'est pas gênant, parce qu'elle lit directement la vitesse et la
+   hauteur du bassin. Avec seulement l'IMU (BNO055), les encodeurs et les FSR, elle
+   doit les déduire des derniers instants, et sentir une poussée ou une bosse.
+   Le plus courant : l'historique des 3 à 5 derniers pas (observations et actions)
+   en entrée de l'acteur ; sinon un réseau récurrent. À décider avec le point 1,
+   en une seule fois.
+
+**Quand le faire.** Ce changement invalide tous les modèles entraînés (poids
+seulement : récompense, référence Placo, curriculum, critères et configs restent
+valables). Réentraîner coûte environ 35 min par run sur GPU pour le palier 1 et
+environ 5 h sur Hetzner pour le palier 2. Mieux vaut le décider **avant d'investir
+dans le palier 3**, sinon on refait trois paliers au lieu de deux.
 
 ### Terminé quand
 
-L'acteur n'a plus aucune entrée marquée « non » ; le choix est écrit dans
-`docs/ARCHITECTURE.md`.
+L'acteur n'a plus aucune entrée marquée « non », a sa mémoire courte, et le choix
+est écrit dans `docs/ARCHITECTURE.md`.
 
 ---
 

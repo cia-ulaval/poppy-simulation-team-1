@@ -716,6 +716,34 @@ ne fait pas encore de boucle fermée sur les capteurs réels.
 tronc) n'ont pas été testés un par un dans le cadre qui marche. Une fois le
 candidat choisi, une ablation dirait lesquels sont utiles.
 
+**À faire, noté le 8 nov. au soir** (rien de tout cela n'est fait)
+- **Décisions d'équipe**
+  - Acteur limité aux capteurs du robot **et** mémoire courte (historique de 3 à
+    5 pas) : à décider ensemble, de préférence avant le palier 3. Détail dans
+    `spec/sim2real-a-corriger.md`, tâche 7.
+  - Renommer les caméras `cote` et `face`, inversées depuis la correction des
+    axes (`--camera face` donne le profil).
+  - Masse simulée 2,61 kg gardée (le robot ne sera pas pesé pour l'instant) :
+    les forces de poussée du palier 3 s'entendent pour 2,61 kg.
+- **Outils**
+  - Mettre `criteres.py` (M1 à M7, relief, poussée) dans le dépôt : il vit
+    encore dans un dossier temporaire. M7 n'est pas dans `evaluate.py`.
+  - Choisir le meilleur modèle sur terrain pendant l'entraînement : au
+    palier 2, `best_model` est choisi sur sol plat et ne sert à rien.
+  - `--init-from` exige un `vec_normalize.pkl` à côté du modèle : les
+    checkpoints doivent être copiés et renommés à la main.
+- **Simulation**
+  - Sensibilité au modèle de contact : sur un champ de hauteur pourtant plat,
+    les modèles entraînés sur sol plat tombent 1 à 2 fois sur 10.
+  - Le terrain ne passe pas sur GPU : MuJoCo Warp fait 6 contacts terrain–robot
+    là où MuJoCo C en fait 24 (survie 40-50 % contre 90 % au relief 0,3). Le
+    calcul complet est un TODO de MuJoCo Warp, même en 4.0.0. Paliers 2 et 3 sur
+    CPU ; à retester à chaque nouvelle version de MuJoCo Warp.
+  - Fusionner la branche GPU (`claude/blissful-jennings-3d0967`) dans `main`
+    une fois relue : validée sur sol plat seulement.
+  - Kit RunPod prêt (`gpu/runpod/`), utile seulement pour des lots de runs sur
+    sol plat.
+
 **Questions pour un relecteur**
 1. Le mécanisme proposé en 3.5 (exploration plus bruitée en action normalisée,
    pénalité de butée, lr fort) est-il plausible ? Quelle expérience le
