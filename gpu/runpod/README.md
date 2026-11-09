@@ -77,7 +77,7 @@ ssh -p <port> root@<ip> 'tar -xzf poppy-*.tar.gz && tar -xzf models.tar.gz -C po
 4. contrôle que torch a des noyaux pour l'architecture de la carte, et que
    Warp tourne dessus ;
 5. `.venv-cpu`, le banc CPU (`requirements/train.lock`, MuJoCo C 3.13) ;
-6. **porte d'entrée : `pytest gpu/tests`** (42 tests).
+6. **porte d'entrée : `pytest gpu/tests`** (32 tests).
    - Si elle échoue, ne rien lancer d'autre : rapatrier `logs/runpod/` et
      supprimer le pod.
    - Les compilations de Warp de ce premier passage (plus d'une minute rien

@@ -204,6 +204,37 @@ def test_reset_draws_one_tile_per_env_with_a_flat_start(config, env) -> None:
         s.terrain.difficulty = config.terrain.difficulty
 
 
+def test_contacts_land_on_the_world_tile(env) -> None:
+    """Les contacts de MuJoCo Warp sont pris sur la tuile du monde, pas ailleurs dans le champ.
+
+    MuJoCo Warp ne calcule geom_xpos des geoms statiques qu'une fois, dans
+    make_data : déplacer le champ par geom_pos ne suffit pas. Chaque monde
+    reçoit ici une tuile plate à sa propre hauteur, 0, -1, -2 et -3 cm, et ses
+    contacts doivent s'y trouver.
+    """
+    s = poppy_state(env)
+    env.reset()
+    ids = torch.arange(env.num_envs, device=_DEVICE)
+    assert torch.allclose(env.sim.data.geom_xpos[:, s.terrain_geom_id, 0:2], s.terrain_offset)
+    n = s.terrain.layout.n
+    level = -0.01 * ids.to(torch.float32)
+    s.terrain.write(ids, level[:, None, None].expand(-1, n, n).contiguous())
+    zero = torch.zeros(env.num_envs, env.action_manager.total_action_dim, device=_DEVICE)
+    wd = env.sim.wp_data
+    seen = {i: [] for i in range(env.num_envs)}
+    for _ in range(30):
+        env.step(zero)
+        count = int(wd.nacon.numpy()[0])
+        geom = wd.contact.geom.numpy()[:count]
+        on_field = (geom == s.terrain_geom_id).any(axis=1)
+        z = wd.contact.pos.numpy()[:count, 2][on_field]
+        for world, height in zip(wd.contact.worldid.numpy()[:count][on_field], z, strict=True):
+            seen[int(world)].append(float(height))
+    for world, heights in seen.items():
+        assert len(heights) > 10, world
+        assert abs(np.median(heights) - level[world].item()) < 0.003, (world, np.median(heights))
+
+
 # ── Récompense sur terrain ─────────────────────────────────────────────────
 
 

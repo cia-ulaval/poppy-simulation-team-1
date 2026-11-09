@@ -944,6 +944,11 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     if s.terrain is not None:
         s.terrain.regenerate(env_ids)
         model.geom_pos[env_ids, s.terrain_geom_id, 0:2] = s.terrain_offset[env_ids]
+        # MuJoCo Warp ne calcule geom_xpos des geoms statiques (attachés au
+        # monde) qu'une fois, dans make_data : sans cette ligne, les collisions
+        # ignorent le décalage et tous les robots marchent sur la même zone du
+        # champ, pas sur leur tuile. reset_data n'y touche pas.
+        data.geom_xpos[env_ids, s.terrain_geom_id, 0:2] = s.terrain_offset[env_ids]
 
     def uniform(low: float, high: float, *shape: int) -> torch.Tensor:
         return torch.empty((n, *shape), device=device).uniform_(low, high)
