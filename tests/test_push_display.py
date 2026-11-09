@@ -1,4 +1,4 @@
-"""La flèche de poussée arrive sur le bassin, dans le sens de la force, et ne change rien à la physique."""
+"""La flèche de poussée vient frapper le bassin, dans le sens de la force, et ne change rien à la physique."""
 
 from __future__ import annotations
 
@@ -15,6 +15,14 @@ def _env() -> PoppyHumanoidEnv:
     return env
 
 
+def _by_type(markers: list[dict], geom_type: int) -> list[dict]:
+    return [m for m in markers if m["type"] == geom_type]
+
+
+def _tip(arrow: dict) -> np.ndarray:
+    return arrow["pos"] + arrow["mat"].reshape(3, 3)[:, 2] * arrow["size"][2]
+
+
 def test_rien_sans_poussee() -> None:
     env = _env()
     marker = PushMarker(dt=env.dt)
@@ -22,22 +30,32 @@ def test_rien_sans_poussee() -> None:
     assert marker.markers(env.data) == []
 
 
-def test_fleche_entrante_vers_le_bassin() -> None:
+def test_la_fleche_arrive_puis_frappe_le_bassin() -> None:
     env = _env()
     marker = PushMarker(dt=env.dt)
     env.apply_push(np.array([10.0, 0.0]), 0.15)
-    marker.update(env.data)
-    arrow, flash = marker.markers(env.data)
-    assert arrow["type"] == mujoco.mjtGeom.mjGEOM_ARROW
     pelvis = env.data.xpos[1]
-    axis = arrow["mat"].reshape(3, 3)[:, 2]
-    # La flèche pointe dans le sens de la force (+x) ...
-    np.testing.assert_allclose(axis, [1.0, 0.0, 0.0], atol=1e-9)
-    # ... part du côté d'où l'on pousse et s'arrête sur le bassin.
-    tip = arrow["pos"] + axis * arrow["size"][2]
-    assert arrow["pos"][0] < tip[0] < pelvis[0]
-    np.testing.assert_allclose(tip, flash["pos"])
-    assert np.linalg.norm(tip - pelvis) < 0.1
+
+    marker.update(env.data)
+    first = marker.markers(env.data)
+    (arrow,) = _by_type(first, mujoco.mjtGeom.mjGEOM_ARROW)
+    # Elle pointe dans le sens de la force (+x), du côté d'où l'on pousse ...
+    np.testing.assert_allclose(arrow["mat"].reshape(3, 3)[:, 2], [1.0, 0.0, 0.0], atol=1e-9)
+    assert arrow["pos"][0] < _tip(arrow)[0] < pelvis[0]
+    # ... et n'a pas encore touché : pas d'impact.
+    assert not _by_type(first, mujoco.mjtGeom.mjGEOM_CYLINDER)
+    far = pelvis[0] - _tip(arrow)[0]
+
+    for _ in range(5):
+        marker.update(env.data)
+    hit = marker.markers(env.data)
+    (arrow,) = _by_type(hit, mujoco.mjtGeom.mjGEOM_ARROW)
+    (ring,) = _by_type(hit, mujoco.mjtGeom.mjGEOM_CYLINDER)
+    # Au contact : la pointe touche le bassin, là où sont l'éclat et l'onde de choc.
+    assert pelvis[0] - _tip(arrow)[0] < far
+    np.testing.assert_allclose(_tip(arrow), ring["pos"])
+    assert np.linalg.norm(_tip(arrow) - pelvis) < 0.1
+    assert any(m.get("label") == "10 N" for m in hit)
 
 
 def test_reste_visible_puis_disparait() -> None:
