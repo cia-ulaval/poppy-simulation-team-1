@@ -6,17 +6,23 @@
 # (configs/palier2_hplaco.yaml), une seule variable changée : les poussées.
 #   - push_as_force : une vraie force horizontale sur le bassin, à la place
 #     de l'ancien « coup » écrit comme un couple (défaut de TECHNIQUE.md §8) ;
-#   - pushes : ~5 par épisode de 10 s, 3 à 15 N pendant 0,15 s. Sur le robot
-#     simulé (2,61 kg), 10 N font +0,57 m/s ; le vrai Poppy est annoncé à
-#     3,5 kg, on garde la masse simulée (décision du lead modèle) ;
+#   - pushes : ~5 par épisode de 10 s, 3 à 20 N pendant 0,15 s. Sur le robot
+#     simulé (2,61 kg), 10 N font +0,57 m/s, 20 N +1,15 m/s ; le vrai Poppy
+#     est annoncé à 3,5 kg, on garde la masse simulée (décision du lead
+#     modèle). Monté de 15 à 20 N le 9 nov. : les modèles de départ tiennent
+#     déjà 10 N sur sol plat sans avoir vu de poussée ;
 #   - curriculum : l'intensité monte de 20 % à 100 % sur les 70 premiers %
 #     (14 M de pas), puis 6 M à pleine intensité ;
 #   - relief maximal (difficulté 1,0) d'un bout à l'autre, acquis au palier 2.
 # Inchangés : imitation Placo, restitution_in_solref, PPO, n_envs.
 #
 # Critères fixés avant le run (journal) :
-#   - ≥ 80 % sans chute après une poussée de 10 N (0,15 s, à 3 s, direction
-#     au hasard), sur sol plat et sur relief 0,5 ;
+#   - ≥ 80 % sans chute après une poussée de 15 N (0,15 s, à 3 s, direction
+#     au hasard), sur sol plat (le plan du palier 1, pas le champ de hauteur à
+#     relief 0) et sur relief 0,5 ;
+#   - mesuré sans seuil, pour situer la limite : la même chose à 20 N ;
+#   Départ (finals du palier 2, 20 épisodes) : 15 N → 45 % sur plat, 25-35 % sur
+#   relief 0,5 ; 20 N → 0-5 % (journal §4.6).
 #   - aucune régression : 6/6 + M7 sur sol plat sans poussée, et survie au
 #     relief maximal au moins égale à celle du modèle de départ.
 #
@@ -126,7 +132,7 @@ terrain:
   flat_radius: 0.6
 pushes:
   probability: 0.005    # par pas sans poussée en cours : ~5 par épisode de 10 s
-  force_range: [3.0, 15.0]
+  force_range: [3.0, 20.0]
   duration: 0.15
   scale: 0.2            # départ ; le curriculum le fait monter
 curriculum:

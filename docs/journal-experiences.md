@@ -710,6 +710,26 @@ départ ; sur relief 0,5, il manque 10 points à la graine 7. Les modèles ont
 déjà subi des « poussées » pendant tout l'entraînement : l'ancien code les
 écrit comme un couple sur le bassin, pas comme une force.
 
+**Barre relevée (9 nov.)**, décision du lead modèle : entraînement de 3 à 20 N
+au lieu de 3 à 15 N ; critère à **15 N** (≥ 80 % sans chute, sol plat et relief
+0,5), et 20 N mesuré sans seuil. Point de départ, mêmes modèles, 20 épisodes :
+
+| Sol | Poussée | Graine 7 | Graine 42 |
+|---|---|---|---|
+| plan (config palier 1) | 10 N | 90 % | 100 % |
+| | 15 N | 45 % | 45 % |
+| | 20 N | 5 % | 5 % |
+| champ de hauteur à relief 0 | 10 N | 80 % | 75 % |
+| | 15 N | 30 % | 30 % |
+| | 20 N | 5 % | 0 % |
+| relief 0,5 | 10 N | 70 % | 80 % |
+| | 15 N | 25 % | 35 % |
+| | 20 N | 0 % | 0 % |
+
+« Sol plat » dans les critères veut dire **le plan du palier 1** : sur le champ
+de hauteur à relief 0, les mêmes modèles perdent 10 à 25 points (sensibilité au
+modèle de contact, déjà vue au §4.5).
+
 **GPU** : le terrain ne passe pas sur MuJoCo Warp (6 contacts terrain–robot
 contre 24 pour MuJoCo C ; les modèles du palier 2 y survivent à 40-50 % au
 relief 0,3 contre 90 % sur CPU). Paliers 2 et 3 restent sur CPU.
