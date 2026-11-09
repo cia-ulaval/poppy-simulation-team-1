@@ -1,0 +1,6 @@
+# Génération de la marche de référence (scripts/generate_reference_walk.py).
+# Dans aucune image : Placo ne sert qu'à produire
+# assets/poppy_humanoid/reference_walk.npz, que l'entraînement lit avec numpy.
+#   docker compose --profile dev run --rm dev bash -c \
+#     "pip install -r requirements/reference.txt && python scripts/generate_reference_walk.py"
+placo==0.11.0

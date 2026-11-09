@@ -56,6 +56,12 @@ from gymnasium.utils import EzPickle
 from numpy.typing import NDArray
 
 from src.config.settings import PushConfig, RewardConfig, TerrainConfig
+from src.environments.reference_motion import (
+    ARMS_URDF_REFERENCE_PATH,
+    DEFAULT_REFERENCE_PATH,
+    ReferenceMotion,
+    load_reference,
+)
 from src.environments.terrain import TERRAIN_NAME, TerrainGrid, add_terrain
 
 _ASSETS_DIR = Path(__file__).parent.parent.parent / "assets" / "poppy_humanoid"
@@ -81,6 +87,9 @@ _LEFT_KNEE = "l_knee_y"
 _LOCAL_FORWARD = np.array([0.0, -1.0, 0.0])
 _LOCAL_LEFT = np.array([1.0, 0.0, 0.0])
 
+# Leg joints: the ones the reference walk moves.
+_LEG_JOINT_PREFIXES = ("r_hip", "r_knee", "r_ankle", "l_hip", "l_knee", "l_ankle")
+
 # ── Natural standing pose corrections ───────────────────────
 # At qpos=0 the URDF shoulder frames cause the arms to cross in
 # front of the body, and the torso/ankles are not balanced.
@@ -103,6 +112,51 @@ _STANDING_POSE_OVERRIDES: Dict[str, float] = {
     "r_ankle_y":      0.026,
     "l_ankle_y":      0.026,
 }
+
+# ── Arm frames as in the URDF (``fix_arm_frames``) ──────────
+# The MJCF copied the URDF ``rpy="π 0 ±π/2"`` of both ``*_shoulder_motor``
+# into ``euler``, which MuJoCo reads as intrinsic x-y-z; URDF rpy is
+# extrinsic (R = Rz·Ry·Rx).  The two differ by 180°: at qpos = 0 the MJCF
+# arms cross the chest, the URDF ones point outwards.  Every other body
+# frame of the MJCF matches the URDF (checked body by body).
+_ARM_FRAME_RPY: Dict[str, Tuple[float, float, float]] = {
+    "l_shoulder_motor": (np.pi, 0.0, np.pi / 2),
+    "r_shoulder_motor": (np.pi, 0.0, -np.pi / 2),
+}
+
+# Standing pose with URDF arm frames: arms hanging at the sides, about 10°
+# outwards, hands 4 cm in front of the shoulders, elbows bent 14° (15° away
+# from their stop).  The right arm is the mirror image of the left one.
+# Torso and ankles found again by grid search, as for the original pose,
+# but kept mirror-symmetric (the ankle_y axes are mirror images, so equal
+# values tilt the feet opposite ways — as the original 0.026 / 0.026 do):
+# the best is the plain one, torso and ankles at 0.  With action = 0 the
+# robot stands 480 steps on average (seeds 0-2, knee fixed), against 291
+# for the original pose.
+_STANDING_POSE_OVERRIDES_URDF_ARMS: Dict[str, float] = {
+    "bust_y":        -0.008,
+    "l_shoulder_y":   1.525,
+    "l_shoulder_x":   1.600,
+    "l_arm_z":       -0.400,
+    "l_elbow_y":     -0.250,
+    "r_shoulder_y":  -1.525,
+    "r_shoulder_x":   1.600,
+    "r_arm_z":        0.400,
+    "r_elbow_y":      0.250,
+}
+
+
+def _urdf_rpy_to_quat(rpy: Tuple[float, float, float]) -> NDArray:
+    """Quaternion (w, x, y, z) of a URDF ``rpy``: R = Rz(yaw)·Ry(pitch)·Rx(roll)."""
+    quat = np.array([1.0, 0.0, 0.0, 0.0])
+    for axis, angle in ((2, rpy[2]), (1, rpy[1]), (0, rpy[0])):
+        q = np.zeros(4)
+        q[0] = np.cos(angle / 2)
+        q[1 + axis] = np.sin(angle / 2)
+        out = np.zeros(4)
+        mujoco.mju_mulQuat(out, quat, q)
+        quat = out
+    return quat
 
 # ── Initial pelvis height ───────────────────────────────────
 # Chosen so the feet just touch the ground at the standing pose.
@@ -277,6 +331,17 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         opposite: the right knee flexes, the left one can only hyperextend
         (it bends backwards, up to 134°, and flexes 3.5° at most).  Flipping
         the axis keeps the URDF range, hence its angle convention.
+    reference_init : float
+        Probability that an episode starts at a random phase of the reference
+        walk, in its pose (DeepMimic's reference state initialisation); the
+        others start standing, phase 0.  Needs the gait clock and
+        ``fix_left_knee_axis``, like the imitation reward terms.
+    fix_arm_frames : bool
+        Orient both ``*_shoulder_motor`` bodies as in the URDF (the MJCF
+        reads their URDF ``rpy`` in the wrong Euler convention, which
+        crosses the arms at qpos = 0), and use a standing pose with the
+        arms along the body.  Changes the physics: old models do not
+        transfer.
     """
 
     metadata = {
@@ -307,6 +372,8 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         pushes: Optional[PushConfig] = None,
         fix_left_knee_axis: bool = False,
         gait_period: float = 0.0,
+        reference_init: float = 0.0,
+        fix_arm_frames: bool = False,
     ):
         EzPickle.__init__(
             self,
@@ -331,8 +398,11 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             pushes=pushes,
             fix_left_knee_axis=fix_left_knee_axis,
             gait_period=gait_period,
+            reference_init=reference_init,
+            fix_arm_frames=fix_arm_frames,
         )
         self._fix_left_knee_axis = fix_left_knee_axis
+        self._fix_arm_frames = fix_arm_frames
         # Gait clock: 0 keeps the 63-dimension observation. Above 0, sin and
         # cos of the phase are appended (65 dimensions).
         self._gait_period = float(gait_period)
@@ -394,7 +464,9 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         self.init_qpos[2] = _INIT_PELVIS_Z
         joint_names = [self.model.joint(i).name
                        for i in range(1, self.model.njnt)]
-        for jname, value in _STANDING_POSE_OVERRIDES.items():
+        overrides = (_STANDING_POSE_OVERRIDES_URDF_ARMS if fix_arm_frames
+                     else _STANDING_POSE_OVERRIDES)
+        for jname, value in overrides.items():
             idx = joint_names.index(jname)
             self.init_qpos[7 + idx] = value
 
@@ -455,6 +527,39 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         chest_rot = standing.xmat[self._chest_id].reshape(3, 3)
         self._chest_local_up = chest_rot.T @ np.array([0.0, 0.0, 1.0])
 
+        # ── Reference walk (piste 3), loaded only when something uses it ──
+        self._reference_init = float(reference_init)
+        self._reference: Optional[ReferenceMotion] = None
+        if reward.uses_imitation or self._reference_init > 0.0:
+            self._reference = self._load_reference(joint_names)
+        self._leg_mask = np.array(
+            [name.startswith(_LEG_JOINT_PREFIXES) for name in joint_names])
+
+    def _load_reference(self, joint_names: list) -> ReferenceMotion:
+        """Load the reference walk and check it fits this environment.
+
+        The reference was generated on the corrected model, for one gait
+        period, in actuator order: any mismatch would make the policy imitate
+        something else than the verified walk, silently.
+        """
+        if not self._fix_left_knee_axis:
+            raise ValueError(
+                "La marche de référence a été générée genou gauche corrigé : "
+                "activer environment.fix_left_knee_axis.")
+        reference = load_reference(ARMS_URDF_REFERENCE_PATH if self._fix_arm_frames
+                                   else DEFAULT_REFERENCE_PATH)
+        if reference.fix_arm_frames != self._fix_arm_frames:
+            raise ValueError(
+                "La marche de référence n'a pas été générée avec le même "
+                "fix_arm_frames que cet environnement.")
+        if abs(reference.period - self._gait_period) > 1e-6:
+            raise ValueError(
+                f"La marche de référence a un cycle de {reference.period} s ; "
+                f"environment.gait_period vaut {self._gait_period} s.")
+        if list(reference.joint_names) != list(joint_names):
+            raise ValueError("Articulations de la référence dans un autre ordre que le MJCF.")
+        return reference
+
     @property
     def is_healthy(self) -> bool:
         # Above the ground under the pelvis: on rough terrain, the absolute
@@ -476,12 +581,18 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         """
         self._terrain: Optional[TerrainGrid] = None
         self._terrain_dirty = False
-        if not self._terrain_config.enabled and not self._fix_left_knee_axis:
+        if (not self._terrain_config.enabled and not self._fix_left_knee_axis
+                and not self._fix_arm_frames):
             return super()._initialize_simulation()
         spec = mujoco.MjSpec.from_file(self.fullpath)
         if self._fix_left_knee_axis:
             knee = spec.joint(_LEFT_KNEE)
             knee.axis = -np.asarray(knee.axis)
+        if self._fix_arm_frames:
+            for body_name, rpy in _ARM_FRAME_RPY.items():
+                body = spec.body(body_name)
+                body.alt.type = mujoco.mjtOrientation.mjORIENTATION_QUAT
+                body.quat = _urdf_rpy_to_quat(rpy)
         if self._terrain_config.enabled:
             self._terrain = add_terrain(spec, self._terrain_config)
         model = spec.compile()
@@ -780,6 +891,12 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
                 phase_contact_reward = w.phase_contact_weight * float(
                     np.mean(in_contact == is_stance))
 
+        # ── Imitation of the reference walk (piste 3) ───────────
+        # At the gait clock's phase, after this step's advance.
+        imitation_reward = 0.0
+        if self._reference is not None and w.uses_imitation:
+            imitation_reward = self._imitation_reward(in_contact)
+
         reward = (forward_reward + healthy_reward + upright_reward
                   + gait_reward
                   - lateral_cost - ctrl_cost
@@ -788,7 +905,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
                   - yaw_rate_cost - joint_limit_cost
                   + vel_tracking_reward - torso_tilt_cost
                   - base_height_cost - ang_vel_xy_cost - feet_slide_cost
-                  + phase_contact_reward)
+                  + phase_contact_reward + imitation_reward)
 
         observation = self._get_obs()
         terminated = self.terminated
@@ -812,6 +929,7 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             "ang_vel_xy_cost": ang_vel_xy_cost,
             "feet_slide_cost": feet_slide_cost,
             "phase_contact_reward": phase_contact_reward,
+            "imitation_reward": imitation_reward,
             # Gait measurements, read by scripts/evaluate.py
             "torso_uprightness": torso_uprightness,
             "yaw_rate": yaw_rate,
@@ -837,6 +955,71 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             return np.concatenate([qpos, qvel, foot_contacts,
                                    [np.sin(angle), np.cos(angle)]])
         return np.concatenate([qpos, qvel, foot_contacts])
+
+    def _imitation_reward(self, in_contact: NDArray) -> float:
+        """Reward for following the reference walk at the current phase.
+
+        Exponential kernels as in DeepMimic (Peng et al. 2018), on the
+        quantities Disney's BDX and Open Duck imitate: leg joint angles and
+        velocities, foot contacts, and here pelvis height and tilt.  Each
+        term is bounded by its weight.  See ``RewardConfig``.
+
+        Args:
+            in_contact: Feet on the ground, ``(right, left)``, shape ``(2,)``.
+
+        Returns:
+            The sum of the active imitation terms.
+        """
+        w = self._reward
+        phase = self._gait_phase()
+        q_ref, qd_ref = self._reference.joints_at(phase)
+        error = self.data.qpos[7:] - q_ref
+        legs = self._leg_mask
+        total = w.imitation_pos_weight * float(
+            np.exp(-w.imitation_pos_scale * np.sum(error[legs] ** 2)))
+        total += w.imitation_upper_weight * float(
+            np.exp(-w.imitation_pos_scale * np.sum(error[~legs] ** 2)))
+        if w.imitation_vel_weight > 0.0:
+            vel_error = self.data.qvel[6:][legs] - qd_ref[legs]
+            total += w.imitation_vel_weight * float(
+                np.exp(-w.imitation_vel_scale * np.sum(vel_error ** 2)))
+        if w.imitation_contact_weight > 0.0:
+            expected = self._reference.contacts_at(phase) > 0.5
+            total += w.imitation_contact_weight * float(np.mean(in_contact == expected))
+        if w.imitation_base_weight > 0.0:
+            height_ref, _, up_ref = self._reference.base_at(phase)
+            up = self.data.xmat[_PELVIS_BODY_ID].reshape(3, 3)[2, :]
+            dz = float(self.data.qpos[2]) - self._ground_height() - height_ref
+            total += w.imitation_base_weight * float(np.exp(
+                -w.imitation_height_scale * dz ** 2
+                - w.imitation_tilt_scale * np.sum((up - up_ref) ** 2)))
+        return total
+
+    def _reference_start(self, qpos: NDArray, qvel: NDArray) -> float:
+        """Put ``qpos`` / ``qvel`` on the reference walk at a random phase.
+
+        The noise already drawn around the standing pose is kept around the
+        reference pose, and the yaw already drawn is kept as the heading.
+
+        Returns:
+            The phase drawn, in [0, 1).
+        """
+        reference = self._reference
+        phase = float(self.np_random.uniform(0.0, 1.0))
+        q_ref, qd_ref = reference.joints_at(phase)
+        height, quat_ref, _ = reference.base_at(phase)
+        qpos[7:] = q_ref + (qpos[7:] - self.init_qpos[7:])
+        ground = 0.0 if self._terrain is None else self._terrain.height_at(qpos[0], qpos[1])
+        qpos[2] = height + ground
+        heading = qpos[3:7] / np.linalg.norm(qpos[3:7])
+        quat = np.zeros(4)
+        mujoco.mju_mulQuat(quat, heading, quat_ref)
+        qpos[3:7] = quat
+        qvel[6:] = qd_ref + (qvel[6:] - self.init_qvel[6:])
+        velocity = np.zeros(3)
+        mujoco.mju_rotVecQuat(velocity, np.array([0.0, -reference.speed, 0.0]), heading)
+        qvel[0:3] = velocity
+        return phase
 
     def _gait_phase(self) -> float:
         """Phase of the gait clock in [0, 1), 0 at reset."""
@@ -915,6 +1098,10 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
             qpos[5] = 0.0            # y
             qpos[6] = np.sin(half)   # z
 
+        start_phase = None
+        if self._reference_init > 0.0 and self.np_random.uniform() < self._reference_init:
+            start_phase = self._reference_start(qpos, qvel)
+
         self.set_state(qpos, qvel)
 
         if self._floor_noise:
@@ -934,6 +1121,9 @@ class PoppyHumanoidEnv(MujocoEnv, EzPickle):
         self._air_time = np.zeros(2)
         self._was_in_contact = np.ones(2, dtype=bool)
         self._phase_time = 0.0
+        if start_phase is not None:
+            self._phase_time = start_phase * self._gait_period
+            self._forward_vel_filtered = self._reference.speed
 
         return self._get_obs()
 

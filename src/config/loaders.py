@@ -113,7 +113,9 @@ def make_poppy_env_config(cfg: dict) -> PoppyEnvironmentConfig:
         terrain=_make_section(TerrainConfig, cfg.get("terrain"), "terrain"),
         pushes=_make_section(PushConfig, cfg.get("pushes"), "pushes"),
         fix_left_knee_axis=bool(env_cfg.get("fix_left_knee_axis", False)),
+        fix_arm_frames=bool(env_cfg.get("fix_arm_frames", False)),
         gait_period=float(env_cfg.get("gait_period", 0.0)),
+        reference_init=float(env_cfg.get("reference_init", 0.0)),
     )
 
 
@@ -124,11 +126,12 @@ def as_evaluation_config(
 ) -> PoppyEnvironmentConfig:
     """Dérive une configuration d'évaluation depuis une configuration d'entraînement.
 
-    Trois différences, et seulement trois : un environnement au lieu de N, les
-    récompenses jamais normalisées — sinon les chiffres affichés ne sont pas
-    comparables d'un entraînement à l'autre — et la randomisation du sol
+    Quatre différences, et seulement quatre : un environnement au lieu de N,
+    les récompenses jamais normalisées — sinon les chiffres affichés ne sont
+    pas comparables d'un entraînement à l'autre —, la randomisation du sol
     désactivée par défaut, pour que deux exécutions du même modèle donnent le
-    même résultat.
+    même résultat, et le départ toujours debout (``reference_init`` à 0) : le
+    banc d'essai commun, et le vrai robot, partent de la pose debout.
 
     Args:
         config: Configuration issue du YAML d'entraînement.
@@ -143,6 +146,7 @@ def as_evaluation_config(
     return replace(
         config,
         n_envs=1,
+        reference_init=0.0,
         normalize_reward=False,
         domain_randomization=replace(config.domain_randomization, enabled=floor_noise),
         terrain=replace(config.terrain, difficulty=terrain_difficulty),
