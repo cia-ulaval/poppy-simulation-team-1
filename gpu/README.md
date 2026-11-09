@@ -2,13 +2,17 @@
 
 Portage de l'entraînement Poppy sur GPU, **sans changer ce qu'on apprend** :
 même MJCF, même contrôle PD, même observation, même récompense, même
-randomisation, mêmes réglages PPO que le témoin A
-(`configs/exp_a_ancien_cadre_nouvelle_recompense.yaml`). Le chemin CPU
+randomisation, mêmes réglages PPO que le run CPU de référence. Deux runs sont
+portés : le témoin A (`configs/exp_a_ancien_cadre_nouvelle_recompense.yaml`)
+et H-Placo, candidat principal du palier 1 (imitation de la marche Placo,
+bras corrigés, `gpu/configs/h_placo_cpu.yaml`). Le chemin CPU
 (`scripts/train_poppy.py`) n'est pas touché.
 
-> **État au 8 novembre 2026 : porte de parité passée sur la RTX 3050.** Le témoin A
-> porté atteint 5/6 sur M1–M6 (7, 8 et 9 M de pas), comme A sur CPU, en 33 min
-> au lieu de 2 à 3 h. Une seule graine (42) ; la RTX 4090 louée n'a pas été essayée.
+> **État au 8 novembre 2026 : deux portes de parité passées sur la RTX 3050.**
+> Le témoin A porté atteint 5/6 sur M1–M6 (7, 8 et 9 M de pas), comme A sur CPU.
+> H-Placo porté atteint 6/6 + M7 aux meilleurs modèles des deux graines, et à 8
+> checkpoints sur 10, comme H-Placo sur CPU. Chaque run de 10 M de pas prend
+> 33 à 35 min au lieu de 2 à 3 h. La RTX 4090 louée n'a pas été essayée.
 
 ## En bref
 
@@ -35,7 +39,15 @@ Entraîner le témoin A (10 M de pas, graine 42, comme sur CPU) :
 docker run --rm --gpus all -v "$PWD:/workspace" -w /workspace poppy-gpu python -m gpu.train --config gpu/configs/exp_a.yaml --num-envs 256 --steps-per-env 16
 ```
 
-Exporter un checkpoint pour le banc CPU, puis mesurer M1–M6 dans l'image CPU :
+Entraîner H-Placo (graines 42 et 7, comme sur CPU) :
+
+```bash
+docker run --rm --gpus all -v "$PWD:/workspace" -w /workspace poppy-gpu python -m gpu.train --config gpu/configs/h_placo.yaml --seed 42
+```
+
+Exporter un checkpoint pour le banc CPU, puis mesurer M1–M6 dans l'image CPU
+(pour H-Placo : `--base-config gpu/configs/h_placo_cpu.yaml` à l'export,
+`--config gpu/configs/h_placo_cpu.yaml` à la mesure, qui ajoute M7) :
 
 ```bash
 docker run --rm -v "$PWD:/workspace" -w /workspace poppy-gpu python -m gpu.export_sb3 logs/gpu/<run>/model_1220.pt
@@ -58,8 +70,20 @@ docker run --rm --gpus all -v "$PWD:/workspace" -w /workspace poppy-gpu python -
 docker run --rm --gpus all -v "$PWD:/workspace" -w /workspace poppy-gpu python -m gpu.parite
 ```
 
+Choisir le « meilleur » checkpoint d'un run GPU, au critère de
+l'`EvalCallback` CPU (voir « Ce qui diffère ») :
+
+```bash
+docker run --rm -v "$PWD:/workspace" -w /workspace poppy-train:latest python gpu/criteres.py --config gpu/configs/h_placo_cpu.yaml --select-best --train-seed 42 --model logs/gpu/<run>/model_610.zip --model …
+```
+
 `gpu/tests` n'est pas dans les `testpaths` du dépôt : `pytest` à la racine
-(image CPU, sans mjlab) ne le voit pas, et reste à `19 passed, 1 xfailed`.
+(image CPU, sans mjlab) ne le voit pas. Il y donne `64 passed, 1 xfailed`
+depuis la fusion de la piste Placo.
+
+Écrire depuis l'image CPU dans un dossier créé par l'image GPU demande
+`--user 0` : sous Docker Desktop, l'utilisateur `poppy` de `poppy-train` n'y a
+pas les droits d'écriture (vidéo, `--json`).
 
 ## Fichiers
 
@@ -67,14 +91,17 @@ docker run --rm --gpus all -v "$PWD:/workspace" -w /workspace poppy-gpu python -
 |---|---|
 | `poppy_env.py` | Scène mjlab, action PD, observation, récompense, terminaison, reset et randomisation |
 | `vecnormalize.py` | `VecNormalize` de SB3 en torch, dans l'enveloppe rsl_rl |
-| `ppo.py` | PPO rsl_rl aligné sur SB3, mise à jour capturée en graphe CUDA |
-| `symmetry.py` | Miroir pour l'extension de symétrie de rsl_rl, tables de `MirrorPPO` |
+| `ppo.py` | PPO rsl_rl aligné sur SB3 (`target_kl` et passe miroir de `MirrorPPO` compris), en graphes CUDA |
+| `symmetry.py` | Tables du miroir de `MirrorPPO`, en tenseurs |
 | `train.py` | Entraînement ; traduit `ppo:` et `network:` du YAML CPU |
 | `export_sb3.py` | Checkpoint rsl_rl → `.zip` SB3 + `_vecnormalize.pkl` |
-| `criteres.py` | M1–M6 du journal (§2) sur le banc CPU |
+| `criteres.py` | M1–M7 du journal (§2) sur le banc CPU ; choix du meilleur checkpoint |
 | `parite.py` | Parité modèle, dynamique et randomisation, CPU contre GPU |
 | `configs/exp_a.yaml` | Le témoin A : désigne le YAML CPU, ne fixe que la répartition GPU |
-| `tests/test_portage.py` | 8 tests (image GPU) |
+| `configs/h_placo.yaml` | H-Placo, même principe |
+| `configs/h_placo_cpu.yaml` | Configuration CPU exacte des runs Hetzner d'H-Placo, jamais versionnée jusqu'ici |
+| `tests/test_portage.py` | 8 tests (image GPU), témoin A |
+| `tests/test_h_placo.py` | 12 tests (image GPU), H-Placo |
 
 ## Ce qui est reproduit, et comment c'est vérifié
 
@@ -112,6 +139,34 @@ pas, il rend l'`info` CPU terme par terme, à moins de 1e-3 près
 **Observation.** `qpos[2:]`, `qvel`, forces des deux pieds, sin et cos de la
 phase : 65 dimensions, contrat inchangé. Écart avec le CPU au reset : 8e-8.
 
+**H-Placo (piste 3).** Ce qu'H-Placo ajoute à A est lu sur la
+`PoppyHumanoidEnv` CPU de même configuration, pas réécrit :
+
+- **bras orientés comme l'URDF** (`fix_arm_frames`) : même quaternion des deux
+  `*_shoulder_motor`, calculé par la fonction du CPU, et la pose debout bras le
+  long du corps. Scène compilée identique au CPU
+  (`test_scene_with_corrected_arms_matches_cpu`), et différente sans la
+  correction (témoin `test_arm_frames_change_the_scene`) ;
+- **référence** : les tableaux de `reference_walk_bras_urdf.npz` chargés par
+  le CPU, interpolés en lot comme `ReferenceMotion` (angles, vitesses,
+  hauteur, quaternion et verticale du bassin, contacts à l'échantillon le plus
+  proche) ; identiques à 1e-5 près sur 200 phases tirées et sur la grille
+  (`test_reference_matches_cpu`) ;
+- **imitation** : les cinq noyaux de `_imitation_reward`, à la phase après le
+  pas. Vérifiée sur données MuJoCo C, terme pour terme, départ debout **et**
+  départ en pleine marche (`test_reward_matches_cpu_on_mujoco_c_data`, deux
+  variantes, écart < 1e-3, imitation moyenne > 0,5 par pas) ;
+- **départ sur la référence** (`reference_init` 0,75) : même état que
+  `_reference_start` (bruit gardé autour de la pose de référence, lacet tiré
+  pris pour cap, vitesse de la référence), à 2e-6 près ; l'horloge part de la
+  phase tirée et la vitesse filtrée de la vitesse de la référence
+  (`test_reference_start_matches_cpu`, `test_reset_starts_on_reference_with_its_phase`).
+  Piège : mjlab applique l'événement de reset **avant** de remettre à zéro le
+  terme d'action ; la phase et la vitesse de départ passent donc par l'état
+  partagé ;
+- **actions bornées** (`normalize_action_space`) : l'espace d'action CPU
+  devient [−1, 1], et la borne GPU, lue dessus, suit (`test_actions_are_bounded`).
+
 **Randomisation.** Friction du sol (glissement, et torsion et roulis
 proportionnels) dans `[0,4 ; 2,0]` ; `solimp[sol, 4]` dans `[0 ; 0,5]` (la
 « restitution » au mauvais indice, défaut §8 reproduit) ; masses ×[0,85 ;
@@ -132,15 +187,38 @@ fait autrement que SB3 (`gpu/ppo.py`) :
 
 S'y ajoutent les avantages normalisés par mini-lot, une perte de valeur non
 bornée de poids 0,5, un taux constant, des réseaux séparés [256, 256] ReLU,
-`log_std` initial à −2 et l'initialisation par défaut de torch. Pour A : 20
-époques, mini-lots de 256, 4096 transitions par mise à jour, comme les 8 × 512
-du CPU.
+`log_std` initial à −2 et l'initialisation par défaut de torch. Pour A et
+H-Placo : 20 époques, mini-lots de 256, 4096 transitions par mise à jour,
+comme les 8 × 512 du CPU.
 
-**Miroir.** `gpu/symmetry.py` fournit à l'extension de symétrie de rsl_rl
-les tables **calculées** par `build_mirror_spec`, celles de `MirrorPPO` :
-paires `r_`/`l_`, signes tirés des axes, horloge décalée d'un demi-cycle,
-reflet sur l'observation brute. Test : `test_mirror_tables_match_mirror_ppo`.
-Coupé pour A, qui n'en a pas.
+**`target_kl` (H-Placo, 0,03).** Comme SB3 : avant chaque pas, la divergence
+`mean((r − 1) − log r)` du mini-lot ; au-delà de 1,5 × `target_kl`, le pas
+n'est pas fait et la mise à jour s'arrête, toutes époques comprises. Le
+gradient et le pas d'Adam sont deux graphes CUDA, la divergence est lue entre
+les deux (`test_target_kl_stops_the_update`). Sur H-Placo GPU (graine 42),
+la mise à jour s'arrête après 1 à 7 époques complètes dans 97 % des cas,
+jamais au bout des 20. Le journal SB3 du CPU n'enregistre pas ce nombre ;
+ce qu'il enregistre concorde :
+
+| H-Placo, graine 42 | CPU (SB3) | GPU |
+|---|---|---|
+| perte miroir, 50 premières mises à jour | 0,0105 | 0,0098 |
+| perte miroir, 200 dernières | 0,0022 | 0,0026 |
+| écart type de l'action en fin de run | 0,070 | 0,07 |
+
+**Miroir (H-Placo, poids 1).** La perte de `MirrorPPO`, pas celle de rsl_rl :
+**après** la mise à jour PPO, une époque de plus, rebattue, avec la seule
+perte `mean((μ(s) − M_a(μ(M_s(s))))²)`. Dans SB3, seuls les poids de la moyenne
+de l'acteur y reçoivent un gradient : `log_std` et le critique ne bougent pas,
+leurs moments d'Adam non plus, et la norme bornée est celle de l'acteur. Pour
+le reproduire, `SB3PPO` tient deux Adam, un pour le réseau de la moyenne, un
+pour le reste ; ensemble, ils font exactement l'Adam de SB3, qui est par
+paramètre (`test_symmetry_step_touches_only_the_mean_network`). Tables
+**calculées** par `build_mirror_spec`, celles de `MirrorPPO` : paires
+`r_`/`l_`, signes tirés des axes, horloge décalée d'un demi-cycle, reflet sur
+l'observation brute dénormalisée (`test_mirror_tables_match_mirror_ppo`,
+`test_symmetry_pass_mirrors_like_mirror_ppo`). L'extension de symétrie de
+rsl_rl, qui ajoute la perte à chaque pas PPO, n'est pas utilisée.
 
 **Export.** Le `.zip` SB3 rend la même action que l'acteur rsl_rl, à 1e-4 près,
 normalisation comprise (`test_sb3_export_reproduces_policy`).
@@ -168,10 +246,16 @@ normalisation comprise (`test_sb3_export_reproduces_policy`).
 5. **Adam fused** (graphe CUDA) au lieu de foreach : mêmes formules, arrondis
    différents.
 6. **MuJoCo 3.11** (épinglé par mjlab 1.6) contre 3.13 dans l'image CPU.
+7. **Meilleur modèle** : rsl_rl n'a pas d'`EvalCallback`. Le critère du CPU
+   (récompense brute moyenne de 5 épisodes déterministes, configuration
+   d'évaluation) est rejoué **après coup** sur le banc CPU, graine
+   d'entraînement + 1000, parmi les checkpoints tous les ~250 000 pas
+   (`gpu/criteres.py --select-best`). Sur CPU, il est cherché tous les
+   50 000 pas, pendant l'entraînement.
 
 Non portés, et refusés au lancement plutôt que simulés de travers : le sol
-accidenté (`terrain`), `restitution_in_solref`, `push_as_force`, `target_kl`,
-un taux d'apprentissage variable.
+accidenté (`terrain`), `restitution_in_solref`, `push_as_force`, un taux
+d'apprentissage variable.
 
 ## Débit
 
@@ -266,6 +350,68 @@ Ce qui n'est **pas** établi :
 
 Les checkpoints, leurs exports et `criteres.json` sont dans
 `logs/gpu/exp_a_256x16_s42/` et `logs/gpu/exp_a_128x32_s42/` (non versionnés).
+
+### H-Placo
+
+Mêmes conditions de mesure, plus M7 (bras le long du corps : chaque coude en
+moyenne au moins 10 cm sous son épaule, `gpu/criteres.py`). CPU : les runs
+Hetzner du 8 nov., `logs/hetzner/poppy-hplaco/`, mesurés ici avec le même
+script. GPU : 256 × 16, 10 M de pas, `gpu/configs/h_placo.yaml`. Les
+checkpoints GPU sont pris au plus près : 2,5 M = itération 610 (2 498 560
+pas), 5 M = 1220, 7,5 M = 1830 (7 495 680), final = 2441 (10 002 432).
+« Meilleur » : `best_model` de l'`EvalCallback` sur CPU, `--select-best` sur
+GPU (s42 : itération 1891, 7,7 M ; s7 : le final).
+
+| Checkpoint | CPU s42 | GPU s42 | CPU s7 | GPU s7 |
+|---|---|---|---|---|
+| 2,5 M | 5/6 + M7 (vitesse 0,18) | **6/6 + M7** | **6/6 + M7** | 4/6 + M7 (vitesse 0,16, tronc 0,974) |
+| 5 M | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** | 5/6 + M7 (vitesse 0,357) |
+| 7,5 M | 5/6 + M7 (latéral 0,30) | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** |
+| meilleur | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** |
+| final, 10 M | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** | **6/6 + M7** |
+
+Score : **8 checkpoints sur 10 à 6/6 + M7 sur CPU, 8 sur 10 sur GPU**, les
+quatre meilleurs modèles compris. Les manques ne tombent pas aux mêmes
+endroits : sur CPU, s42 à 2,5 M et 7,5 M, chaque fois de peu ; sur GPU, s7
+au début du run, qui démarre plus lentement (0,16 m/s à 2,5 M, puis
+0,357 m/s à 5 M, juste au-dessus de la borne de 0,35).
+
+Détail des meilleurs modèles :
+
+| Modèle | M1 | M2 vitesse | M3 tronc | M4 \|cap\| | M5 D−G | M6 \|latéral\| (max) | M7 G / D |
+|---|---|---|---|---|---|---|---|
+| CPU s42 `best_model` | 100 % | 0,249 | 0,998 | 1,4° | 0,7 | 0,12 (0,14) | 14,7 / 14,8 cm |
+| GPU s42 itération 1891 | 100 % | 0,255 | 0,999 | 0,7° | 5,5 | 0,11 (0,12) | 14,8 / 14,8 cm |
+| CPU s7 `best_model` | 100 % | 0,273 | 0,998 | 1,1° | 0,4 | 0,04 (0,08) | 14,8 / 14,8 cm |
+| GPU s7 final | 100 % | 0,272 | 0,998 | 0,6° | 2,6 | 0,06 (0,10) | 14,8 / 14,8 cm |
+
+Vidéo de profil du meilleur modèle GPU s42 (`--camera face`, qui filme de
+profil depuis la correction des axes) : `logs/gpu/h_placo_gpu_s42_best_face.mp4`
+(non versionnée). Le robot marche droit, genoux légèrement fléchis, bras le
+long du corps, comme le dit M7.
+
+Débit : 33,2 min (s42, 5 000 pas/s) et 35,1 min (s7, 4 750 pas/s), pour
+10 M de pas chacun, l'un après l'autre sur la 3050. `target_kl` (une
+synchronisation par mini-lot) et la passe miroir ne coûtent presque rien :
+la mise à jour prend 0,07 s par itération en moyenne, moins que les 0,18 s de
+A, puisque l'arrêt anticipé coupe la plupart des époques.
+
+Ce qui reste ouvert :
+
+- **Écart de moteur** : comme pour A, les politiques sont entraînées sur les
+  contacts de MuJoCo Warp et mesurées sur ceux de MuJoCo C. La porte passe
+  quand même ; elle ne dit pas qu'un modèle GPU se comporte comme un modèle
+  CPU sur le robot.
+- **Deux graines** de chaque côté : la différence de démarrage de s7 sur GPU
+  peut être le hasard autant que le moteur.
+- **Meilleur modèle** choisi parmi des checkpoints tous les ~250 000 pas,
+  après coup, pas tous les 50 000 pas pendant l'entraînement.
+- M5 (symétrie d'appui) est plus élevé sur GPU s42 (5,5 à 6,9 points en fin
+  de run, contre 0,7 à 2,6 sur CPU), sous la borne de 10.
+
+Exports, `best.log`, `criteres.md` : `logs/gpu/h_placo_256x16_s42/`,
+`logs/gpu/h_placo_256x16_s7/` ; référence CPU : `logs/gpu/h_placo_cpu_ref/`
+(non versionnés).
 
 ### Choix de répartition
 
