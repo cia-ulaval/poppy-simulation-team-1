@@ -19,9 +19,3 @@ gpu:
   num_steps_per_env: 32
   # Un checkpoint tous les ~500 000 pas, comme training.checkpoint_freq.
   checkpoint_freq: 500_000
-
-# Miroir (symétrie de rsl_rl) : coupé pour A, qui n'en a pas.
-mirror:
-  use_data_augmentation: false
-  use_mirror_loss: false
-  mirror_loss_coeff: 0.0

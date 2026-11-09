@@ -1,4 +1,4 @@
-"""Miroir gauche ↔ droite pour l'extension de symétrie de rsl_rl.
+"""Miroir gauche ↔ droite de ``MirrorPPO``, sur les tenseurs du GPU.
 
 Mêmes tables que ``MirrorPPO`` : elles sont **calculées** par
 ``src.environments.mirror.build_mirror_spec`` sur la ``PoppyHumanoidEnv`` de
@@ -10,8 +10,8 @@ on dénormalise avec les statistiques de ``VecNormalizeWrapper``, on reflète,
 on renormalise et on borne. L'action est reflétée en passant par les angles
 cibles, à cause des courses asymétriques autour de la pose debout.
 
-rsl_rl appelle :func:`mirror_batch` avec ``obs`` et/ou ``actions`` et attend
-en retour l'original suivi du reflet, concaténés sur la première dimension.
+``gpu.ppo.SB3PPO`` s'en sert pour la passe de symétrie de ``MirrorPPO`` (et
+non pour l'extension de symétrie de rsl_rl, qui ferait autre chose).
 """
 
 from __future__ import annotations
@@ -19,10 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict
 
 from gpu.poppy_env import reference_env
-from gpu.vecnormalize import OBS_GROUP, VecNormalizeWrapper
+from gpu.vecnormalize import VecNormalizeWrapper
 from src.environments.mirror import build_mirror_spec
 
 
@@ -83,26 +82,3 @@ def mirror_action(env: VecNormalizeWrapper, action: torch.Tensor) -> torch.Tenso
     target = m.joint_init + torch.where(action >= 0, action * m.range_up, action * m.range_down)
     delta = target[:, m.joint_perm] * m.joint_sign - m.joint_init
     return torch.where(delta >= 0, delta / m.range_up, delta / m.range_down)
-
-
-def mirror_batch(
-    env: VecNormalizeWrapper,
-    obs: TensorDict | None = None,
-    actions: torch.Tensor | None = None,
-) -> tuple[TensorDict | None, torch.Tensor | None]:
-    """Fonction d'augmentation pour ``rsl_rl.extensions.Symmetry``.
-
-    Returns:
-        ``(obs, actions)`` de taille double : originaux puis reflets.
-    """
-    obs_out = None
-    if obs is not None:
-        policy = obs[OBS_GROUP]
-        obs_out = TensorDict(
-            {OBS_GROUP: torch.cat([policy, mirror_obs(env, policy)], dim=0)},
-            batch_size=[policy.shape[0] * 2],
-        )
-    act_out = None
-    if actions is not None:
-        act_out = torch.cat([actions, mirror_action(env, actions)], dim=0)
-    return obs_out, act_out

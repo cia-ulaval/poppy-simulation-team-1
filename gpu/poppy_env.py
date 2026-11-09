@@ -14,6 +14,12 @@ temps suit l'ordre exact de ``PoppyHumanoidEnv.step`` :
    les forces de contact des pieds ;
 5. récompense, terminaison, puis observation.
 
+H-Placo (piste 3) ajoute l'imitation de la marche de référence, le départ
+sur cette marche (``reference_init``), les bras orientés comme l'URDF
+(``fix_arm_frames``) et les actions bornées à [−1, 1]
+(``normalize_action_space``). La référence est **lue** sur la
+``PoppyHumanoidEnv`` CPU, comme le reste ; elle n'est pas rechargée ici.
+
 Les grandeurs dérivées (``xpos``, ``xmat``, ``cfrc_ext``) lues par la
 récompense ont un sous-pas de retard sur ``qpos``, exactement comme dans
 Gymnasium, qui ne refait pas ``mj_forward`` après ``mj_step``. Les
@@ -55,6 +61,7 @@ from mjlab.sim import MujocoCfg, SimulationCfg
 
 from src.config.settings import PoppyEnvironmentConfig
 from src.environments.poppy_humanoid_env import (
+    _ARM_FRAME_RPY,
     _CONTACT_THRESHOLD,
     _KD,
     _KP,
@@ -65,6 +72,7 @@ from src.environments.poppy_humanoid_env import (
     _N_JOINTS,
     _PELVIS_BODY_ID,
     PoppyHumanoidEnv,
+    _urdf_rpy_to_quat,
 )
 
 ROBOT = "robot"
@@ -108,7 +116,9 @@ def reference_env(config: PoppyEnvironmentConfig) -> PoppyHumanoidEnv:
         terrain=config.terrain,
         pushes=config.pushes,
         fix_left_knee_axis=config.fix_left_knee_axis,
+        fix_arm_frames=config.fix_arm_frames,
         gait_period=config.gait_period,
+        reference_init=config.reference_init,
     )
 
 
@@ -138,13 +148,99 @@ def check_supported(config: PoppyEnvironmentConfig) -> None:
         )
 
 
-def _poppy_spec(fix_left_knee_axis: bool) -> mujoco.MjSpec:
-    """Charge le MJCF Poppy, genou gauche corrigé comme dans ``PoppyHumanoidEnv``."""
+def _poppy_spec(fix_left_knee_axis: bool, fix_arm_frames: bool = False) -> mujoco.MjSpec:
+    """Charge le MJCF Poppy, corrigé comme dans ``PoppyHumanoidEnv._initialize_simulation``.
+
+    Genou gauche retourné, et épaules orientées comme l'URDF (même quaternion,
+    calculé par la même fonction que sur CPU).
+    """
     spec = mujoco.MjSpec.from_file(str(_MODEL_PATH))
     if fix_left_knee_axis:
         knee = spec.joint(_LEFT_KNEE)
         knee.axis = -np.asarray(knee.axis)
+    if fix_arm_frames:
+        for body_name, rpy in _ARM_FRAME_RPY.items():
+            body = spec.body(body_name)
+            body.alt.type = mujoco.mjtOrientation.mjORIENTATION_QUAT
+            body.quat = _urdf_rpy_to_quat(rpy)
     return spec
+
+
+@dataclass
+class ReferenceTables:
+    """La marche de référence de ``PoppyHumanoidEnv``, en tenseurs.
+
+    Attributes:
+        qpos: ``(M, 25)`` angles, rad.
+        qvel: ``(M, 25)`` vitesses, rad/s.
+        contacts: ``(M, 2)`` pieds au sol (droit, gauche), 0 ou 1.
+        height: ``(M,)`` hauteur du bassin au-dessus du sol, m.
+        quat: ``(M, 4)`` orientation du bassin (w, x, y, z).
+        speed: Vitesse d'avance moyenne, m/s.
+    """
+
+    qpos: torch.Tensor
+    qvel: torch.Tensor
+    contacts: torch.Tensor
+    height: torch.Tensor
+    quat: torch.Tensor
+    speed: float
+
+    @property
+    def n_samples(self) -> int:
+        """Nombre d'échantillons M sur le cycle."""
+        return int(self.qpos.shape[0])
+
+    def _bracket(self, phase: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """``ReferenceMotion._bracket`` en lot : indices encadrants et poids."""
+        x = torch.remainder(phase, 1.0) * self.n_samples
+        floor = torch.floor(x)
+        i0 = floor.long() % self.n_samples
+        return i0, (i0 + 1) % self.n_samples, x - floor
+
+    def joints_at(self, phase: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Angles et vitesses ``(N, 25)``, interpolation linéaire périodique."""
+        i0, i1, w = self._bracket(phase)
+        w = w[:, None]
+        return ((1.0 - w) * self.qpos[i0] + w * self.qpos[i1],
+                (1.0 - w) * self.qvel[i0] + w * self.qvel[i1])
+
+    def base_at(self, phase: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Hauteur ``(N,)``, quaternion normé ``(N, 4)``, verticale dans le repère du bassin ``(N, 3)``."""
+        i0, i1, w = self._bracket(phase)
+        height = (1.0 - w) * self.height[i0] + w * self.height[i1]
+        quat = (1.0 - w[:, None]) * self.quat[i0] + w[:, None] * self.quat[i1]
+        quat = quat / torch.linalg.norm(quat, dim=-1, keepdim=True)
+        qw, qx, qy, qz = quat.unbind(-1)
+        up = torch.stack([2.0 * (qx * qz - qw * qy),
+                          2.0 * (qy * qz + qw * qx),
+                          1.0 - 2.0 * (qx * qx + qy * qy)], dim=-1)
+        return height, quat, up
+
+    def contacts_at(self, phase: torch.Tensor) -> torch.Tensor:
+        """Pieds au sol ``(N, 2)``, échantillon le plus proche."""
+        i0, i1, w = self._bracket(phase)
+        return torch.where((w >= 0.5)[:, None], self.contacts[i1], self.contacts[i0])
+
+
+def _quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Produit de quaternions (w, x, y, z) en lot, comme ``mju_mulQuat``."""
+    aw, ax, ay, az = a.unbind(-1)
+    bw, bx, by, bz = b.unbind(-1)
+    return torch.stack([
+        aw * bw - ax * bx - ay * by - az * bz,
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+    ], dim=-1)
+
+
+def _quat_rotate(q: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    """Vecteur ``v`` tourné par le quaternion unitaire ``q`` ``(N, 4)``, comme ``mju_rotVecQuat``."""
+    v = v.expand(q.shape[0], 3)
+    u = q[:, 1:]
+    t = 2.0 * torch.linalg.cross(u, v)
+    return v + q[:, :1] * t + torch.linalg.cross(u, t)
 
 
 @dataclass
@@ -213,6 +309,10 @@ class PoppyState:
     chest_id: int
     feet_ids: torch.Tensor           # (2,) (droit, gauche)
     floor_geom_id: int
+    # Piste 3 : marche de référence (None si rien ne s'en sert).
+    reference: ReferenceTables | None = None
+    reference_init: float = 0.0
+    leg_mask: torch.Tensor | None = None  # (25,) articulations des jambes
     # Tampons, (N, …).
     action: torch.Tensor = field(init=False)
     prev_action: torch.Tensor = field(init=False)
@@ -225,6 +325,10 @@ class PoppyState:
     forward_vel_filtered: torch.Tensor = field(init=False)
     air_time: torch.Tensor = field(init=False)
     was_in_contact: torch.Tensor = field(init=False)
+    # Phase de départ (0 debout, tirée sur la référence sinon) et vitesse
+    # filtrée de départ : posées par poppy_reset, qui passe avant reset().
+    phase_offset: torch.Tensor = field(init=False)
+    start_forward_vel: torch.Tensor = field(init=False)
     info: dict = field(init=False, default_factory=dict)
 
     def allocate(self, num_envs: int, device: str) -> None:
@@ -243,6 +347,8 @@ class PoppyState:
         self.forward_vel_filtered = zeros()
         self.air_time = zeros(2)
         self.was_in_contact = torch.ones((num_envs, 2), device=device, dtype=torch.bool)
+        self.phase_offset = zeros()
+        self.start_forward_vel = zeros()
 
     def reset(self, env_ids: torch.Tensor | slice) -> None:
         """Remet les tampons d'épisode à zéro, comme ``reset_model``."""
@@ -250,7 +356,7 @@ class PoppyState:
         self.feet_need_refresh[env_ids] = True
         self.foot_force[env_ids] = 0.0
         self.yaw_rate_filtered[env_ids] = 0.0
-        self.forward_vel_filtered[env_ids] = 0.0
+        self.forward_vel_filtered[env_ids] = self.start_forward_vel[env_ids]
         self.air_time[env_ids] = 0.0
         self.was_in_contact[env_ids] = True
 
@@ -281,6 +387,14 @@ def build_state(
             )
 
         floor = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, f"{ROBOT}/floor")
+        reference = None
+        if ref._reference is not None:
+            r = ref._reference
+            reference = ReferenceTables(
+                qpos=_tensor(r.qpos, device), qvel=_tensor(r.qvel, device),
+                contacts=_tensor(r.contacts, device), height=_tensor(r.base_pos[:, 2], device),
+                quat=_tensor(r.base_quat, device), speed=float(r.speed),
+            )
         return PoppyState(
             dt=float(ref.dt),
             gait_period=float(ref._gait_period),
@@ -308,6 +422,9 @@ def build_state(
                 [body_id(ref._r_foot_id), body_id(ref._l_foot_id)], device=device
             ),
             floor_geom_id=floor,
+            reference=reference,
+            reference_init=float(ref._reference_init),
+            leg_mask=torch.as_tensor(ref._leg_mask, device=device),
         )
     finally:
         ref.close()
@@ -430,9 +547,14 @@ def poppy_observation(env: ManagerBasedRlEnv) -> torch.Tensor:
 
 
 def _gait_phase(env: ManagerBasedRlEnv, s: PoppyState) -> torch.Tensor:
-    """Phase de l'horloge dans [0, 1), 0 au reset : ``(pas × dt / période) mod 1``."""
+    """Phase de l'horloge dans [0, 1) : ``(départ + pas × dt / période) mod 1``.
+
+    Le départ vaut 0 debout, et la phase tirée quand l'épisode part de la
+    marche de référence (``_phase_time = phase × période`` sur CPU).
+    """
     elapsed = env.episode_length_buf.to(torch.float64) * s.dt
-    return torch.remainder(elapsed / s.gait_period, 1.0).to(torch.float32)
+    phase = s.phase_offset.to(torch.float64) + elapsed / s.gait_period
+    return torch.remainder(phase, 1.0).to(torch.float32)
 
 
 # ── Terminaison : bassin hors de la plage de hauteur ───────────────────────
@@ -643,6 +765,12 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
               - base_height_cost - ang_vel_xy_cost - feet_slide_cost
               + phase_contact_reward)
 
+    # Imitation de la marche de référence, à la phase après le pas.
+    imitation_reward = torch.zeros_like(z)
+    if s.reference is not None and w.uses_imitation and phase is not None:
+        imitation_reward = _imitation_reward(s, qpos, qvel, pelvis_rot, in_contact, phase)
+        reward = reward + imitation_reward
+
     s.info = {
         "forward_vel": forward_vel, "capped_vel": capped_vel,
         "lateral_vel": lateral_vel, "uprightness": uprightness,
@@ -654,6 +782,7 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
         "vel_tracking_reward": vel_tracking_reward, "torso_tilt_cost": torso_tilt_cost,
         "base_height_cost": base_height_cost, "ang_vel_xy_cost": ang_vel_xy_cost,
         "feet_slide_cost": feet_slide_cost, "phase_contact_reward": phase_contact_reward,
+        "imitation_reward": imitation_reward,
         "torso_uprightness": torso_uprightness, "yaw_rate": yaw_rate,
         "heading": torch.atan2(forward_dir[:, 1], forward_dir[:, 0]),
         "r_contact": in_contact[:, 0].float(), "l_contact": in_contact[:, 1].float(),
@@ -662,6 +791,75 @@ def compute_reward(  # noqa: PLR0915 - un terme par bloc, dans l'ordre de step()
         "reward": reward,
     }
     return reward
+
+
+def _imitation_reward(
+    s: PoppyState,
+    qpos: torch.Tensor,
+    qvel: torch.Tensor,
+    pelvis_rot: torch.Tensor,
+    in_contact: torch.Tensor,
+    phase: torch.Tensor,
+) -> torch.Tensor:
+    """``PoppyHumanoidEnv._imitation_reward`` en lot, terme pour terme.
+
+    Noyaux exponentiels sur les angles des jambes et du haut du corps, les
+    vitesses des jambes, les contacts des pieds, la hauteur et l'inclinaison
+    du bassin (sol plat : hauteur du sol nulle).
+
+    Returns:
+        ``(N,)`` la somme des termes d'imitation actifs.
+    """
+    w = s.reward
+    ref = s.reference
+    legs = s.leg_mask
+    q_ref, qd_ref = ref.joints_at(phase)
+    error = qpos[:, 7:] - q_ref
+    total = w.imitation_pos_weight * torch.exp(
+        -w.imitation_pos_scale * (error[:, legs] ** 2).sum(-1))
+    total = total + w.imitation_upper_weight * torch.exp(
+        -w.imitation_pos_scale * (error[:, ~legs] ** 2).sum(-1))
+    if w.imitation_vel_weight > 0.0:
+        vel_error = qvel[:, 6:][:, legs] - qd_ref[:, legs]
+        total = total + w.imitation_vel_weight * torch.exp(
+            -w.imitation_vel_scale * (vel_error ** 2).sum(-1))
+    if w.imitation_contact_weight > 0.0:
+        expected = ref.contacts_at(phase) > 0.5
+        total = total + w.imitation_contact_weight * (in_contact == expected).float().mean(-1)
+    if w.imitation_base_weight > 0.0:
+        height_ref, _, up_ref = ref.base_at(phase)
+        up = pelvis_rot[:, 2, :]
+        dz = qpos[:, 2] - height_ref
+        total = total + w.imitation_base_weight * torch.exp(
+            -w.imitation_height_scale * dz ** 2
+            - w.imitation_tilt_scale * ((up - up_ref) ** 2).sum(-1))
+    return total
+
+
+def reference_start(
+    s: PoppyState, qpos: torch.Tensor, qvel: torch.Tensor, phase: torch.Tensor
+) -> None:
+    """``PoppyHumanoidEnv._reference_start`` en lot, sur place.
+
+    Le bruit déjà tiré autour de la pose debout est gardé autour de la pose
+    de référence, et le lacet déjà tiré devient le cap.
+
+    Args:
+        s: État partagé (référence, pose debout).
+        qpos: ``(n, nq)`` état initial tiré, modifié.
+        qvel: ``(n, nv)``, modifié.
+        phase: ``(n,)`` phases tirées, dans [0, 1).
+    """
+    ref = s.reference
+    q_ref, qd_ref = ref.joints_at(phase)
+    height, quat_ref, _ = ref.base_at(phase)
+    qpos[:, 7:] = q_ref + (qpos[:, 7:] - s.init_qpos[7:])
+    qpos[:, 2] = height
+    heading = qpos[:, 3:7] / torch.linalg.norm(qpos[:, 3:7], dim=-1, keepdim=True)
+    qpos[:, 3:7] = _quat_mul(heading, quat_ref)
+    qvel[:, 6:] = qd_ref + qvel[:, 6:]
+    backward = torch.tensor([0.0, -ref.speed, 0.0], device=qpos.device)
+    qvel[:, 0:3] = _quat_rotate(heading, backward)
 
 
 # ── Reset et randomisation de domaine ──────────────────────────────────────
@@ -678,6 +876,11 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
     (défaut connu : c'est l'exposant de l'impédance, reproduit tel quel), et
     chaque masse à ±15 % de sa valeur d'origine, sans recalcul des
     constantes dérivées — comme ``_randomize_masses``.
+
+    Avec ``reference_init``, une partie des épisodes part de la marche de
+    référence à une phase tirée au hasard (:func:`reference_start`) ; leur
+    horloge et leur vitesse filtrée partent de cette phase et de la vitesse
+    de la référence, comme sur CPU.
     """
     s = poppy_state(env)
     if env_ids is None:
@@ -698,6 +901,17 @@ def poppy_reset(env: ManagerBasedRlEnv, env_ids: torch.Tensor | None) -> None:
         qpos[:, 3] = torch.cos(half)
         qpos[:, 4:6] = 0.0
         qpos[:, 6] = torch.sin(half)
+    s.phase_offset[env_ids] = 0.0
+    s.start_forward_vel[env_ids] = 0.0
+    if s.reference_init > 0.0:
+        start = torch.rand(n, device=device) < s.reference_init
+        phase = torch.rand(n, device=device)
+        moved_qpos, moved_qvel = qpos.clone(), qvel.clone()
+        reference_start(s, moved_qpos, moved_qvel, phase)
+        qpos = torch.where(start[:, None], moved_qpos, qpos)
+        qvel = torch.where(start[:, None], moved_qvel, qvel)
+        s.phase_offset[env_ids] = torch.where(start, phase, 0.0)
+        s.start_forward_vel[env_ids] = torch.where(start, s.reference.speed, 0.0)
     data.qpos[env_ids] = qpos
     data.qvel[env_ids] = qvel
     data.xfrc_applied[env_ids] = 0.0
@@ -743,9 +957,10 @@ def make_env_cfg(
         ref.close()
 
     fix_knee = config.fix_left_knee_axis
+    fix_arms = config.fix_arm_frames
     # La pose initiale vient de poppy_reset ; init_state ne sert qu'au keyframe
     # que mjlab ajoute à la scène, et que rien ici ne relit.
-    robot = EntityCfg(spec_fn=lambda: _poppy_spec(fix_knee))
+    robot = EntityCfg(spec_fn=lambda: _poppy_spec(fix_knee, fix_arms))
 
     return ManagerBasedRlEnvCfg(
         decimation=config.frame_skip,
@@ -790,6 +1005,7 @@ __all__ = [
     "PoppyPdActionCfg",
     "PoppyReward",
     "PoppyState",
+    "ReferenceTables",
     "check_supported",
     "make_env_cfg",
     "option_fields",
@@ -797,4 +1013,5 @@ __all__ = [
     "poppy_reset",
     "poppy_state",
     "reference_env",
+    "reference_start",
 ]

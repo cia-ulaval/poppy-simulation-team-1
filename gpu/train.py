@@ -61,12 +61,12 @@ def runner_cfg(
       paramétré en log comme SB3 ; réseaux séparés pour la politique et la
       valeur, comme ``net_arch: {pi, vf}`` ;
     * norme de gradient bornée globalement et Adam à ``eps = 1e-5`` :
-      :class:`gpu.ppo.SB3PPO`.
+      :class:`gpu.ppo.SB3PPO` ;
+    * ``target_kl`` (arrêt anticipé de SB3) et ``symmetry_loss_weight``
+      (passe miroir de ``MirrorPPO``) : :class:`gpu.ppo.SB3PPO` aussi.
     """
     ppo = base_cfg["ppo"]
     net = base_cfg.get("network", {})
-    if ppo.get("target_kl") is not None:
-        raise NotImplementedError("ppo.target_kl (arrêt anticipé de SB3) n'est pas porté.")
     if isinstance(ppo.get("learning_rate"), str) or ppo.get("lr_schedule", "constant") != "constant":
         raise NotImplementedError("Seul un taux d'apprentissage constant est porté.")
     batch = num_envs * num_steps
@@ -74,8 +74,6 @@ def runner_cfg(
         raise ValueError(f"{batch} transitions ne se découpent pas en mini-lots de {ppo['batch_size']}.")
     hidden = list(net.get("hidden_layers", [64, 64]))
     activation = _ACTIVATIONS[net.get("activation", "tanh")]
-    mirror = gpu_cfg.get("mirror", {})
-    use_mirror = mirror.get("use_data_augmentation") or mirror.get("use_mirror_loss")
     return {
         "seed": seed,
         "num_steps_per_env": num_steps,
@@ -118,12 +116,9 @@ def runner_cfg(
             "normalize_advantage_per_mini_batch": True,
             "optimizer": "adam",
             "rnd_cfg": None,
-            "symmetry_cfg": {
-                "data_augmentation_func": "gpu.symmetry:mirror_batch",
-                "use_data_augmentation": bool(mirror.get("use_data_augmentation", False)),
-                "use_mirror_loss": bool(mirror.get("use_mirror_loss", False)),
-                "mirror_loss_coeff": float(mirror.get("mirror_loss_coeff", 0.0)),
-            } if use_mirror else None,
+            "symmetry_cfg": None,  # pas la symétrie de rsl_rl : celle de MirrorPPO
+            "target_kl": None if ppo.get("target_kl") is None else float(ppo["target_kl"]),
+            "sb3_symmetry_weight": float(ppo.get("symmetry_loss_weight", 0.0)),
         },
     }
 

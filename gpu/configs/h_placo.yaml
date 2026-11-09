@@ -1,0 +1,20 @@
+# ============================================================
+# H-Placo porté sur GPU (mjlab + MuJoCo Warp + rsl_rl).
+#
+# Comme pour A, rien de ce qu'on apprend n'est recopié ici : imitation de la
+# marche Placo, départ sur la référence, bras corrigés, actions bornées,
+# hyperparamètres PPO (target_kl, perte miroir compris) et réseau sont lus
+# dans base_config, la configuration exacte des runs CPU.
+# ============================================================
+
+base_config: gpu/configs/h_placo_cpu.yaml
+
+gpu:
+  # 8 × 512 = 4096 transitions par mise à jour sur CPU ; ici 256 × 16, le
+  # découpage validé pour A (README, porte de parité), le plus rapide sur
+  # la RTX 3050. Mêmes 16 mini-lots de 256, mêmes 20 époques.
+  num_envs: 256
+  num_steps_per_env: 16
+  # Un checkpoint tous les ~250 000 pas : 2,5 M, 5 M et 7,5 M en font
+  # partie, et le « meilleur » modèle se choisit parmi eux (README).
+  checkpoint_freq: 250_000

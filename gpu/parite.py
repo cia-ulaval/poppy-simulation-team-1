@@ -51,7 +51,7 @@ STEP_TERMS = (
     "healthy_reward", "gait_reward", "ctrl_cost", "action_rate_cost",
     "joint_vel_cost", "air_time_reward", "yaw_rate_cost", "joint_limit_cost",
     "vel_tracking_reward", "torso_tilt_cost", "base_height_cost",
-    "ang_vel_xy_cost", "feet_slide_cost", "phase_contact_reward",
+    "ang_vel_xy_cost", "feet_slide_cost", "phase_contact_reward", "imitation_reward",
 )
 
 
