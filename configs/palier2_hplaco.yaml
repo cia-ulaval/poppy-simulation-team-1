@@ -1,0 +1,122 @@
+# ============================================================
+# Poppy Humanoid — Palier 2 sur H-Placo : sol accidenté
+#
+# EXPÉRIMENTAL — branche claude/piste3-placo-4cdd4e.
+# Exactement la config de H-Placo (exp_hp, journal §4.5 : 6/6 + M7 sur deux
+# graines), une seule variable changée : le terrain, avec un curriculum.
+#   - terrain : champ de hauteur régénéré à chaque reset() ;
+#   - curriculum : relief de 0,1 à 1,0 sur les 70 premiers % (14 M de pas),
+#     puis 6 M à pleine difficulté.
+# Volontairement inchangés par rapport à H-Placo : poids de l'imitation (la
+# référence est une marche sur sol plat), restitution_in_solref (défaut
+# connu, TECHNIQUE.md §8), n_envs.
+# L'évaluation pendant l'entraînement reste sur sol plat : best_model est donc
+# choisi sur sol plat. Les checkpoints se mesurent ensuite sur terrain.
+#
+# Usage :
+#   python scripts/train_poppy.py --config configs/palier2_hplaco.yaml \
+#     --init-from <run exp_hp>/best_model/best_model.zip
+# ============================================================
+algorithm: PPO
+training:
+  total_timesteps: 20000000
+  seed: 7
+  checkpoint_freq: 500000
+  eval_freq: 50000
+  n_eval_episodes: 5
+  log_dir: ./logs/palier2_hp
+environment:
+  n_envs: 8
+  frame_skip: 5
+  terminate_when_unhealthy: true
+  healthy_z_range:
+  - 0.25
+  - 0.7
+  normalize_obs: true
+  normalize_reward: true
+  clip_obs: 10.0
+  gamma: 0.99
+  normalize_action_space: true
+  fix_left_knee_axis: true
+  fix_arm_frames: true
+  gait_period: 0.7
+  reference_init: 0.75
+domain_randomization:
+  enabled: true
+  friction_range:
+  - 0.4
+  - 2.0
+  restitution_range:
+  - 0.0
+  - 0.5
+  restitution_in_solref: false
+  push_as_force: false
+reward:
+  imitation_pos_weight: 2.0
+  imitation_pos_scale: 5.0
+  imitation_upper_weight: 0.5
+  imitation_vel_weight: 0.5
+  imitation_vel_scale: 0.05
+  imitation_contact_weight: 1.0
+  imitation_base_weight: 1.0
+  imitation_height_scale: 200.0
+  imitation_tilt_scale: 20.0
+  forward_weight: 0.0
+  max_forward_vel: 0.8
+  vel_tracking_weight: 1.5
+  target_vel: 0.25
+  vel_tracking_sigma: 0.2
+  vel_tracking_tau: 1.0
+  healthy: 0.5
+  upright_weight: 0.25
+  torso_upright_weight: 0.25
+  torso_tilt_weight: 5.0
+  yaw_rate_weight: 20.0
+  yaw_rate_tau: 2.0
+  lateral_weight: 0.5
+  joint_limit_weight: 2.0
+  joint_limit_soft: 0.95
+  feet_slide_weight: 0.25
+  base_height_weight: 0.0
+  ang_vel_xy_weight: 0.0
+  phase_contact_weight: 0.0
+  gait_single: 0.0
+  gait_double: 0.0
+  air_time_weight: 0.0
+  ctrl_weight: 0.0
+  action_rate_weight: 0.5
+  joint_vel_weight: 0.001
+ppo:
+  learning_rate: 2.5e-05
+  n_steps: 512
+  batch_size: 256
+  n_epochs: 20
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.3
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.8
+  symmetry_loss_weight: 1.0
+  target_kl: 0.03
+network:
+  hidden_layers:
+  - 256
+  - 256
+  activation: relu
+  log_std_init: -2
+  ortho_init: false
+figs_dir: ./figs/palier2_hp
+terrain:
+  enabled: true
+  difficulty: 0.1
+  size: 20.0
+  resolution: 0.05
+  slope_amplitude: 0.05
+  bump_height: 0.04
+  step_height: 0.03
+  roughness: 0.005
+  flat_radius: 0.6
+curriculum:
+  terrain_difficulty: [0.1, 1.0]
+  ramp_fraction: 0.7
