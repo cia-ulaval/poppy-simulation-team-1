@@ -33,3 +33,12 @@ figs/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets : la clé OpenAI de voice_assistant/ se lit dans un .env local.
+.env
+.env.*
+
+# Fichiers temporaires d'éditeur
+*.swp
+*.swo
+*~
