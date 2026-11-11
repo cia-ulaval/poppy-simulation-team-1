@@ -1,9 +1,10 @@
 
 import asyncio
 
-from openai import AsyncOpenAI
-from config.settings import REALTIME_MODEL
 from conversation.prompts import POPPY_SYSTEM_PROMPT
+from openai import AsyncOpenAI
+
+from config.settings import REALTIME_MODEL
 
 
 async def main():

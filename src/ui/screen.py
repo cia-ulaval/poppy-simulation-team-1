@@ -1,5 +1,5 @@
-import tkinter as tk
 import random
+import tkinter as tk
 
 root = tk.Tk()
 root.attributes("-fullscreen", True)
@@ -44,14 +44,14 @@ def move_eyes():
 
 def change_mouth():
     mood = random.choice(["smile", "flat", "surprise"])
-    
+
     if mood == "smile":
         canvas.itemconfig(mouth, extent=-180)
     elif mood == "flat":
         canvas.itemconfig(mouth, extent=0)
     else:
         canvas.itemconfig(mouth, extent=180)
-    
+
     root.after(2000, change_mouth)
 
 def random_blink():

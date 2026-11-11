@@ -1,5 +1,5 @@
-import sounddevice as sd
 import numpy as np
+import sounddevice as sd
 
 
 class Microphone:

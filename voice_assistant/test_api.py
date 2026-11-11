@@ -1,6 +1,7 @@
+import os
+
 from dotenv import load_dotenv
 from openai import OpenAI
-import os
 
 # Charger la clé depuis le fichier .env
 load_dotenv()

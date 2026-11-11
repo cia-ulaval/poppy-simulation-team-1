@@ -1,6 +1,6 @@
 
-import sounddevice as sd
 import numpy as np
+import sounddevice as sd
 from scipy.signal import resample_poly
 
 

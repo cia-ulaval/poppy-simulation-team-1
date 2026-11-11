@@ -2,10 +2,11 @@
 import asyncio
 import base64
 
-from openai import AsyncOpenAI
-from config.settings import REALTIME_MODEL, VOICE
-from conversation.prompts import POPPY_SYSTEM_PROMPT
 from audio.speaker import Speaker
+from conversation.prompts import POPPY_SYSTEM_PROMPT
+from openai import AsyncOpenAI
+
+from config.settings import REALTIME_MODEL, VOICE
 
 
 async def main():

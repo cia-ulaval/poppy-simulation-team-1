@@ -1,6 +1,7 @@
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Chemin du dossier voice_assistant
