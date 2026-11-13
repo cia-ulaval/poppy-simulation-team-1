@@ -19,6 +19,36 @@ right_pupil = canvas.create_oval(580, 180, 620, 220, fill="black")
 # pour la bouche
 mouth = canvas.create_arc(300, 280, 500, 400, start=0, extent=-180, style="arc", width=4, outline="white")
 
+EMOTIONS = {
+    "content" : {
+        "mouth_box": (300, 280, 500, 400), #(x1, y1, x2, y2) boîte dans laquelle la bouche se trouve au centre
+        "mouth_start": 0,
+        "mouth_extent": -180,
+        "eye_color": "white",
+        "brows" : None,
+        "pupil_offset" : (0, -8), # décalage de 8px vers le haut des pupilles
+        "extras": ["joues"],
+    },
+    "triste" : {
+        "mouth_box": (320, 330, 480, 410),
+        "mouth_start": 0,
+        "mouth_extent": 180,
+        "eye_color": "blue",
+        "pupil_offset" : (0, 15),
+        "brows" : ((150, 140, 250, 118), (550, 118, 650, 140)),
+        "extras": ["larme"],
+    },
+    "reflechit" : {
+        "mouth_box": (350, 335, 440, 345),
+        "mouth_start": 0,
+        "mouth_extent": 180,
+        "eye_color": "white",
+        "pupil_offset" : (15, -15),
+        "brows" : ((150, 130, 250, 130), (550, 118, 650, 100)),
+        "extras": ["points"],
+    },
+}
+
 def blink():
     canvas.itemconfig(left_eye, fill="black")
     canvas.itemconfig(right_eye, fill="black")
