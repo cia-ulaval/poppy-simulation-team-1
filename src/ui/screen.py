@@ -8,6 +8,10 @@ root.configure(bg="black")
 canvas = tk.Canvas(root, bg="black", highlightthickness=0)
 canvas.pack(fill="both", expand=True)
 
+# Pour les sourcils (il n'apparaissent que pour certaines émotions)
+left_brow = canvas.create_line(0, 0, 0, 0, fill="white", width=6, state="hidden")
+right_brow = canvas.create_line(0, 0, 0, 0, fill="white", width=6, state="hidden")
+
 # pour les yeux
 left_eye = canvas.create_oval(150, 150, 250, 250, fill="white")
 right_eye = canvas.create_oval(550, 150, 650, 250, fill="white")
@@ -39,7 +43,7 @@ EMOTIONS = {
         "extras": ["larme"],
     },
     "reflechit" : {
-        "mouth_box": (350, 335, 440, 345),
+        "mouth_box": (350, 339, 440, 341),
         "mouth_start": 0,
         "mouth_extent": 180,
         "eye_color": "white",
@@ -48,6 +52,31 @@ EMOTIONS = {
         "extras": ["points"],
     },
 }
+
+def set_emotion(emotion):
+    fiche = EMOTIONS[emotion]
+
+    canvas.coords(mouth, *fiche["mouth_box"])
+    canvas.itemconfig(mouth, start=fiche["mouth_start"], extent=fiche["mouth_extent"])
+
+    canvas.itemconfig(left_eye, fill=fiche["eye_color"])
+    canvas.itemconfig(right_eye, fill=fiche["eye_color"])
+
+    dx, dy = fiche["pupil_offset"]
+    canvas.coords(left_pupil, 180, 180, 220, 220) #remet les pupilles au centre
+    canvas.coords(right_pupil, 580, 180, 620, 220)
+    canvas.move(left_pupil, dx, dy) # décale les pupilles
+    canvas.move(right_pupil, dx, dy)
+
+    if fiche["brows"] is None:
+        canvas.itemconfig(left_brow, state="hidden")
+        canvas.itemconfig(right_brow, state="hidden")
+    else:
+        canvas.coords(left_brow, *fiche["brows"][0])
+        canvas.coords(right_brow, *fiche["brows"][1])
+
+        canvas.itemconfig(left_brow, state="normal")
+        canvas.itemconfig(right_brow, state="normal")
 
 def blink():
     canvas.itemconfig(left_eye, fill="black")
@@ -102,5 +131,6 @@ canvas.bind("<Button-1>", react)
 # Lancer animations
 move_eyes()
 random_blink()
-change_mouth()
+#change_mouth()
+set_emotion("reflechit")
 root.mainloop()
