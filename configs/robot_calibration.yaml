@@ -1,0 +1,49 @@
+# Calibration simulation -> moteurs du Poppy réel, relevée le 13 novembre 2026.
+#
+# Les 25 SENS sont établis. Les ZÉROS ne sont confirmés que pour les deux coudes et
+# r_arm_z ; les autres sont l'hypothèse 2048 (512 pour les AX), à vérifier avant tout
+# rejeu de politique. Procédure et pièges : docs/robot-reel.md.
+#
+# Convention : angle_sim est l'angle URDF, c'est-à-dire celui du MJCF avec
+# fix_left_knee_axis et fix_arm_frames activés.
+#   ticks = zero + sens * angle_rad * K
+#   K = 4096 / (2*pi) = 651.9 ticks/rad (MX), 1024 / radians(300) = 195.6 ticks/rad (AX)
+#
+# sens       : +1 direct, -1 inversé.
+# zero       : ticks à angle_sim = 0. Les limites EEPROM des moteurs reproduisent
+#              exactement les plages URDF avec zéro 2048 et sens +1 partout : elles ont
+#              été écrites sans tenir compte du sens, et ne prouvent donc rien. Pour un
+#              moteur inversé, elles sont probablement du mauvais côté.
+# zero_verifie : true si une pose observée confirme le zéro.
+# confiance  : bonne (vu nettement, ou deux observations concordantes), moyenne (une
+#              seule observation, ou vidéo difficile).
+# source     : comment le sens a été établi.
+#
+# Le bus « jambes » porte les identifiants 11-25, le bus « haut » 31-54.
+
+articulations:
+  l_hip_x:      {id: 11, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis genoux pliés : − ticks = pied vers l'intérieur, la simulation va vers l'extérieur ; même résultat jambes tendues"}
+  l_hip_z:      {id: 12, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis jambes tendues : + ticks = jambe vers l'intérieur, comme la simulation"}
+  l_hip_y:      {id: 13, bus: jambes, modele: MX-64, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), la simulation va vers l'arrière"}
+  l_knee_y:     {id: 14, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
+  l_ankle_y:    {id: 15, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = pointe qui monte, la simulation la fait descendre"}
+  r_hip_x:      {id: 21, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis genoux pliés : + ticks = pied vers l'intérieur, la simulation va vers l'extérieur"}
+  r_hip_z:      {id: 22, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis jambes tendues : − ticks = jambe vers l'intérieur, comme la simulation"}
+  r_hip_y:      {id: 23, bus: jambes, modele: MX-64, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), comme la simulation"}
+  r_knee_y:     {id: 24, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
+  r_ankle_y:    {id: 25, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = pointe qui monte, comme la simulation"}
+  abs_y:        {id: 31, bus: haut,   modele: MX-64, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "vidéo de profil, jambes bloquées par le poteau ; les limites EEPROM suggèrent un zéro vers 1615"}
+  abs_x:        {id: 32, bus: haut,   modele: MX-64, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "vidéo de profil, pieds vers la caméra"}
+  abs_z:        {id: 33, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "observation directe, hanches vers la droite"}
+  bust_y:       {id: 34, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "vidéo de profil, pieds vers l'avant ; les limites EEPROM suggèrent un zéro vers 1592"}
+  bust_x:       {id: 35, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "vidéo de face, pieds vers la droite du robot"}
+  head_z:       {id: 36, bus: haut,   modele: AX-12, sens: +1, zero: 512,  zero_verifie: false, confiance: bonne,   source: "observation directe, tête vers la gauche"}
+  head_y:       {id: 37, bus: haut,   modele: AX-12, sens: +1, zero: 512,  zero_verifie: false, confiance: moyenne, source: "la tête se redresse quand les ticks montent"}
+  l_shoulder_y: {id: 41, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "+ ticks = bras en arrière, comme la simulation"}
+  l_shoulder_x: {id: 42, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "bras pendant vers +1,5 rad, comme la pose debout simulée (+1,6)"}
+  l_arm_z:      {id: 43, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "coude plié : + ticks = main vers l'intérieur, comme la simulation"}
+  l_elbow_y:    {id: 44, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: true,  confiance: bonne,   source: "butée « tendu » à 2048, flexion vers l'avant observée"}
+  r_shoulder_y: {id: 51, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "+ ticks = bras en arrière, la simulation va vers l'avant"}
+  r_shoulder_x: {id: 52, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "+ ticks lève le bras ; 2048 vu à l'horizontale"}
+  r_arm_z:      {id: 53, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: true,  confiance: bonne,   source: "coude plié, l'avant-bras pointe vers l'extérieur et le haut : la simulation ne le donne qu'avec sens -1 et zéro 2048"}
+  r_elbow_y:    {id: 54, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: true,  confiance: bonne,   source: "butée « tendu » à 2048, flexion vers l'avant observée"}
