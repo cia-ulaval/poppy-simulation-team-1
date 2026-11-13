@@ -37,7 +37,7 @@ EMOTIONS = {
         "mouth_box": (320, 330, 480, 410),
         "mouth_start": 0,
         "mouth_extent": 180,
-        "eye_color": "blue",
+        "eye_color": "#bcd4ff",
         "pupil_offset" : (0, 15),
         "brows" : ((150, 140, 250, 118), (550, 118, 650, 140)),
         "extras": ["larme"],
@@ -53,7 +53,13 @@ EMOTIONS = {
     },
 }
 
+current_emotion = "content"
+emotion_cycle = list(EMOTIONS)
+
 def set_emotion(emotion):
+    global current_emotion
+    current_emotion = emotion
+
     fiche = EMOTIONS[emotion]
 
     canvas.coords(mouth, *fiche["mouth_box"])
@@ -78,14 +84,19 @@ def set_emotion(emotion):
         canvas.itemconfig(left_brow, state="normal")
         canvas.itemconfig(right_brow, state="normal")
 
+def next_emotion(event):
+    next_emotion_index = (emotion_cycle.index(current_emotion) + 1)%len(emotion_cycle)
+    set_emotion(emotion_cycle[next_emotion_index])
+
 def blink():
     canvas.itemconfig(left_eye, fill="black")
     canvas.itemconfig(right_eye, fill="black")
     root.after(200, open_eyes)
 
 def open_eyes():
-    canvas.itemconfig(left_eye, fill="white")
-    canvas.itemconfig(right_eye, fill="white")
+    fiche = EMOTIONS[current_emotion]
+    canvas.itemconfig(left_eye, fill=fiche["eye_color"])
+    canvas.itemconfig(right_eye, fill=fiche["eye_color"])
 
 def move_eyes():
     dx = random.randint(-10, 10)
@@ -118,7 +129,7 @@ def random_blink():
     root.after(random.randint(2000, 5000), random_blink)
 
 def react(event):
-    canvas.itemconfig(mouth, extent=-180)  # sourire
+    set_emotion("content")
     print("Touched!")
 
     # son (si tu as branché un speaker)
@@ -126,11 +137,10 @@ def react(event):
     os.system("aplay /usr/share/sounds/alsa/Front_Left.wav &")
 
 canvas.bind("<Button-1>", react)
-
+root.bind("<space>", next_emotion)
 
 # Lancer animations
 move_eyes()
 random_blink()
-#change_mouth()
-set_emotion("reflechit")
+set_emotion("content")
 root.mainloop()
