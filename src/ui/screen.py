@@ -1,3 +1,4 @@
+import math
 import random
 import tkinter as tk
 
@@ -98,11 +99,8 @@ def set_emotion(emotion):
     canvas.itemconfig(right_eye, fill=fiche["eye_color"])
 
     dx, dy = fiche["pupil_offset"]
-    canvas.coords(left_pupil, 180, 180, 220, 220)  # remet les pupilles au centre
-    canvas.coords(right_pupil, 580, 180, 620, 220)
-    canvas.move(left_pupil, dx, dy)  # décale les pupilles
-    canvas.move(right_pupil, dx, dy)
-
+    place_pupils(dx, dy)
+    
     if fiche["brows"] is None:
         canvas.itemconfig(left_brow, state="hidden")
         canvas.itemconfig(right_brow, state="hidden")
@@ -136,6 +134,13 @@ def animate_tear():
 
     animation_job = root.after(50, animate_tear)
 
+def yellow_at(level):
+    """Jaune des points à la luminosité level : 0 = noir (invisible), 1 = #ffd34d."""
+    red = round(255 * level)
+    green = round(211 * level)
+    blue = round(77 * level)
+    return f"#{red:02x}{green:02x}{blue:02x}"
+
 def animate_thinking_points(step):
     """
     step = 0:
@@ -147,15 +152,17 @@ def animate_thinking_points(step):
     points = EXTRAS["thinking_points"]
 
     for i in range(3):
-        if i < step:
-            canvas.itemconfig(points[i], state="normal")
-        else:
-            canvas.itemconfig(points[i], state="hidden")
+        level = (math.sin(step * 0.15 - i * 0.8) + 1) / 2
+        canvas.itemconfig(points[i], fill=yellow_at(level))
 
-    step = (step + 1) % 4
+    animation_job = root.after(40, animate_thinking_points, step+1)
 
-    animation_job = root.after(400, animate_thinking_points, step)
-
+def place_pupils(dx, dy):
+    canvas.coords(left_pupil, 180, 180, 220, 220)  # remet les pupilles au centre
+    canvas.coords(right_pupil, 580, 180, 620, 220)
+    canvas.move(left_pupil, dx, dy)  # décale les pupilles
+    canvas.move(right_pupil, dx, dy)
+    
 def blink():
     canvas.itemconfig(left_eye, fill="black")
     canvas.itemconfig(right_eye, fill="black")
@@ -167,18 +174,13 @@ def open_eyes():
     canvas.itemconfig(right_eye, fill=fiche["eye_color"])
 
 def move_eyes():
-    dx = random.randint(-10, 10)
-    dy = random.randint(-10, 10)
+    dx, dy = EMOTIONS[current_emotion]["pupil_offset"]
+    ecart_x = random.randint(-10, 10)
+    ecart_y = random.randint(-10, 10)
+    
+    place_pupils(dx + ecart_x, dy + ecart_y)
 
-    for pupil in [left_pupil, right_pupil]:
-        x1, y1, x2, y2 = canvas.coords(pupil)
-
-        if 160 < x1 + dx < 240:
-            canvas.move(pupil, dx, 0)
-        if 160 < y1 + dy < 240:
-            canvas.move(pupil, 0, dy)
-
-    root.after(1000, move_eyes)
+    root.after(random.randint(800, 2500), move_eyes)
 
 def change_mouth():
     mood = random.choice(["smile", "flat", "surprise"])
