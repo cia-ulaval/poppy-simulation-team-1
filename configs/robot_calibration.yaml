@@ -1,8 +1,17 @@
 # Calibration simulation -> moteurs du Poppy réel, relevée le 13 novembre 2026.
 #
-# Les 25 SENS sont établis. Les ZÉROS ne sont confirmés que pour les deux coudes et
-# r_arm_z ; les autres sont l'hypothèse 2048 (512 pour les AX), à vérifier avant tout
-# rejeu de politique. Procédure et pièges : docs/robot-reel.md.
+# Les 25 SENS sont établis. Les ZÉROS sont confirmés pour les deux coudes, r_arm_z,
+# et les hanches y, genoux et chevilles (robot couché sur le dos en pose zéro : jambes
+# tendues à plat, pieds à la verticale). Les autres sont l'hypothèse 2048 (512 pour
+# les AX). Procédure et pièges : docs/robot-reel.md.
+#
+# Torse (abs_y, bust_y) : 2048 est SUPPOSÉ, par décision du 13 nov. 2026, sans test
+# dédié. Trois indices disent qu'un torse droit demande abs_y + bust_y environ 16 à 24°
+# au-dessus de 2048 en cumulé : couché sans couple 2185/2176 ; en pose zéro couché
+# abs_y libre à 2185, bust_y à 2094 ; pose debout de l'ancienne équipe ~2130/~2240.
+# Le partage entre les deux moteurs reste inconnu. Si le robot penche en avant au
+# premier rejeu, regarder ici en premier. Les limites EEPROM, qui suggéraient 1615 et
+# 1592, sont écartées : à plat, le torse serait alors plié de 50°.
 #
 # Convention : angle_sim est l'angle URDF, c'est-à-dire celui du MJCF avec
 # fix_left_knee_axis et fix_arm_frames activés.
@@ -24,18 +33,18 @@
 articulations:
   l_hip_x:      {id: 11, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis genoux pliés : − ticks = pied vers l'intérieur, la simulation va vers l'extérieur ; même résultat jambes tendues"}
   l_hip_z:      {id: 12, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis jambes tendues : + ticks = jambe vers l'intérieur, comme la simulation"}
-  l_hip_y:      {id: 13, bus: jambes, modele: MX-64, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), la simulation va vers l'arrière"}
-  l_knee_y:     {id: 14, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
-  l_ankle_y:    {id: 15, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = pointe qui monte, la simulation la fait descendre"}
+  l_hip_y:      {id: 13, bus: jambes, modele: MX-64, sens: -1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), la simulation va vers l'arrière"}
+  l_knee_y:     {id: 14, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
+  l_ankle_y:    {id: 15, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "+ ticks = pointe qui monte, la simulation la fait descendre"}
   r_hip_x:      {id: 21, bus: jambes, modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis genoux pliés : + ticks = pied vers l'intérieur, la simulation va vers l'extérieur"}
   r_hip_z:      {id: 22, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "assis jambes tendues : − ticks = jambe vers l'intérieur, comme la simulation"}
-  r_hip_y:      {id: 23, bus: jambes, modele: MX-64, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), comme la simulation"}
-  r_knee_y:     {id: 24, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
-  r_ankle_y:    {id: 25, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "+ ticks = pointe qui monte, comme la simulation"}
-  abs_y:        {id: 31, bus: haut,   modele: MX-64, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "vidéo de profil, jambes bloquées par le poteau ; les limites EEPROM suggèrent un zéro vers 1615"}
+  r_hip_y:      {id: 23, bus: jambes, modele: MX-64, sens: +1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "+ ticks = jambe vers l'avant (poteau derrière), comme la simulation"}
+  r_knee_y:     {id: 24, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "jambe pendante contre la butée « tendu » de la simulation"}
+  r_ankle_y:    {id: 25, bus: jambes, modele: MX-28, sens: +1, zero: 2048, zero_verifie: true,  confiance: moyenne, source: "+ ticks = pointe qui monte, comme la simulation"}
+  abs_y:        {id: 31, bus: haut,   modele: MX-64, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "vidéo de profil, jambes bloquées par le poteau ; zéro 2048 supposé (décision du 13 nov.), voir l'en-tête"}
   abs_x:        {id: 32, bus: haut,   modele: MX-64, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "vidéo de profil, pieds vers la caméra"}
   abs_z:        {id: 33, bus: haut,   modele: MX-28, sens: +1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "observation directe, hanches vers la droite"}
-  bust_y:       {id: 34, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "vidéo de profil, pieds vers l'avant ; les limites EEPROM suggèrent un zéro vers 1592"}
+  bust_y:       {id: 34, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: bonne,   source: "vidéo de profil, pieds vers l'avant ; zéro 2048 supposé (décision du 13 nov.), voir l'en-tête"}
   bust_x:       {id: 35, bus: haut,   modele: MX-28, sens: -1, zero: 2048, zero_verifie: false, confiance: moyenne, source: "vidéo de face, pieds vers la droite du robot"}
   head_z:       {id: 36, bus: haut,   modele: AX-12, sens: +1, zero: 512,  zero_verifie: false, confiance: bonne,   source: "observation directe, tête vers la gauche"}
   head_y:       {id: 37, bus: haut,   modele: AX-12, sens: +1, zero: 512,  zero_verifie: false, confiance: moyenne, source: "la tête se redresse quand les ticks montent"}

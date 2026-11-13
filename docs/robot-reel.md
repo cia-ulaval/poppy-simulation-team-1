@@ -1,8 +1,15 @@
 # Le Poppy réel : accès, calibration, pièges
 
 État au 13 novembre 2026. Les 25 moteurs répondent et le **sens** de chaque
-articulation est établi. Les **zéros** ne sont confirmés que pour les deux coudes et
-`r_arm_z`. Aucune politique n'a encore tourné sur le robot.
+articulation est établi. Les **zéros** sont confirmés pour les coudes, `r_arm_z`, les
+hanches y, les genoux et les chevilles. Aucune politique n'a encore tourné sur le
+robot.
+
+Le code de l'équipe précédente est sur le robot, dans
+`~/work/poppy-conception/src/poppy_motors/` : un coucou (`motor_node_test.py`), une
+danse et un dab rejoués depuis des poses enregistrées (`dynamic_input.py`,
+`positions_*.csv`). Il ne contient aucune calibration : tous les zéros y sont à 2048,
+et seuls trois moteurs y sont inversés, à titre d'essai.
 
 ## 1. Accès
 
@@ -92,10 +99,19 @@ Ce qu'il faut savoir avant :
 - la pose 0 de la simulation a les **bras à l'horizontale, en T**, pas le long du
   corps ;
 - les limites EEPROM reproduisent les plages URDF avec un zéro à 2048 et un sens +1
-  **partout**. Elles ont été écrites sans tenir compte du sens. Pour `abs_y` et
-  `bust_y`, deux moteurs inversés, elles laissent penser à un zéro vers 1615 et 1592
-  plutôt que 2048. Ce sont les deux zéros à regarder en premier ;
-- le robot ne tient **pas** debout seul en pose 0. Quelqu'un doit le tenir.
+  **partout**. Elles ont été écrites sans tenir compte du sens, et ne prouvent rien ;
+- le robot ne tient **pas** debout seul en pose 0. Quelqu'un doit le tenir ;
+- **la bonne méthode est de coucher le robot sur le dos**, sur un sol plat. Debout et
+  tenu par le torse, le bassin pivote librement entre le torse et les jambes, les
+  hanches sortent de leurs limites, et l'outil les laisse libres : les jambes se
+  croisent. Couché, le corps est déjà presque en pose 0 et le sol sert de règle.
+
+Fait le 13 novembre 2026, robot couché : jambes tendues à plat, pieds à la verticale.
+Les zéros des hanches y, des genoux et des chevilles sont confirmés. Pour le torse,
+2048 est **supposé**, sans test dédié. Trois relevés indiquent pourtant qu'un torse
+droit demande `abs_y` + `bust_y` environ 16 à 24° au-dessus de 2048 en cumulé (détail
+dans l'en-tête de la calibration). Le test qui les départagerait : robot couché sur
+le côté, comparer le torse à 2048 et à environ 2130/2240.
 
 ## 4. Pièges Dynamixel constatés
 
@@ -118,7 +134,8 @@ couple sans qu'on le veuille.
 
 ## 5. Reste à faire avant un premier rejeu de politique
 
-1. Vérifier les zéros, en commençant par le tronc (`abs_y`, `bust_y`) et les hanches.
+1. Vérifier les zéros restants : les hanches x et z (photo prise du dessus, robot
+   couché), et le torse si le robot penche au premier rejeu.
 2. Repasser sur les sens dont la confiance est « moyenne » si un zéro surprend.
 3. Écrire le pont observation → action : lecture des positions, conversion par
    `load_calibration`, consigne. Il faut aussi définir ce qu'on donne à la politique
