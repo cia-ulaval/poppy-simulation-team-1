@@ -65,8 +65,8 @@ tout écart à positions_11 est reporté sur les poses du floss. Pour régler en
 spectacle : ``arriere N`` et ``avant N``.
 
 Danse « 67 » : coudes au corps, avant-bras vers l'avant, puis les mains montent et
-descendent en alternance par les coudes, à ``--vitesse``. Le robot tombe facilement en
-avant quand ses bras portent du poids devant lui : les mains restent à 20 cm devant les
+descendent en alternance par les coudes (±10°), à ``--vitesse``. Le robot tombe facilement en
+avant quand ses bras portent du poids devant lui : les mains restent à 18 cm devant les
 épaules au plus, et les épaules bougent avant les coudes, bras encore tendus. Le poignet
 ne tourne pas : les paumes ne regardent qu'à moitié vers le haut. À chaque battement, la
 phase est écrite dans ``/tmp/poppy_67`` : « 6 » quand monte la main droite du robot, à
@@ -105,19 +105,20 @@ TORSE = (31, 34)  # abs_y, bust_y : sens -1, des ticks en plus penchent le torse
 # tomber. Un écart à positions_11 serait reporté sur toutes les poses du floss.
 DEBOUT_TORSE = {31: 2150, 34: 2246}
 
-# Danse « 67 ». Pose cherchée dans MuJoCo (fix_left_knee_axis et fix_arm_frames) et
-# convertie par configs/robot_calibration.yaml. Angles de simulation : épaules y ±1,30 rad,
-# épaules x 1,45, arm_z ±0,25, coudes à 100°, puis 120°/80° en alternance. Coude à 3 cm
-# devant l'épaule et 4 cm sur le côté, main à 20 cm devant l'épaule, mains à 12 cm
-# l'une de l'autre au plus près ; le centre de masse n'avance que de 0,7 cm par rapport
-# aux bras pendants de la simulation. Paumes tournées de ~23° vers le haut, sans plus :
-# il n'y a pas de rotation du poignet.
-EPAULES_67 = {41: 2895, 42: 2993, 43: 2211, 51: 2895, 52: 1103, 53: 2211}
-COUDES_67 = {44: 910, 54: 3186}  # 100° ; l_elbow_y plie vers les ticks bas, r_elbow_y vers les hauts
-# « 6 » : main droite du robot en haut (120°), gauche en bas (80°) ; c'est la main de
+# Danse « 67 », version compacte : constat du 13 nov. 2026, le robot tombe dès que ses
+# bras portent du poids vers l'avant. Pose cherchée dans MuJoCo (fix_left_knee_axis et
+# fix_arm_frames) et convertie par configs/robot_calibration.yaml. Angles de simulation :
+# épaules y ±1,50 rad (haut du bras vertical, comme debout), épaules x 1,45, arm_z ±0,25,
+# coudes à 115°, puis 105°/125° en alternance, symétriques. Coudes au corps, mains à
+# 18 cm devant l'épaule au plus et à 12 cm l'une de l'autre ; le centre de masse n'avance
+# que de 0,3 cm par rapport aux bras pendants de la simulation. Le poignet ne tourne pas :
+# les paumes ne regardent qu'à moitié vers le haut (~23°), et vers l'intérieur.
+EPAULES_67 = {41: 3026, 42: 2993, 43: 2211, 51: 3026, 52: 1103, 53: 2211}
+COUDES_67 = {44: 740, 54: 3356}  # 115° ; l_elbow_y plie vers les ticks bas, r_elbow_y vers les hauts
+# « 6 » : main droite du robot en haut (125°), gauche en bas (105°) ; c'est la main de
 # gauche pour le public, du côté de l'œil « 6 » du visage. « 7 » : l'inverse.
-BATTEMENT_67 = (("6", {44: 1138, 54: 3413}),
-                ("7", {44: 683, 54: 2958}))
+BATTEMENT_67 = (("6", {44: 853, 54: 3470}),
+                ("7", {44: 626, 54: 3243}))
 CYCLES_67 = 5
 PHASE_67 = Path("/tmp/poppy_67")  # "6", "7" ou vide : lu par src/ui/poppy_visage_67.py
 
@@ -294,7 +295,7 @@ def signaler_67(phase: str) -> None:
 def faire_67(robot: r.Robot, actifs: list[int], vitesse: int, cycles: int) -> None:
     """Danse « 67 » : bras seuls, jambes, tronc et tête restent tenus.
 
-    Épaules d'abord, bras encore tendus, puis coudes à 100° : la main ne passe jamais
+    Épaules d'abord, bras encore tendus, puis coudes à 115° : la main ne passe jamais
     loin devant. Au retour, coudes d'abord, puis épaules, puis bras relâchés.
     """
     depart = bras_au_repos(robot)
