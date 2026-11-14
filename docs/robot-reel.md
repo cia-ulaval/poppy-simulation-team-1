@@ -163,6 +163,13 @@ et un 7 qui balancent au rythme des mains : il lit la cadence dans `/tmp/poppy_6
 On le lance sur l'écran de la tête avec `DISPLAY=:0 python3 poppy_visage_67.py` ; Échap
 le ferme. La pose a été vérifiée dans MuJoCo, pas encore sur le robot.
 
+Trois coucous existent. `coucou`, celui de l'ancienne équipe, porte les bras vers
+l'avant et l'arrière : il a fait tomber le robot. `coucou2` lève le bras droit sur le
+côté et l'agite par `r_shoulder_x` : il tient l'équilibre, mais ressemble à un bras qui
+se balance. `coucou3` lève le bras droit sur le côté, plie l'avant-bras vers le haut et
+fait saluer la main par le coude, dans le plan du corps. Sa pose a été vérifiée dans
+MuJoCo, pas encore sur le robot.
+
 ### Procédure
 
 1. Coucher le robot **sur le dos**, sur un sol plat.

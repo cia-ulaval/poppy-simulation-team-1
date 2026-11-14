@@ -30,7 +30,12 @@ Sous-commandes :
                   pris que le temps d'un ordre, puis relâchés en 3 s.
 
 Ordres de ``spectacle``, par exemple ``echo floss > /tmp/poppy_ordre`` :
-    coucou        un coucou, puis les bras sont relâchés
+    coucou        le coucou de l'ancienne équipe, puis les bras sont relâchés ; il porte
+                  les bras vers l'avant et l'arrière et a fait tomber le robot
+    coucou2       bras droit levé sur le côté et agité par r_shoulder_x ; tient
+                  l'équilibre, mais ressemble plus à un bras qui se balance
+    coucou3       vrai salut de la main droite : bras levé sur le côté, avant-bras
+                  vers le haut, la main balance ``--cycles`` fois de ±17° par le coude
     floss         un floss, retour debout, puis les bras sont relâchés
     67 [N]        danse « 67 », N cycles (5 par défaut, 1 à 6), bras seuls, puis les
                   bras sont relâchés ; voir plus bas
@@ -120,6 +125,21 @@ COUDES_67 = {44: 740, 54: 3356}  # 115° ; l_elbow_y plie vers les ticks bas, r_
 BATTEMENT_67 = (("6", {44: 853, 54: 3470}),
                 ("7", {44: 626, 54: 3243}))
 CYCLES_67 = 5
+
+# coucou3 : vrai salut de la main droite, poids centré. Pose cherchée dans MuJoCo
+# (fix_left_knee_axis et fix_arm_frames) et convertie par configs/robot_calibration.yaml.
+# Haut du bras droit levé sur le côté, 15° sous l'horizontale (r_shoulder_x 1800 ; 2048
+# = horizontal), dans le plan du corps. arm_z tourné pour que l'axe du coude pointe vers
+# l'avant : le coude plie alors l'avant-bras vers le HAUT, dans le plan du corps, paume
+# vers le public. Le salut balance l'avant-bras de ±17° autour de la verticale (coude
+# 105°, puis 88°/122°) : un « bye-bye » vu de face, sans rien porter vers l'avant ni
+# l'arrière. En simulation, le centre de masse bouge de 0,2 cm vers l'arrière et de 1 cm
+# vers la droite ; haut du bras à 5,7 cm du torse, main à 12 cm de la tête au plus près.
+SALUT_EPAULE = {51: 3042, 52: 1800}  # r_shoulder_y comme debout en simulation ; bras levé
+SALUT_ARM_Z = {53: 1057}  # tourné bras levé et tendu : bras pendant, l'avant-bras frôle la cuisse
+SALUT_COUDE = 3243  # 105° : avant-bras vertical ; r_elbow_y plie vers les ticks hauts
+SALUT_VAGUE = (3049, 3436)  # 88° main vers l'extérieur, 122° main vers la tête
+VITESSE_SALUT = 90  # ~60 °/s : un aller en ~0,6 s
 PHASE_67 = Path("/tmp/poppy_67")  # "6", "7" ou vide : lu par src/ui/poppy_visage_67.py
 
 
@@ -329,6 +349,53 @@ def faire_coucou(robot: r.Robot, actifs: list[int], vitesse: int, cycles: int) -
         relacher_bras(robot, actifs)
 
 
+def faire_coucou_cote(robot: r.Robot, actifs: list[int], cycles: int) -> None:
+    """Coucou léger : seul le bras droit se lève sur le côté et s'agite.
+
+    Le coucou de l'ancienne équipe porte les deux bras vers l'avant et l'arrière, et
+    fait tomber le robot. Ici, un seul bras bouge, sur le côté, par r_shoulder_x
+    (sens −1 : + ticks lève le bras, 2048 = horizontal). C'est le coucou du 13 nov.
+    qui avait marché avec robot_dxl.
+    """
+    bras = 52
+    p = robot.lire(bras, r.PRESENT, 2)
+    depart = min(max(p, robot.lire(bras, r.CW_LIMIT, 2)), robot.lire(bras, r.CCW_LIMIT, 2))
+    try:
+        prendre(robot, [bras], actifs)
+        aller(robot, {bras: 2560}, r.VITESSE_LENTE, 12)
+        for _ in range(cycles):
+            for c in (2720, 2400):
+                aller(robot, {bras: c}, 60, 3)
+        aller(robot, {bras: depart}, r.VITESSE_LENTE, 12)
+    finally:
+        relacher_bras(robot, actifs)
+
+
+def faire_coucou_salut(robot: r.Robot, actifs: list[int], cycles: int) -> None:
+    """coucou3 : vrai salut de la main droite ; le bras gauche reste libre.
+
+    Bras levé sur le côté, tendu, comme coucou2 ; puis arm_z ; puis le coude plie
+    l'avant-bras vers le haut et la main salue. Retour dans l'ordre inverse : coude
+    déplié, arm_z, bras baissé, à la position de départ ramenée dans les limites.
+    """
+    ids = [51, 52, 53, 54]
+    depart = {i: p for i, p in bras_au_repos(robot).items() if i in ids}
+    try:
+        prendre(robot, ids, actifs)
+        aller(robot, SALUT_EPAULE, r.VITESSE_LENTE, 12)
+        aller(robot, SALUT_ARM_Z, r.VITESSE_LENTE, 10)
+        aller(robot, {54: SALUT_COUDE}, r.VITESSE_LENTE, 10)
+        for _ in range(cycles):
+            for c in SALUT_VAGUE:
+                aller(robot, {54: c}, VITESSE_SALUT, 3)
+        aller(robot, {54: SALUT_COUDE}, VITESSE_SALUT, 3)
+        aller(robot, {54: depart[54]}, r.VITESSE_LENTE, 10)
+        aller(robot, {53: depart[53]}, r.VITESSE_LENTE, 10)
+        aller(robot, {51: depart[51], 52: depart[52]}, r.VITESSE_LENTE, 12)
+    finally:
+        relacher_bras(robot, actifs)
+
+
 def faire_floss(robot: r.Robot, actifs: list[int], poses: dict, vitesse: int,
                 cycles: int, debout: dict[int, int]) -> None:
     try:
@@ -346,13 +413,15 @@ def faire_floss(robot: r.Robot, actifs: list[int], poses: dict, vitesse: int,
 def cmd_spectacle(robot: r.Robot, args: argparse.Namespace) -> None:
     """Debout, tient jambes et tronc, et exécute les ordres écrits dans /tmp/poppy_ordre.
 
-    Ordres : coucou, floss, 67 [N], etat, arriere N, avant N, genoux N, chevilles N,
-    couple N, tete, stop (détail en tête du module). Jambes et tronc ne sont relâchés
-    qu'au stop, sur erreur, ou au-delà de TEMP_ARRET.
+    Ordres : coucou, coucou2, coucou3, floss, 67 [N], etat, arriere N, avant N,
+    genoux N, chevilles N, couple N, tete, stop (détail en tête du module). Jambes et
+    tronc ne sont relâchés qu'au stop, sur erreur, ou au-delà de TEMP_ARRET.
     """
     poses = charger_poses(args.poses)
     debout = pose_debout(poses)
-    for nom, p in [("coucou", COUCOU_BRAS), *poses.items(), *(("67", p) for p in poses_67())]:
+    for nom, p in [("coucou", COUCOU_BRAS), *poses.items(), *(("67", p) for p in poses_67()),
+                   ("coucou3", {**SALUT_EPAULE, **SALUT_ARM_Z, 54: SALUT_COUDE}),
+                   *(("coucou3", {54: c}) for c in SALUT_VAGUE)]:
         if hors := hors_limites(robot, p):
             sys.exit(f"refusé : pose {nom} hors limites {hors}")
     r.verifier_depart(robot, JAMBES_TRONC, args.tolerance)
@@ -398,6 +467,10 @@ def cmd_spectacle(robot: r.Robot, args: argparse.Namespace) -> None:
                     serrer_jambes(robot, int(mots[1]))
                 elif ordre == "tete":
                     tenir_tete(robot, actifs)
+                elif ordre == "coucou2":
+                    faire_coucou_cote(robot, actifs, args.cycles)
+                elif ordre == "coucou3":
+                    faire_coucou_salut(robot, actifs, args.cycles)
                 elif ordre == "stop":
                     break
                 elif ordre:
