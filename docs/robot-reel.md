@@ -132,7 +132,61 @@ couple sans qu'on le veuille.
 5. **`head_y` et `abs_y` reposent souvent hors limites** quand le robot est éteint
    ou assis. C'est normal.
 
-## 5. Reste à faire avant un premier rejeu de politique
+## 5. Démonstration
+
+`scripts/robot_danse.py` rejoue le debout, le coucou et le floss de l'ancienne équipe
+avec les garde-fous de `robot_dxl.py`. Il a tourné sur le robot le 13 novembre 2026.
+Ses poses, `positions_11.csv` à `positions_14.csv`, sont copiées dans
+`configs/robot_poses/`. Sous-commandes, ordres et options sont décrits en tête du
+script.
+
+```bash
+scp scripts/robot_dxl.py scripts/robot_danse.py configs/robot_poses/*.csv poppy:/tmp/
+```
+
+Puis, sur le robot, avec les deux variables de port exportées :
+
+```bash
+cd /tmp && python3 robot_danse.py verifier
+```
+
+```bash
+cd /tmp && python3 robot_danse.py spectacle --confirme --marge-deg 12
+```
+
+Les ordres s'écrivent depuis un second terminal, par exemple
+`echo floss > /tmp/poppy_ordre`. `stop` relâche tout.
+
+### Procédure
+
+1. Coucher le robot **sur le dos**, sur un sol plat.
+2. Lancer la commande : le couple est pris robot couché, puis le corps passe en pose
+   debout.
+3. Le relever **d'un bloc, comme une planche**, en le basculant sur ses pieds. Garder
+   **les mains sur lui en permanence**, jusqu'au `stop` compris.
+
+### Ce qu'on a constaté sur le torse
+
+La pose debout de l'ancienne équipe (`abs_y` 2150, `bust_y` 2246) fait **pencher le
+robot en avant**. La meilleure pose observée est **3° plus en arrière : `abs_y` 2133, `bust_y` 2229**. C'est le défaut
+du script. Le même décalage, −17 ticks sur chaque moteur, s'applique aux quatre poses
+du floss.
+
+Ces valeurs confirment l'en-tête de la calibration : un torse droit demande `abs_y` et
+`bust_y` nettement au-dessus de 2048. Elles ne fixent pas pour autant le zéro du torse :
+une pose debout n'est pas la pose zéro de la simulation.
+
+### Pièges
+
+- **Couché, la pièce entre `abs_y` et `bust_y` peut basculer**, et `bust_y` sort alors
+  de ses limites EEPROM. Avec la marge par défaut (2,6°), le script refuse de prendre
+  ce moteur. `--marge-deg 12` le ramène sur sa limite à la place, sous couple
+  limité et à vitesse lente.
+- **Le robot ne garde pas l'équilibre seul.** Les moteurs tiennent la pose, rien ne
+  corrige l'équilibre. Il est tombé quand le torse a bougé. Les mains restent sur lui
+  pendant chaque ordre, en particulier `arriere`, `avant` et `floss`.
+
+## 6. Reste à faire avant un premier rejeu de politique
 
 1. Vérifier les zéros restants : les hanches x et z (photo prise du dessus, robot
    couché), et le torse si le robot penche au premier rejeu.
