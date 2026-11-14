@@ -167,10 +167,16 @@ Les ordres s'écrivent depuis un second terminal, par exemple
 
 ### Ce qu'on a constaté sur le torse
 
-La pose debout de l'ancienne équipe (`abs_y` 2150, `bust_y` 2246) fait **pencher le
-robot en avant**. La meilleure pose observée est **3° plus en arrière : `abs_y` 2133, `bust_y` 2229**. C'est le défaut
-du script. Le même décalage, −17 ticks sur chaque moteur, s'applique aux quatre poses
-du floss.
+La meilleure pose debout observée est **celle de l'ancienne équipe : `abs_y` 2150,
+`bust_y` 2246**. Le torse y penche légèrement en avant, mais elle tient. C'est le
+défaut du script, et les poses du floss sont jouées sans décalage.
+
+Un réglage **3° plus en arrière** (`abs_y` 2133, `bust_y` 2229) a tenu un temps, puis
+a fait tomber le robot. Pour régler le torse en cours de spectacle, les ordres
+`arriere N` et `avant N` restent disponibles, avec les mains sur le robot.
+
+**`bust_y` chauffe : 50 °C pendant un maintien prolongé**, ce qui déclenche l'alerte
+chaleur du script (`TEMP_ALERTE`). Il s'arrête à 60 °C. Éviter les longues tenues.
 
 Ces valeurs confirment l'en-tête de la calibration : un torse droit demande `abs_y` et
 `bust_y` nettement au-dessus de 2048. Elles ne fixent pas pour autant le zéro du torse :

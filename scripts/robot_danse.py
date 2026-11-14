@@ -51,9 +51,11 @@ Options des commandes qui bougent :
                     aussi pour ``verifier``)
     --cycles, --vitesse   coucou, floss, spectacle : 3 cycles, vitesse 120 (200 au plus)
 
-Pose debout : celle de l'ancienne équipe (positions_11) penche en avant. Le torse est
-reculé de 3° : ``abs_y`` 2133 et ``bust_y`` 2229 au lieu de 2150 et 2246. Le même
-décalage s'applique à toutes les poses du floss (voir DEBOUT_TORSE).
+Pose debout : celle de l'ancienne équipe (positions_11), ``abs_y`` 2150 et ``bust_y``
+2246. Le torse y penche légèrement en avant, mais elle tient. Un torse reculé de 3°
+(2133/2229) a tenu un temps puis a fait tomber le robot. DEBOUT_TORSE fixe ce torse ;
+tout écart à positions_11 est reporté sur les poses du floss. Pour régler en cours de
+spectacle : ``arriere N`` et ``avant N``.
 
 Positions en ticks : 0-4095 sur 360° (MX), 0-1023 sur 300° (AX).
 """
@@ -82,9 +84,10 @@ TEMP_ALERTE, TEMP_ARRET = 50, 60  # °C ; l'alarme interne des MX coupe vers 70-
 MARGE = 30  # ticks, ~2,6° sur un MX
 ORDRES = Path("/tmp/poppy_ordre")
 TORSE = (31, 34)  # abs_y, bust_y : sens -1, des ticks en plus penchent le torse en avant
-# Meilleure pose debout observée le 13 nov. 2026 : 3° plus en arrière que positions_11
-# (2150 et 2246), qui penchait en avant. Le même décalage vaut pour les poses du floss.
-DEBOUT_TORSE = {31: 2133, 34: 2229}
+# Meilleure pose debout observée le 13 nov. 2026 : celle de positions_11, décalage nul.
+# Elle penche un peu en avant mais tient ; 3° plus en arrière (2133/2229) a fini par
+# tomber. Un écart à positions_11 serait reporté sur toutes les poses du floss.
+DEBOUT_TORSE = {31: 2150, 34: 2246}
 
 
 def lire_pose(dossier: Path, nom: str) -> dict[int, int]:

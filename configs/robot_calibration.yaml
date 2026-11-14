@@ -14,9 +14,10 @@
 # 1592, sont écartées : à plat, le torse serait alors plié de 50°.
 #
 # Meilleure pose debout observée (démonstration du 13 nov. 2026, robot tenu à la
-# main) : abs_y 2133, bust_y 2229, soit 3° plus en arrière que la pose de l'ancienne
-# équipe (2150/2246), qui penchait en avant. C'est le défaut de scripts/robot_danse.py.
-# Les champs zero n'en sont PAS déduits : une pose debout n'est pas la pose zéro de la
+# main) : celle de l'ancienne équipe, abs_y 2150, bust_y 2246. Le torse y penche
+# légèrement en avant, mais elle tient ; 3° plus en arrière (2133/2229) a tenu un temps
+# puis a fait tomber le robot. bust_y y monte à 50 °C en maintien prolongé. C'est le
+# défaut de scripts/robot_danse.py. Les champs zero n'en sont PAS déduits : une pose debout n'est pas la pose zéro de la
 # simulation.
 #
 # Convention : angle_sim est l'angle URDF, c'est-à-dire celui du MJCF avec
