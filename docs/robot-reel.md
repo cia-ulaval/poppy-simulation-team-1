@@ -157,6 +157,12 @@ cd /tmp && python3 robot_danse.py spectacle --confirme --marge-deg 12
 Les ordres s'écrivent depuis un second terminal, par exemple
 `echo floss > /tmp/poppy_ordre`. `stop` relâche tout.
 
+`echo 67 > /tmp/poppy_ordre` joue la danse « 67 » (bras seuls, 5 cycles ; `67 N` pour
+N de 1 à 6). Le visage qui l'accompagne, `src/ui/poppy_visage_67.py`, a pour yeux un 6
+et un 7 qui balancent au rythme des mains : il lit la cadence dans `/tmp/poppy_67`.
+On le lance sur l'écran de la tête avec `DISPLAY=:0 python3 poppy_visage_67.py` ; Échap
+le ferme. La pose a été vérifiée dans MuJoCo, pas encore sur le robot.
+
 ### Procédure
 
 1. Coucher le robot **sur le dos**, sur un sol plat.

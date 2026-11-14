@@ -32,10 +32,17 @@ Sous-commandes :
 Ordres de ``spectacle``, par exemple ``echo floss > /tmp/poppy_ordre`` :
     coucou        un coucou, puis les bras sont relâchés
     floss         un floss, retour debout, puis les bras sont relâchés
-    etat          consigne, position réelle et température des cinq moteurs du torse
+    67 [N]        danse « 67 », N cycles (5 par défaut, 1 à 6), bras seuls, puis les
+                  bras sont relâchés ; voir plus bas
+    etat          consigne, position réelle et température du torse et des jambes en y
     arriere N     penche le torse de N degrés en arrière (0 < N <= 6), moitié sur
                   ``abs_y``, moitié sur ``bust_y`` ; vaut pour debout ET pour le floss
     avant N       idem vers l'avant
+    genoux N      plie les genoux de N degrés (-10 à 10, négatif : déplie), hanches et
+                  chevilles de N/2 chacune pour garder pied à plat et torse d'aplomb
+    chevilles N   chevilles de N degrés (-6 à 6) : + = tibia vers l'avant
+    couple N      couple limite des jambes (300 à 900, sur 1023)
+    tete          redresse la tête (head_z et head_y à 512) et la tient jusqu'au stop
     stop          relâche tout et quitte
 Un ordre qui échoue est abandonné et le robot revient debout : les jambes restent
 tenues. Jambes et tronc ne sont relâchés qu'au ``stop``, sur erreur, sur Ctrl-C ou
@@ -56,6 +63,15 @@ Pose debout : celle de l'ancienne équipe (positions_11), ``abs_y`` 2150 et ``bu
 (2133/2229) a tenu un temps puis a fait tomber le robot. DEBOUT_TORSE fixe ce torse ;
 tout écart à positions_11 est reporté sur les poses du floss. Pour régler en cours de
 spectacle : ``arriere N`` et ``avant N``.
+
+Danse « 67 » : coudes au corps, avant-bras vers l'avant, puis les mains montent et
+descendent en alternance par les coudes, à ``--vitesse``. Le robot tombe facilement en
+avant quand ses bras portent du poids devant lui : les mains restent à 20 cm devant les
+épaules au plus, et les épaules bougent avant les coudes, bras encore tendus. Le poignet
+ne tourne pas : les paumes ne regardent qu'à moitié vers le haut. À chaque battement, la
+phase est écrite dans ``/tmp/poppy_67`` : « 6 » quand monte la main droite du robot, à
+gauche pour le public, « 7 » pour l'autre. Le visage ``src/ui/poppy_visage_67.py``, dont
+les yeux sont un 6 et un 7, s'y cale.
 
 Positions en ticks : 0-4095 sur 360° (MX), 0-1023 sur 300° (AX).
 """
@@ -88,6 +104,22 @@ TORSE = (31, 34)  # abs_y, bust_y : sens -1, des ticks en plus penchent le torse
 # Elle penche un peu en avant mais tient ; 3° plus en arrière (2133/2229) a fini par
 # tomber. Un écart à positions_11 serait reporté sur toutes les poses du floss.
 DEBOUT_TORSE = {31: 2150, 34: 2246}
+
+# Danse « 67 ». Pose cherchée dans MuJoCo (fix_left_knee_axis et fix_arm_frames) et
+# convertie par configs/robot_calibration.yaml. Angles de simulation : épaules y ±1,30 rad,
+# épaules x 1,45, arm_z ±0,25, coudes à 100°, puis 120°/80° en alternance. Coude à 3 cm
+# devant l'épaule et 4 cm sur le côté, main à 20 cm devant l'épaule, mains à 12 cm
+# l'une de l'autre au plus près ; le centre de masse n'avance que de 0,7 cm par rapport
+# aux bras pendants de la simulation. Paumes tournées de ~23° vers le haut, sans plus :
+# il n'y a pas de rotation du poignet.
+EPAULES_67 = {41: 2895, 42: 2993, 43: 2211, 51: 2895, 52: 1103, 53: 2211}
+COUDES_67 = {44: 910, 54: 3186}  # 100° ; l_elbow_y plie vers les ticks bas, r_elbow_y vers les hauts
+# « 6 » : main droite du robot en haut (120°), gauche en bas (80°) ; c'est la main de
+# gauche pour le public, du côté de l'œil « 6 » du visage. « 7 » : l'inverse.
+BATTEMENT_67 = (("6", {44: 1138, 54: 3413}),
+                ("7", {44: 683, 54: 2958}))
+CYCLES_67 = 5
+PHASE_67 = Path("/tmp/poppy_67")  # "6", "7" ou vide : lu par src/ui/poppy_visage_67.py
 
 
 def lire_pose(dossier: Path, nom: str) -> dict[int, int]:
@@ -157,6 +189,7 @@ def cmd_verifier(robot: r.Robot, args: argparse.Namespace) -> None:
     floss = charger_poses(args.poses)
     poses = {"debout": pose_debout(floss), "coucou": COUCOU_BRAS}
     poses.update({f"floss {n}": p for n, p in floss.items()})
+    poses.update({f"67 {k}": p for k, p in enumerate(poses_67())})
     for nom, cibles in poses.items():
         print(f"{nom:9s} hors limites : {hors_limites(robot, cibles) or 'aucun'}")
     print("écart actuel → debout :", ecarts(robot, poses["debout"]))
@@ -233,8 +266,57 @@ def relacher_bras(robot: r.Robot, actifs: list[int]) -> None:
         actifs.remove(i)
 
 
+def bras_au_repos(robot: r.Robot) -> dict[int, int]:
+    """Position actuelle des bras, ramenée dans les limites EEPROM.
+
+    Un bras qui pend repose parfois juste hors de ses limites (coude à 2030 pour 2036) :
+    y renvoyer le moteur déclenche l'erreur 0x02. On revient donc à cette position-ci.
+    """
+    depart = {}
+    for i in BRAS:
+        p = robot.lire(i, r.PRESENT, 2)
+        depart[i] = min(max(p, robot.lire(i, r.CW_LIMIT, 2)), robot.lire(i, r.CCW_LIMIT, 2))
+    return depart
+
+
+def poses_67() -> list[dict[int, int]]:
+    return [EPAULES_67, COUDES_67, *(cibles for _, cibles in BATTEMENT_67)]
+
+
+def signaler_67(phase: str) -> None:
+    """Donne la cadence au visage ; sans effet sur les moteurs, et jamais bloquant."""
+    try:
+        PHASE_67.write_text(phase)
+    except OSError:
+        pass
+
+
+def faire_67(robot: r.Robot, actifs: list[int], vitesse: int, cycles: int) -> None:
+    """Danse « 67 » : bras seuls, jambes, tronc et tête restent tenus.
+
+    Épaules d'abord, bras encore tendus, puis coudes à 100° : la main ne passe jamais
+    loin devant. Au retour, coudes d'abord, puis épaules, puis bras relâchés.
+    """
+    depart = bras_au_repos(robot)
+    try:
+        prendre(robot, BRAS, actifs)
+        aller(robot, EPAULES_67, r.VITESSE_LENTE, 10)
+        aller(robot, COUDES_67, r.VITESSE_LENTE, 10)
+        for _ in range(cycles):
+            for phase, cibles in BATTEMENT_67:
+                signaler_67(phase)
+                aller(robot, cibles, vitesse, 3)
+        signaler_67("")
+        aller(robot, COUDES_67, r.VITESSE_LENTE, 6)
+        aller(robot, {i: depart[i] for i in COUDES_67}, r.VITESSE_LENTE, 10)
+        aller(robot, depart, r.VITESSE_LENTE, 10)
+    finally:
+        signaler_67("")
+        relacher_bras(robot, actifs)
+
+
 def faire_coucou(robot: r.Robot, actifs: list[int], vitesse: int, cycles: int) -> None:
-    depart = {i: robot.lire(i, r.PRESENT, 2) for i in BRAS}
+    depart = bras_au_repos(robot)
     try:
         prendre(robot, BRAS, actifs)
         aller(robot, COUCOU_BRAS, r.VITESSE_LENTE, 10)
@@ -263,12 +345,13 @@ def faire_floss(robot: r.Robot, actifs: list[int], poses: dict, vitesse: int,
 def cmd_spectacle(robot: r.Robot, args: argparse.Namespace) -> None:
     """Debout, tient jambes et tronc, et exécute les ordres écrits dans /tmp/poppy_ordre.
 
-    Ordres : coucou, floss, etat, arriere N, avant N, stop (détail en tête du module).
-    Jambes et tronc ne sont relâchés qu'au stop, sur erreur, ou au-delà de TEMP_ARRET.
+    Ordres : coucou, floss, 67 [N], etat, arriere N, avant N, genoux N, chevilles N,
+    couple N, tete, stop (détail en tête du module). Jambes et tronc ne sont relâchés
+    qu'au stop, sur erreur, ou au-delà de TEMP_ARRET.
     """
     poses = charger_poses(args.poses)
     debout = pose_debout(poses)
-    for nom, p in [("coucou", COUCOU_BRAS), *poses.items()]:
+    for nom, p in [("coucou", COUCOU_BRAS), *poses.items(), *(("67", p) for p in poses_67())]:
         if hors := hors_limites(robot, p):
             sys.exit(f"refusé : pose {nom} hors limites {hors}")
     r.verifier_depart(robot, JAMBES_TRONC, args.tolerance)
@@ -295,17 +378,31 @@ def cmd_spectacle(robot: r.Robot, args: argparse.Namespace) -> None:
             try:
                 if ordre == "coucou":
                     faire_coucou(robot, actifs, args.vitesse, args.cycles)
+                elif mots[:1] == ["67"] and len(mots) <= 2:
+                    cycles = int(mots[1]) if len(mots) == 2 else CYCLES_67
+                    if not 1 <= cycles <= 6:
+                        raise SystemExit("67 refusé : entre 1 et 6 cycles")
+                    faire_67(robot, actifs, args.vitesse, cycles)
                 elif ordre == "floss":
                     faire_floss(robot, actifs, poses, args.vitesse, args.cycles, debout)
                 elif ordre == "etat":
                     etat_torse(robot, debout)
                 elif len(mots) == 2 and mots[0] in ("arriere", "avant"):
                     incliner(robot, debout, poses, mots[0], float(mots[1]))
+                elif len(mots) == 2 and mots[0] == "genoux":
+                    plier_genoux(robot, debout, poses, float(mots[1]))
+                elif len(mots) == 2 and mots[0] == "chevilles":
+                    pencher_chevilles(robot, debout, poses, float(mots[1]))
+                elif len(mots) == 2 and mots[0] == "couple":
+                    serrer_jambes(robot, int(mots[1]))
+                elif ordre == "tete":
+                    tenir_tete(robot, actifs)
                 elif ordre == "stop":
                     break
                 elif ordre:
                     print("ordre inconnu", flush=True)
-            except (SystemExit, ValueError) as erreur:  # un ordre raté ne fait pas tomber le robot
+            # Un ordre raté ne fait pas tomber le robot.
+            except (SystemExit, ValueError, OSError) as erreur:
                 print(f"ordre abandonné : {erreur} ; jambes toujours tenues", flush=True)
                 aller(robot, debout, r.VITESSE_LENTE, 10)
             if ordre:
@@ -324,8 +421,8 @@ PAS_MAX_DEG = 6.0
 
 
 def etat_torse(robot: r.Robot, debout: dict[int, int]) -> None:
-    """Consigne, position réelle et température des moteurs du torse."""
-    for i in (31, 32, 33, 34, 35):
+    """Consigne, position réelle et température du torse et des jambes en y."""
+    for i in (31, 32, 33, 34, 35, 13, 14, 15, 23, 24, 25):
         p = robot.lire(i, r.PRESENT, 2)
         print(f"  {r.NOMS[i]:7s} consigne {debout[i]} réel {p} "
               f"(affaissement {(p - debout[i]) * r.deg_par_tick(i):+.1f}°) "
@@ -349,6 +446,70 @@ def incliner(robot: r.Robot, debout: dict[int, int], poses: dict, sens: str, deg
             p[i] += d
     aller(robot, nouveau, r.VITESSE_LENTE, 6)
     etat_torse(robot, debout)
+
+
+def decaler(robot: r.Robot, debout: dict[int, int], poses: dict,
+            deltas_deg: dict[int, float]) -> None:
+    """Décale des articulations (degrés, en ticks moteur) dans la pose debout et le floss."""
+    d = {i: round(v / r.deg_par_tick(i)) for i, v in deltas_deg.items()}
+    nouveau = {i: debout[i] + d[i] for i in d}
+    if hors := hors_limites(robot, nouveau):
+        raise SystemExit(f"limite atteinte {hors}")
+    debout.update(nouveau)
+    for p in poses.values():
+        for i in d:
+            p[i] += d[i]
+    aller(robot, nouveau, r.VITESSE_LENTE, 6)
+    etat_torse(robot, debout)
+
+
+def plier_genoux(robot: r.Robot, debout: dict[int, int], poses: dict, deg: float) -> None:
+    """Plie les genoux de ``deg`` (négatif : déplie), hanches et chevilles de deg/2 chacune.
+
+    Pied à plat et torse d'aplomb : la cuisse avance de deg/2, le tibia aussi.
+    Ticks : hanches y + = cuisse en avant ; genou gauche plie vers +, droit vers − ;
+    chevilles + = pointe qui monte (tibia vers l'avant).
+    """
+    if not 0 < abs(deg) <= 10:
+        raise SystemExit("pas refusé : genoux entre -10 et 10°")
+    h = deg / 2
+    decaler(robot, debout, poses, {13: h, 23: h, 14: deg, 24: -deg, 15: h, 25: h})
+
+
+def pencher_chevilles(robot: r.Robot, debout: dict[int, int], poses: dict, deg: float) -> None:
+    """Chevilles de ``deg`` : + = tibia vers l'avant (pointe qui monte), − = vers l'arrière."""
+    if not 0 < abs(deg) <= PAS_MAX_DEG:
+        raise SystemExit(f"pas refusé : chevilles entre -{PAS_MAX_DEG} et {PAS_MAX_DEG}°")
+    decaler(robot, debout, poses, {15: deg, 25: deg})
+
+
+def tenir_tete(robot: r.Robot, actifs: list[int]) -> None:
+    """Redresse la tête (head_z 512, head_y 512) et la garde tenue jusqu'au stop.
+
+    head_y pend souvent sous sa limite basse : on écrit d'abord la vitesse, ce qui
+    active le couple et ramène doucement la consigne sur la limite (méthode du
+    coucou de robot_dxl, qui a fonctionné), puis on monte à 512.
+    """
+    for i in (36, 37):
+        if i not in actifs:
+            actifs.append(i)  # avant toute écriture : chacune peut activer le couple
+            robot.ecrire(i, r.SPEED, r.VITESSE_LENTE, 2)
+            robot.ecrire(i, r.TORQUE_LIMIT, COUPLE, 2)
+            robot.ecrire(i, r.TORQUE_ENABLE, 1, 1)
+    r.attendre_arret(robot, [37], 6)
+    aller(robot, {36: 512, 37: robot.lire(37, r.CW_LIMIT, 2)}, r.VITESSE_LENTE, 8)
+    aller(robot, {37: 512}, r.VITESSE_LENTE, 8)
+    for i in (36, 37):
+        print(f"  {r.NOMS[i]} à {robot.lire(i, r.PRESENT, 2)} (cible 512)", flush=True)
+
+
+def serrer_jambes(robot: r.Robot, couple: int) -> None:
+    """Couple limite des jambes (registre TORQUE_LIMIT, 1023 = 100 %)."""
+    if not 300 <= couple <= 900:
+        raise SystemExit("couple refusé : entre 300 et 900")
+    for i in r.JAMBES:
+        robot.ecrire(i, r.TORQUE_LIMIT, couple, 2)
+    print(f"  couple des jambes à {couple} ({couple * 100 // 1023} %)", flush=True)
 
 
 def main() -> int:
