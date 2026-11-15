@@ -56,12 +56,46 @@ avec « OPENAI_API_KEY introuvable ».
 
 ### Les dépendances
 
+Mieux vaut un environnement Python à part pour la voix, créé à la racine du dépôt.
+
+**Sur Mac :**
+
 ```bash
+python3 -m venv .venv-voix
+source .venv-voix/bin/activate
 pip install -r voice_assistant/requirements.txt
 ```
 
-Sous Windows, `python` tout court peut ouvrir le Microsoft Store au lieu de Python :
-utilisez `py`, ou le chemin complet de votre environnement.
+- Sur Mac, la commande est `python3` et non `python`, sauf une fois l'environnement
+  activé. Il faut refaire `source .venv-voix/bin/activate` dans chaque nouveau
+  terminal.
+- **Le micro demande une autorisation.** Au premier enregistrement, macOS demande si
+  le Terminal (ou VS Code) peut utiliser le micro : répondez oui. Si vous avez refusé,
+  le micro n'enregistre que du silence, sans message d'erreur. Pour corriger :
+  Réglages Système → Confidentialité et sécurité → Microphone, puis cochez
+  l'application et relancez-la.
+- **Le fichier `.env` est invisible dans le Finder,** comme tous les fichiers qui
+  commencent par un point. Ouvrez-le avec `open -e voice_assistant/.env`, avec VS Code,
+  ou affichez les fichiers cachés avec Cmd + Maj + point.
+- **Le visage (`src/ui/screen.py`) a besoin de tkinter.** Le Python de python.org
+  l'inclut. Avec le Python de Homebrew, il faut l'ajouter : `brew install python-tk`.
+- Pour le reste de l'installation sur Mac (Docker, viewer), voir
+  [`docs/DEMARRAGE-mac.md`](../docs/DEMARRAGE-mac.md).
+
+**Sur Windows :**
+
+```bash
+py -m venv .venv-voix
+.venv-voix\Scripts\activate
+pip install -r voice_assistant/requirements.txt
+```
+
+`python` tout court peut ouvrir le Microsoft Store au lieu de Python : utilisez `py`
+tant que l'environnement n'est pas activé. Le dossier `.venv/` du dépôt sert au
+viewer de la simulation : n'y installez pas la voix.
+
+**Sur le robot (Linux) :** `sounddevice` a aussi besoin de PortAudio,
+`sudo apt install libportaudio2`. Sur Mac et Windows, il est fourni avec le paquet.
 
 ### Tester : en ligne de commande ou à la voix
 
