@@ -1,6 +1,8 @@
 import math
 import random
+import time
 import tkinter as tk
+from pathlib import Path
 
 root = tk.Tk()
 root.attributes("-fullscreen", True)
@@ -32,6 +34,14 @@ right_eye = canvas.create_oval(550, 150, 650, 250, fill="white")
 left_pupil = canvas.create_oval(180, 180, 220, 220, fill="black")
 right_pupil = canvas.create_oval(580, 180, 620, 220, fill="black")
 
+# Pour le visage 67 : un « 6 » et un « 7 » à la place des yeux (cachés par défaut)
+DIGIT_YELLOW, DIGIT_PALE = "#ffd34d", "#9c8434"
+DIGIT_SIZE = 160  # hauteur de la police des chiffres, en px
+left_digit = canvas.create_text(200, 195, text="6", fill=DIGIT_YELLOW,
+                                font=("Helvetica", -DIGIT_SIZE, "bold"), state="hidden")
+right_digit = canvas.create_text(600, 195, text="7", fill=DIGIT_YELLOW,
+                                 font=("Helvetica", -DIGIT_SIZE, "bold"), state="hidden")
+
 # pour la bouche
 mouth_closed = canvas.create_arc(300, 280, 500, 400, start=0, extent=-180, style="arc", width=4, outline="white")
 mouth_open = canvas.create_oval(0, 0, 0, 0, fill="white", outline="", state="hidden")
@@ -40,6 +50,7 @@ EXTRAS = {
     "cheeks": [left_cheek, right_cheek],
     "tear": [tear],
     "thinking_points": [thinking_point1, thinking_point2, thinking_point3],
+    "digits": [left_digit, right_digit],
 }
 
 EMOTIONS = {
@@ -89,9 +100,27 @@ EMOTIONS = {
         "brows" : ((140, 120, 260, 165), (540, 165, 660, 120)),
         "extras": [],
     },
+    "67" : {
+        "mouth_box": (288, 270, 512, 430),
+        "mouth_start": 0,
+        "mouth_extent": -180,
+        "eye_color": "white",
+        "round_eyes": False,  # les chiffres remplacent les yeux et les pupilles
+        "pupil_offset" : (0, 0),
+        "brows" : ((158, 94, 242, 114), (558, 114, 642, 94)),
+        "extras": ["cheeks", "digits"],
+    },
 }
 
 ANGRY_SHAKE = 5
+
+# Visage 67 : les chiffres balancent au rythme de la danse. scripts/robot_danse.py écrit
+# « 6 » ou « 7 » dans ce fichier à chaque battement ; il est facultatif (absent sous
+# Windows, ignoré s'il a plus de 3 s) et, sans lui, le visage garde sa propre cadence.
+CADENCE_67 = Path("/tmp/poppy_67")
+CADENCE_67_FRESH_S = 3.0
+CADENCE_67_FREE_MS = 650  # un battement sans cadence : à peu près celui du robot
+DIGIT_SWAY = 24  # course du balancement des chiffres, en px
 
 # La parole n'est pas une émotion : elle ne prend que la bouche (et lève un peu les
 # sourcils), par-dessus l'émotion en cours, qui garde ses yeux, ses sourcils et ses
@@ -121,10 +150,17 @@ talk_job = None  # animation de la bouche qui parle, indépendante de celle de l
 brow_shake = (0, 0)  # décalage des sourcils dû à la colère
 brow_lift = 0  # montée des sourcils due à la parole
 
+digit_phase = "6"  # chiffre du battement en cours
+digit_x = 0.0  # balancement, de -1 (gauche de l'écran) à 1 (droite)
+digit_beat_start = 0.0  # instant du dernier battement
+digit_last_signal = 0.0  # dernier instant où le fichier de cadence a été lu
+digit_blink_until = 0.0  # les chiffres disparaissent brièvement jusque-là
+
 def set_emotion(emotion):
     global current_emotion
     global animation_job
     global brow_shake
+    global digit_phase, digit_x, digit_beat_start, digit_last_signal
 
     current_emotion = emotion
 
@@ -139,6 +175,11 @@ def set_emotion(emotion):
 
     canvas.itemconfig(left_eye, fill=fiche["eye_color"])
     canvas.itemconfig(right_eye, fill=fiche["eye_color"])
+
+    # Les yeux ronds et leurs pupilles disparaissent quand des chiffres les remplacent.
+    eyes_state = "normal" if fiche.get("round_eyes", True) else "hidden"
+    for item in (left_eye, right_eye, left_pupil, right_pupil):
+        canvas.itemconfig(item, state=eyes_state)
 
     # Pendant la parole, la bouche appartient à la parole : on n'y touche pas.
     if not talking:
@@ -161,6 +202,11 @@ def set_emotion(emotion):
         animate_thinking_points(0)
     elif emotion == "angry":
         animate_angry()
+    elif emotion == "67":
+        digit_phase, digit_x = "6", 0.0
+        digit_beat_start = time.monotonic()
+        digit_last_signal = -CADENCE_67_FRESH_S
+        animate_67()
 
 def draw_rest_mouth():
     """Bouche de l'émotion en cours, quand Poppy ne parle pas."""
@@ -258,6 +304,48 @@ def animate_angry():
         canvas.coords(mouth_closed, x1 + shake_x // 2, y1, x2 + shake_x // 2, y2)
     animation_job = root.after(40, animate_angry)
 
+def read_67_cadence():
+    """Chiffre écrit par la danse, ou None si le fichier est absent, vide ou ancien."""
+    try:
+        if time.time() - CADENCE_67.stat().st_mtime > CADENCE_67_FRESH_S:
+            return None
+        text = CADENCE_67.read_text().strip()
+    except OSError:
+        return None
+    return text if text in ("6", "7") else None
+
+def animate_67():
+    global animation_job, digit_phase, digit_x, digit_beat_start, digit_last_signal, brow_shake
+    now = time.monotonic()
+
+    # Un nouveau battement vient du fichier de cadence, ou de la cadence propre du visage.
+    phase = read_67_cadence()
+    if phase is not None:
+        digit_last_signal = now
+        if phase != digit_phase:
+            digit_phase, digit_beat_start = phase, now
+    elif (now - digit_last_signal > CADENCE_67_FRESH_S
+          and now - digit_beat_start > CADENCE_67_FREE_MS / 1000):
+        digit_phase, digit_beat_start = ("7" if digit_phase == "6" else "6"), now
+
+    bounce = math.exp(-6 * (now - digit_beat_start))  # 1 au battement, puis retombe
+    active = 0 if digit_phase == "6" else 1
+    digit_x += ((-1.0 if active == 0 else 1.0) - digit_x) * 0.25  # balancement amorti
+    blinking = now < digit_blink_until
+
+    for k, (digit, cx) in enumerate(zip(EXTRAS["digits"], (200, 600), strict=True)):
+        scale = 1.0 + 0.3 * bounce if k == active else 0.85
+        canvas.coords(digit, cx + digit_x * DIGIT_SWAY, 195 - (14 * bounce if k == active else 0))
+        canvas.itemconfig(digit, state="hidden" if blinking else "normal",
+                          fill=DIGIT_YELLOW if k == active else DIGIT_PALE,
+                          font=("Helvetica", -int(DIGIT_SIZE * scale), "bold"))
+
+    # Les sourcils suivent le balancement, comme ils suivent les secousses de la colère.
+    brow_shake = (digit_x * DIGIT_SWAY, -6 * bounce)
+    place_brows()
+
+    animation_job = root.after(30, animate_67)
+
 def animate_talking():
     global talk_job, brow_lift
     animate_talking_mouth()
@@ -299,6 +387,10 @@ def place_pupils(dx, dy):
     canvas.move(right_pupil, dx, dy)
 
 def blink():
+    global digit_blink_until
+    if not EMOTIONS[current_emotion].get("round_eyes", True):
+        digit_blink_until = time.monotonic() + 0.15  # les chiffres clignent à la place
+        return
     canvas.itemconfig(left_eye, fill="black")
     canvas.itemconfig(right_eye, fill="black")
     root.after(200, open_eyes)
@@ -309,6 +401,9 @@ def open_eyes():
     canvas.itemconfig(right_eye, fill=fiche["eye_color"])
 
 def move_eyes():
+    if not EMOTIONS[current_emotion].get("round_eyes", True):
+        root.after(random.randint(800, 2500), move_eyes)  # pas de pupilles en 67
+        return
     dx, dy = EMOTIONS[current_emotion]["pupil_offset"]
     ecart_x = random.randint(-10, 10)
     ecart_y = random.randint(-10, 10)
