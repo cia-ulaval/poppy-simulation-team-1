@@ -16,12 +16,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("OPENAI_API_KEY introuvable. Vérifie le fichier .env.")
 
-# Configuration audio
-MICROPHONE_DEVICE = 1
-SPEAKER_DEVICE = 2
-
-MICROPHONE_SAMPLE_RATE = 44100
-SPEAKER_SAMPLE_RATE = 48000
+# Configuration audio : micro et haut-parleur par défaut du système, ou ceux du .env
+# (POPPY_MICRO, POPPY_HAUT_PARLEUR). Voir config/peripheriques.py.
+from config.peripheriques import MICROPHONE_DEVICE, SPEAKER_DEVICE  # noqa: E402, F401
 
 AUDIO_CHANNELS = 1
 

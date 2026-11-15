@@ -37,6 +37,7 @@ Thumbs.db
 # Secrets : la clé OpenAI de voice_assistant/ se lit dans un .env local.
 .env
 .env.*
+!.env.example
 
 # Fichiers temporaires d'éditeur
 *.swp
