@@ -89,19 +89,15 @@ EMOTIONS = {
         "brows" : ((140, 120, 260, 165), (540, 165, 660, 120)),
         "extras": [],
     },
-    "talking" : {
-        "mouth_box": (340, 300, 460, 330),
-        "mouth_start": 0,
-        "mouth_extent": 359,
-        "eye_color": "white",
-        "brows" : ((150, 128, 250, 128), (550, 128, 650, 128)),
-        "pupil_offset" : (0, 0),
-        "extras": [],
-    }
 }
 
 ANGRY_SHAKE = 5
+
+# La parole n'est pas une émotion : elle ne prend que la bouche (et lève un peu les
+# sourcils), par-dessus l'émotion en cours, qui garde ses yeux, ses sourcils et ses
+# extras. On peut donc parler en étant triste, content, en colère...
 TALK_CENTER = (400, 342)
+TALK_BROW_LIFT = 12  # montée des sourcils quand la bouche est grande ouverte, en px
 
 MOUTH_SHAPES = {
     "close": {"width": 120, "height": 10, "weight": 3},
@@ -118,18 +114,21 @@ talk_target = MOUTH_SHAPES["close"]
 shake_sign = 1
 current_emotion = "happy"
 emotion_cycle = list(EMOTIONS)
-animation_job = None
+animation_job = None  # animation de l'émotion : larme, points, colère
+
+talking = False
+talk_job = None  # animation de la bouche qui parle, indépendante de celle de l'émotion
+brow_shake = (0, 0)  # décalage des sourcils dû à la colère
+brow_lift = 0  # montée des sourcils due à la parole
 
 def set_emotion(emotion):
     global current_emotion
     global animation_job
+    global brow_shake
 
     current_emotion = emotion
 
     fiche = EMOTIONS[emotion]
-
-    canvas.coords(mouth_closed, *fiche["mouth_box"])
-    canvas.itemconfig(mouth_closed, start=fiche["mouth_start"], extent=fiche["mouth_extent"])
 
     for extra in EXTRAS:
         for item in EXTRAS[extra]:
@@ -140,22 +139,16 @@ def set_emotion(emotion):
 
     canvas.itemconfig(left_eye, fill=fiche["eye_color"])
     canvas.itemconfig(right_eye, fill=fiche["eye_color"])
-    canvas.itemconfig(mouth_closed, style="arc", fill="")
-    canvas.itemconfig(mouth_closed, state="normal")
-    canvas.itemconfig(mouth_open, state="hidden")
+
+    # Pendant la parole, la bouche appartient à la parole : on n'y touche pas.
+    if not talking:
+        draw_rest_mouth()
 
     dx, dy = fiche["pupil_offset"]
     place_pupils(dx, dy)
-    
-    if fiche["brows"] is None:
-        canvas.itemconfig(left_brow, state="hidden")
-        canvas.itemconfig(right_brow, state="hidden")
-    else:
-        canvas.coords(left_brow, *fiche["brows"][0])
-        canvas.coords(right_brow, *fiche["brows"][1])
 
-        canvas.itemconfig(left_brow, state="normal")
-        canvas.itemconfig(right_brow, state="normal")
+    brow_shake = (0, 0)
+    place_brows()
 
     # ANIMATIONS
     if animation_job is not None:
@@ -168,8 +161,52 @@ def set_emotion(emotion):
         animate_thinking_points(0)
     elif emotion == "angry":
         animate_angry()
-    elif emotion == "talking":
+
+def draw_rest_mouth():
+    """Bouche de l'émotion en cours, quand Poppy ne parle pas."""
+    fiche = EMOTIONS[current_emotion]
+    canvas.coords(mouth_closed, *fiche["mouth_box"])
+    canvas.itemconfig(mouth_closed, start=fiche["mouth_start"], extent=fiche["mouth_extent"],
+                      style="arc", fill="", outline="white", width=4, state="normal")
+    canvas.itemconfig(mouth_open, state="hidden")
+
+def place_brows():
+    """Sourcils de l'émotion en cours, secoués par la colère et levés par la parole."""
+    brows = EMOTIONS[current_emotion]["brows"]
+    if brows is None:  # émotion sans sourcils : ils restent cachés, même en parlant
+        canvas.itemconfig(left_brow, state="hidden")
+        canvas.itemconfig(right_brow, state="hidden")
+        return
+
+    dx, dy = brow_shake
+    for brow, coords in ((left_brow, brows[0]), (right_brow, brows[1])):
+        canvas.coords(brow, *coords)
+        canvas.move(brow, dx, dy + brow_lift)
+        canvas.itemconfig(brow, state="normal")
+
+def set_talking(active):
+    """Fait parler Poppy, ou le fait taire, sans changer son émotion."""
+    global talking, talk_job, brow_lift, talk_width, talk_height, talk_target
+
+    if active == talking:
+        return
+    talking = active
+
+    if talk_job is not None:
+        root.after_cancel(talk_job)
+        talk_job = None
+
+    if talking:
         animate_talking()
+    else:
+        talk_width, talk_height = 120, 10
+        talk_target = MOUTH_SHAPES["close"]
+        brow_lift = 0
+        place_brows()
+        draw_rest_mouth()
+
+def toggle_talking(event):
+    set_talking(not talking)
 
 def next_emotion(event):
     next_emotion_index = (emotion_cycle.index(current_emotion) + 1) % len(emotion_cycle)
@@ -208,34 +245,25 @@ def animate_thinking_points(step):
     animation_job = root.after(40, animate_thinking_points, step+1)
 
 def animate_angry():
-    global animation_job, shake_sign
+    global animation_job, shake_sign, brow_shake
     shake_sign = -shake_sign
     shake_x = shake_sign * random.randint(ANGRY_SHAKE // 2, ANGRY_SHAKE)
     shake_y = random.randint(-2, 2)
 
-    (left_brow_coords, right_brow_coords) = EMOTIONS["angry"]["brows"]
-    canvas.coords(left_brow, *left_brow_coords)
-    canvas.coords(right_brow, *right_brow_coords)
-    canvas.move(left_brow, shake_x, shake_y)
-    canvas.move(right_brow, shake_x, shake_y)
+    brow_shake = (shake_x, shake_y)
+    place_brows()
 
-    x1, y1, x2, y2 = EMOTIONS["angry"]["mouth_box"]
-    canvas.coords(mouth_closed, x1 + shake_x // 2, y1, x2 + shake_x // 2, y2)
+    if not talking:  # en parlant, seuls les sourcils tremblent
+        x1, y1, x2, y2 = EMOTIONS["angry"]["mouth_box"]
+        canvas.coords(mouth_closed, x1 + shake_x // 2, y1, x2 + shake_x // 2, y2)
     animation_job = root.after(40, animate_angry)
 
 def animate_talking():
-    global animation_job
-    animate_talking_brows()
+    global talk_job, brow_lift
     animate_talking_mouth()
-    animation_job = root.after(50, animate_talking)
-
-def animate_talking_brows():
-    left_brow_coords, right_brow_coords = EMOTIONS["talking"]["brows"]
-    lift = -(talk_height - 6) / 74 * 12
-    canvas.coords(left_brow, *left_brow_coords)
-    canvas.coords(right_brow, *right_brow_coords)
-    canvas.move(left_brow, 0, lift)
-    canvas.move(right_brow, 0, lift)
+    brow_lift = -(talk_height - 6) / 74 * TALK_BROW_LIFT
+    place_brows()
+    talk_job = root.after(50, animate_talking)
 
 def animate_talking_mouth():
     global talk_width, talk_height, talk_target
@@ -303,6 +331,7 @@ def react(event):
 
 canvas.bind("<Button-1>", react)
 root.bind("<space>", next_emotion)
+root.bind("<Key-t>", toggle_talking)  # t : parler / se taire, en gardant l'émotion
 
 # Lancer animations
 move_eyes()
