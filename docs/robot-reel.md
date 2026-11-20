@@ -14,8 +14,8 @@ et seuls trois moteurs y sont inversés, à titre d'essai.
 ## 1. Accès
 
 Le robot est un Raspberry Pi joignable en SSH sur le réseau local. L'adresse change
-d'un réseau à l'autre : on la lit sur le robot avec `hostname -I`. On se connecte par
-clé, sans mot de passe. Côté poste, dans `~/.ssh/config` :
+d'un réseau à l'autre. Pour la connaître et joindre le robot hors de l'université,
+voir [`robot-reseau.md`](robot-reseau.md). On se connecte par clé, sans mot de passe. Côté poste, dans `~/.ssh/config` :
 
 ```
 Host poppy
