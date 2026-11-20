@@ -1,0 +1,6 @@
+# Dépendances de la voix de Poppy : pip install -r voice_assistant/requirements.txt
+openai>=2.0        # client.realtime : API Realtime officielle (sessions "type": "realtime")
+python-dotenv      # lit la clé dans voice_assistant/.env
+sounddevice        # micro et haut-parleur
+numpy
+scipy              # resample_poly : 24 kHz <-> fréquence du micro et du haut-parleur
