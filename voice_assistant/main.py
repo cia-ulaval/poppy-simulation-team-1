@@ -19,7 +19,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from conversation.assistant import discuter
+# Le python3 fourni par macOS est un 3.9, trop ancien pour le visage (et son tkinter
+# aussi) : mieux vaut le dire tout de suite qu'au milieu d'une conversation.
+if sys.version_info < (3, 10):  # noqa: UP036 — la voix tourne hors des images Docker
+    sys.exit(f"Python {sys.version.split()[0]} est trop ancien : il faut Python 3.10 ou plus "
+             "(3.12 de python.org conseillé). Voir voice_assistant/README.md, étape 1.")
+
+from conversation.assistant import discuter  # noqa: E402
 
 ECRAN = Path(__file__).resolve().parent.parent / "src" / "ui" / "screen.py"
 

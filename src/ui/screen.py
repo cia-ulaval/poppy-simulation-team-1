@@ -485,9 +485,11 @@ def react(event):
     set_emotion("happy")
     print("Touched!")
 
-    # son (si tu as branché un speaker)
+    # son (si tu as branché un speaker) : aplay n'existe que sous Linux, donc sur le robot
     import os
-    os.system("aplay /usr/share/sounds/alsa/Front_Left.wav &")
+    import shutil
+    if shutil.which("aplay"):
+        os.system("aplay /usr/share/sounds/alsa/Front_Left.wav &")
 
 canvas.bind("<Button-1>", react)
 root.bind("<space>", next_emotion)
