@@ -6,7 +6,7 @@ fonctionnement et les choix sont dans [`spec/voix-visage.md`](../spec/voix-visag
 
 | Fichier | Rôle |
 | --- | --- |
-| `main.py` | Tout : lance le visage, puis la conversation au micro ou au clavier. |
+| `main.py` | Tout : lance le visage, puis la conversation au micro (Entrée, ou micro toujours ouvert avec `--micro-ouvert`) ou au clavier. |
 | `chat_clavier.py` | La conversation au clavier seulement, pour mettre au point la personnalité. |
 | `conversation/assistant.py` | La session Realtime, l'outil `changer_expression`, le micro. |
 | `conversation/prompts.py` | La personnalité de Poppy : modifiable sans programmer. |
@@ -71,9 +71,10 @@ Chaque étape ne demande que les précédentes : si l'une échoue, inutile d'all
 | 6 | Visage toujours ouvert : `../.venv-voix/Scripts/python.exe chat_clavier.py` | On tape une question, Poppy répond à voix haute. L'émotion choisie s'affiche entre crochets (`[sad]`) et le visage la prend **avant** que la voix commence. `quit` pour sortir. |
 | 7 | `../.venv-voix/Scripts/python.exe enregistrer_hors_ligne.py` | « Enregistré : …/sons/hors_ligne.wav ». Une fois par machine, le fichier n'est pas versionné. |
 | 8 | Fermer le visage, puis : `../.venv-voix/Scripts/python.exe main.py --fenetre` | Le visage s'ouvre tout seul. Entrée, parler, Entrée : Poppy répond à ce qu'on a dit. On peut aussi taper une question. Sur le robot, sans `--fenetre` (plein écran). |
-| 9 | Couper le Wi-Fi, puis `../.venv-voix/Scripts/python.exe chat_clavier.py` | « Connexion impossible », puis Poppy dit qu'il n'a pas de réseau, visage triste. |
+| 9 | Fermer, puis : `../.venv-voix/Scripts/python.exe main.py --fenetre --micro-ouvert` | « Micro ouvert ». On parle sans toucher au clavier ; quand on se tait, « Vous : … » affiche ce que Poppy a compris, puis « Poppy [émotion] : … » et sa voix. Il réécoute dès qu'il a fini. Parler pendant qu'il parle ne sert à rien : son micro est coupé. Sur le robot, sans `--fenetre`. |
+| 10 | Couper le Wi-Fi, puis `../.venv-voix/Scripts/python.exe chat_clavier.py` | « Connexion impossible », puis Poppy dit qu'il n'a pas de réseau, visage triste. |
 
-## 3. Les questions à poser à l'étape 6 ou 8
+## 3. Les questions à poser aux étapes 6, 8 et 9
 
 Cocher ce qui marche, noter ce qui casse (la question exacte et ce qui s'est passé).
 
@@ -109,4 +110,6 @@ Cocher ce qui marche, noter ce qui casse (la question exacte et ce qui s'est pas
 | `ModuleNotFoundError: No module named 'config'` | Lancé depuis la racine : faire `cd voice_assistant`. |
 | Le micro n'entend rien (niveau proche de 0) | Mauvais micro : `python -m sounddevice` les liste, puis `POPPY_MICRO=` dans `.env`. Sur Mac, autoriser le micro au Terminal. |
 | Le visage ne réagit pas | Lancé avec un autre Python que celui de la voix, ou sous un autre utilisateur : les deux doivent voir le même dossier temporaire. |
+| Micro ouvert : Poppy répond au bruit de la salle, ou coupe avant la fin de la phrase | Dans `conversation/assistant.py`, `DETECTION_PAROLE` : monter `threshold` (0,5 par défaut, jusqu'à 0,8) contre le bruit, allonger `silence_duration_ms` (700 par défaut) s'il coupe trop tôt. |
+| Micro ouvert : impossible de couper la parole à Poppy | Voulu : le micro est coupé pendant qu'il parle, et 0,6 s après (`MARGE_ECHO_S`), sinon il s'entendrait dans son haut-parleur et se répondrait. Attendre qu'il ait fini. |
 | « haut-parleur bloqué » | Le haut-parleur a cessé de jouer (casque Bluetooth qui décroche, par exemple). La réponse en cours est coupée, la suivante repart normalement. |

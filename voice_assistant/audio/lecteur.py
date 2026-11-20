@@ -38,6 +38,7 @@ class LecteurContinu:
         self.debut = None  # instant où la question est partie
         self.premier_son = None  # instant où le premier son est sorti
         self._dernier_appel = time.monotonic()  # dernier passage dans le callback
+        self._fin_instant = 0.0  # instant où la dernière réponse a fini de sortir
         self._flux = self._ouvrir()
 
     def _ouvrir(self):
@@ -83,6 +84,10 @@ class LecteurContinu:
         """Plus rien n'arrivera pour cette réponse : la bouche se fermera à la fin."""
         self._fin_annoncee.set()
 
+    def occupe(self, marge_s=0.0):
+        """Vrai pendant une réponse, et marge_s secondes après qu'elle a fini de sortir."""
+        return not self._fini.is_set() or time.monotonic() - self._fin_instant < marge_s
+
     async def attendre_fin(self):
         """Attend que tout ce qui est dans la file soit sorti du haut-parleur.
 
@@ -101,6 +106,7 @@ class LecteurContinu:
             self._file.clear()
         if self.visage is not None:
             self.visage.bouche_ouverte(False)
+        self._fin_instant = time.monotonic()
         self._fini.set()
         try:
             self._flux.abort()
@@ -136,7 +142,9 @@ class LecteurContinu:
         elif vide and self._fin_annoncee.is_set():
             if self.visage is not None:
                 self.visage.bouche_ouverte(False)
-            self._fini.set()
+            if not self._fini.is_set():
+                self._fin_instant = time.monotonic()
+                self._fini.set()
         elif self.visage is not None and self.visage.parle:
             self.visage.bouche_ouverte(True, 0.0)  # trou dans le flux : bouche fermée
 

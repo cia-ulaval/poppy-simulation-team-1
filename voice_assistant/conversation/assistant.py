@@ -11,6 +11,7 @@ Lancé par chat_clavier.py (clavier seul) et main.py (visage, clavier et micro).
 import asyncio
 import base64
 import json
+import time
 import wave
 from pathlib import Path
 
@@ -45,17 +46,35 @@ OUTIL_EXPRESSION = {
 }
 
 
-def configuration_session(voice):
+MARGE_ECHO_S = 0.6  # micro ouvert : on n'écoute pas Poppy, ni l'écho juste après lui
+
+# Micro ouvert : l'API repère elle-même le début et la fin de la parole, puis répond.
+DETECTION_PAROLE = {
+    "type": "server_vad",
+    "threshold": 0.5,  # à monter si le bruit de la salle déclenche des réponses
+    "prefix_padding_ms": 300,
+    "silence_duration_ms": 700,  # silence qui marque la fin de la question
+    "create_response": True,
+    "interrupt_response": False,  # le micro est coupé pendant que Poppy parle
+}
+
+
+def configuration_session(voice, micro_ouvert=False):
+    entree = {"format": {"type": "audio/pcm", "rate": GPT_SAMPLE_RATE}}
+    if micro_ouvert:
+        entree["turn_detection"] = DETECTION_PAROLE
+        entree["noise_reduction"] = {"type": "far_field"}  # micro loin de la bouche
+        # Pour afficher ce que Poppy a compris ; ne change rien à sa réponse.
+        entree["transcription"] = {"model": "gpt-4o-mini-transcribe"}
+    else:
+        # On appuie pour parler : pas de détection automatique de fin de phrase.
+        entree["turn_detection"] = None
     return {
         "type": "realtime",
         "output_modalities": ["audio"],
         "instructions": POPPY_SYSTEM_PROMPT + VISAGE_PROMPT,
         "audio": {
-            "input": {
-                "format": {"type": "audio/pcm", "rate": GPT_SAMPLE_RATE},
-                # On appuie pour parler : pas de détection automatique de fin de phrase.
-                "turn_detection": None,
-            },
+            "input": entree,
             "output": {
                 "format": {"type": "audio/pcm", "rate": GPT_SAMPLE_RATE},
                 "voice": voice,
@@ -177,14 +196,147 @@ class Poppy:
         else:
             print()
 
-    async def _appliquer_outil(self, item):
+    async def ecouter_en_continu(self):
+        """Micro toujours ouvert : on parle quand on veut, Poppy répond à la fin de la phrase.
+
+        Le micro est coupé pendant que Poppy parle, et MARGE_ECHO_S après : sinon il
+        s'entendrait dans son propre haut-parleur et se répondrait à lui-même. On ne
+        peut donc pas encore lui couper la parole. Taper une question marche aussi.
+        """
+        boucle = asyncio.get_running_loop()
+        frequence_micro = frequence(MICROPHONE_DEVICE, "input")
+        reechantillonneur = Reechantillonneur(frequence_micro, GPT_SAMPLE_RATE)
+        blocs = asyncio.Queue()
+
+        def callback(indata, frames, time_info, status):
+            boucle.call_soon_threadsafe(blocs.put_nowait, indata[:, 0].copy())
+
+        async def envoyer_micro():
+            while True:
+                bloc = await blocs.get()
+                audio = reechantillonneur(bloc)  # toujours, pour garder son état
+                if self.lecteur.occupe(MARGE_ECHO_S):
+                    continue
+                pcm16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+                await self.connexion.input_audio_buffer.append(
+                    audio=base64.b64encode(pcm16.tobytes()).decode("ascii"))
+
+        async def lire_clavier():
+            while True:
+                try:
+                    texte = (await asyncio.to_thread(input)).strip()
+                except EOFError:
+                    return
+                if texte.lower() in ("quit", "exit", "q"):
+                    return
+                if texte and not self.lecteur.occupe():
+                    await self.poser_texte_sans_attendre(texte)
+
+        await self.connexion.input_audio_buffer.clear()
+        flux = sd.InputStream(samplerate=frequence_micro, channels=1, dtype="float32",
+                              device=MICROPHONE_DEVICE, blocksize=int(frequence_micro * 0.05),
+                              callback=callback)
+        print("Micro ouvert : parle quand tu veux. « quit » + Entrée pour sortir.\n")
+        with flux:
+            taches = [asyncio.create_task(envoyer_micro()),
+                      asyncio.create_task(self._suivre_evenements()),
+                      asyncio.create_task(lire_clavier())]
+            fini, _ = await asyncio.wait(taches, return_when=asyncio.FIRST_COMPLETED)
+            for tache in taches:
+                tache.cancel()
+            for tache in fini:
+                tache.result()  # fait remonter une erreur éventuelle
+
+    async def poser_texte_sans_attendre(self, texte):
+        await self.connexion.conversation.item.create(item={
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": texte}],
+        })
+        await self.connexion.response.create()
+
+    async def _suivre_evenements(self):
+        """Réagit aux événements de l'API quand c'est elle qui lance les réponses."""
+        emotion_avant = self.visage.emotion
+        en_tour = relance = appel = audio_recu = emotion_choisie = False
+        fin_parole = None  # instant où l'on a fini de parler : départ de la latence
+        # La transcription de la question arrive souvent après le début de la réponse :
+        # on n'écrit « Poppy [émotion] : » qu'à son premier mot, pour garder l'ordre.
+        ligne_ouverte, emotion_a_afficher = False, ""
+
+        while True:
+            event = await self.connexion.recv()
+
+            if event.type == "input_audio_buffer.speech_started":
+                print("  (j'écoute...)", flush=True)
+
+            elif event.type == "input_audio_buffer.speech_stopped":
+                fin_parole = time.monotonic()
+                emotion_avant = self.visage.emotion
+                self.visage.changer_emotion("thinking")
+
+            elif event.type == "conversation.item.input_audio_transcription.completed":
+                print(("\n" if ligne_ouverte else "") + f"Vous : {event.transcript.strip()}",
+                      flush=True)
+
+            elif event.type == "response.created":
+                appel = audio_recu = False
+                if not en_tour:  # nouvelle question ; une relance continue le même tour
+                    en_tour, relance, emotion_choisie = True, False, False
+                    self.lecteur.nouvelle_reponse()
+                    if fin_parole is not None:
+                        self.lecteur.debut, fin_parole = fin_parole, None
+                    ligne_ouverte, emotion_a_afficher = False, ""
+
+            elif event.type == "response.output_audio.delta":
+                if not audio_recu and not emotion_choisie and self.visage.emotion == "thinking":
+                    self.visage.changer_emotion(emotion_avant)
+                audio_recu = True
+                self.lecteur.ajouter(base64.b64decode(event.delta))
+
+            elif event.type == "response.output_audio_transcript.delta":
+                if not ligne_ouverte:
+                    print(f"Poppy{emotion_a_afficher} : ", end="", flush=True)
+                    ligne_ouverte = True
+                print(event.delta, end="", flush=True)
+
+            elif (event.type == "response.output_item.done"
+                  and event.item.type == "function_call"):
+                appel = True
+                choisie = await self._appliquer_outil(event.item, afficher=False)
+                if choisie:
+                    emotion_choisie, emotion_a_afficher = True, f" [{self.visage.emotion}]"
+
+            elif event.type == "response.done":
+                if event.response.status != "completed":
+                    print(f"\n  (réponse {event.response.status})", end="")
+                if appel and not audio_recu and not relance:
+                    relance = True  # visage changé sans parler : on le fait parler
+                    await self.connexion.response.create(response={"tool_choice": "none"})
+                    continue
+                en_tour = False
+                self.lecteur.fin_reponse()
+                asyncio.create_task(self._annoncer_fin())
+
+            elif event.type == "error":
+                print(f"\n  Erreur de l'API : {event.error.message}", flush=True)
+
+    async def _annoncer_fin(self):
+        await self.lecteur.attendre_fin()
+        if self.lecteur.premier_son is not None:
+            print(f"\n  (premier son après {self.lecteur.premier_son - self.lecteur.debut:.1f} s)")
+        else:
+            print()
+
+    async def _appliquer_outil(self, item, afficher=True):
         if item.name == "changer_expression":
             try:
                 emotion = json.loads(item.arguments or "{}").get("emotion")
             except json.JSONDecodeError:
                 emotion = None
             choisie = self.visage.changer_emotion(emotion)
-            print(f"[{emotion}] ", end="", flush=True)  # voir ce que GPT a choisi
+            if afficher:  # voir ce que GPT a choisi
+                print(f"[{emotion}] ", end="", flush=True)
             resultat = "ok" if choisie else "émotion inconnue"
         else:
             choisie, resultat = False, "outil inconnu"
@@ -215,23 +367,27 @@ async def hors_ligne(lecteur, visage):
     await lecteur.attendre_fin()
 
 
-async def discuter(micro=True):
-    """Boucle de conversation. Au clavier : on tape une question. Au micro : Entrée."""
+async def discuter(micro=True, micro_ouvert=False):
+    """Conversation. Au clavier : on tape. Au micro : Entrée, ou micro toujours ouvert."""
     from openai import AsyncOpenAI
 
     from config.settings import REALTIME_MODEL, VOICE  # demande la clé
 
     with Visage("happy") as visage, LecteurContinu(visage) as lecteur:
         print(f"Haut-parleur : {lecteur.nom}")
-        if micro:
+        if micro or micro_ouvert:
             print(f"Micro : {sd.query_devices(MICROPHONE_DEVICE, 'input')['name']}")
         print("Connexion à OpenAI Realtime...")
         try:
             async with AsyncOpenAI() as client, \
                     client.realtime.connect(model=REALTIME_MODEL) as connexion:
-                await connexion.session.update(session=configuration_session(VOICE))
+                await connexion.session.update(
+                    session=configuration_session(VOICE, micro_ouvert))
                 poppy = Poppy(connexion, lecteur, visage)
-                await _boucle(poppy, micro)
+                if micro_ouvert:
+                    await poppy.ecouter_en_continu()
+                else:
+                    await _boucle(poppy, micro)
         except (OSError, TimeoutError) as erreur:
             print(f"Connexion impossible : {erreur}")
             await hors_ligne(lecteur, visage)
