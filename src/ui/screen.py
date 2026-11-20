@@ -1,11 +1,18 @@
+import json
 import math
 import random
+import sys
+import tempfile
 import time
 import tkinter as tk
 from pathlib import Path
 
 root = tk.Tk()
-root.attributes("-fullscreen", True)
+if "--fenetre" in sys.argv:  # sur un ordinateur : une fenêtre à la taille de l'écran du robot
+    root.geometry("800x480")
+    root.title("Poppy")
+else:
+    root.attributes("-fullscreen", True)
 root.configure(bg="black")
 
 canvas = tk.Canvas(root, bg="black", highlightthickness=0)
@@ -136,6 +143,18 @@ MOUTH_SHAPES = {
     "u":     {"width": 44,  "height": 30, "weight": 1},
     "i":     {"width": 140, "height": 14, "weight": 2},
 }
+
+# La voix (voice_assistant/) pilote le visage par un petit fichier JSON, relu toutes les
+# 40 ms : {"emotion": "happy", "parle": true, "bouche": 0.6}. Même emplacement que dans
+# voice_assistant/visage.py : /dev/shm sur le robot (en mémoire, pour ne pas user la carte
+# SD), sinon le dossier temporaire. Fichier absent, illisible ou vieux de plus de 3 s : le
+# visage vit sa vie, comme sans la voix.
+VOIX = (Path("/dev/shm") if Path("/dev/shm").is_dir() else Path(tempfile.gettempdir())) / "poppy_visage"
+VOIX_FRESH_S = 3.0
+VOIX_PERIOD_MS = 40
+voix_emotion = None  # dernière émotion lue dans le fichier
+voix_parle = False  # dernier « parle » lu dans le fichier
+voix_bouche = None  # ouverture de la bouche voulue par la voix, ou None : au hasard
 
 talk_width, talk_height = 120, 10
 talk_target = MOUTH_SHAPES["close"]
@@ -356,7 +375,16 @@ def animate_talking():
 def animate_talking_mouth():
     global talk_width, talk_height, talk_target
 
-    if abs(talk_width - talk_target["width"]) < 6 and abs(talk_height - talk_target["height"]) < 6:
+    if voix_bouche is not None:  # la voix donne le volume : la forme suit le son
+        if voix_bouche < 0.1:
+            names = ("close",)
+        elif voix_bouche < 0.45:
+            names = ("e", "i")
+        else:
+            names = ("a", "o")
+        if talk_target not in [MOUTH_SHAPES[name] for name in names]:
+            talk_target = MOUTH_SHAPES[random.choice(names)]
+    elif abs(talk_width - talk_target["width"]) < 6 and abs(talk_height - talk_target["height"]) < 6:
         name = random.choices(
             list(MOUTH_SHAPES),
             weights=[shape["weight"] for shape in MOUTH_SHAPES.values()]
@@ -379,6 +407,43 @@ def animate_talking_mouth():
                                 cx + talk_width / 2, cy + talk_height / 2)
         canvas.itemconfig(mouth_open, fill="#ffffff", outline="", state="normal")
         canvas.itemconfig(mouth_closed, state="hidden")
+
+def read_voice():
+    """État écrit par la voix, ou None si le fichier est absent, illisible ou ancien."""
+    try:
+        if time.time() - VOIX.stat().st_mtime > VOIX_FRESH_S:
+            return None
+        state = json.loads(VOIX.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return state if isinstance(state, dict) else None
+
+def follow_voice():
+    """Applique l'émotion et la parole voulues par la voix, seulement quand elles changent."""
+    global voix_emotion, voix_parle, voix_bouche
+    state = read_voice()
+
+    if state is None:  # pas de voix : le visage reprend sa vie, bouche fermée
+        if voix_parle:
+            set_talking(False)
+        voix_emotion, voix_parle, voix_bouche = None, False, None
+    else:
+        emotion = state.get("emotion")
+        # set_emotion seulement au changement : sinon les animations repartiraient à zéro.
+        if emotion in EMOTIONS and emotion != voix_emotion:
+            set_emotion(emotion)
+            voix_emotion = emotion
+
+        parle = bool(state.get("parle"))
+        try:
+            voix_bouche = min(1.0, max(0.0, float(state.get("bouche", 0.0))))
+        except (TypeError, ValueError):
+            voix_bouche = None
+        if parle != voix_parle:
+            set_talking(parle)
+            voix_parle = parle
+
+    root.after(VOIX_PERIOD_MS, follow_voice)
 
 def place_pupils(dx, dy):
     canvas.coords(left_pupil, 180, 180, 220, 220)  # remet les pupilles au centre
@@ -427,9 +492,11 @@ def react(event):
 canvas.bind("<Button-1>", react)
 root.bind("<space>", next_emotion)
 root.bind("<Key-t>", toggle_talking)  # t : parler / se taire, en gardant l'émotion
+root.bind("<Escape>", lambda event: root.destroy())
 
 # Lancer animations
 move_eyes()
 random_blink()
 set_emotion("happy")
+follow_voice()
 root.mainloop()
