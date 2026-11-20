@@ -48,3 +48,34 @@ def reechantillonner(audio, depuis, vers):
         return np.asarray(audio)
     commun = math.gcd(depuis, vers)
     return resample_poly(audio, vers // commun, depuis // commun)
+
+
+class Reechantillonneur:
+    """Change la fréquence d'un flux arrivant par morceaux, sans clic entre eux.
+
+    reechantillonner() traite chaque morceau seul et fait un petit saut à chaque
+    jointure : inaudible sur un enregistrement entier, mais un clic toutes les
+    quelques dizaines de millisecondes en continu. Ici, on garde le dernier
+    échantillon et la position entre deux morceaux, et on interpole linéairement :
+    largement assez pour de la voix.
+    """
+
+    def __init__(self, depuis, vers):
+        self.pas = depuis / vers  # avance dans le signal d'entrée par échantillon de sortie
+        self.precedent = 0.0
+        self.position = 1.0  # position du prochain échantillon, 0 étant « precedent »
+
+    def __call__(self, morceau):
+        morceau = np.asarray(morceau, dtype=np.float32)
+        if morceau.size == 0:
+            return morceau
+        signal = np.concatenate(([self.precedent], morceau))
+        fin = len(signal) - 1
+        positions = np.arange(self.position, fin, self.pas) if self.position < fin else []
+        sortie = np.interp(positions, np.arange(len(signal)), signal).astype(np.float32)
+        if len(positions):
+            self.position = positions[-1] + self.pas - fin
+        else:
+            self.position -= fin
+        self.precedent = float(signal[-1])
+        return sortie
