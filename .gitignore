@@ -39,6 +39,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# Phrase « hors ligne » enregistrée sur place par voice_assistant/enregistrer_hors_ligne.py
+voice_assistant/sons/
 
 # Fichiers temporaires d'éditeur
 *.swp
