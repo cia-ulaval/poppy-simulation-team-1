@@ -18,6 +18,11 @@ le dépôt est public. Ils sont dans le message épinglé du Discord de l'équip
 L'adresse eduroam est celle qu'eduroam lui donne en ce moment ; elle peut changer.
 Celle du Wi-Fi « Poppy » ne change jamais.
 
+Tout ce document sert à **trouver le robot sur le réseau**. Le `ssh` demande ensuite le
+**mot de passe du compte `poppy`**. Il est volontairement **différent** de celui du
+Wi-Fi : on ne veut pas qu'un seul mot de passe ouvre tout. Il est aussi sur Discord.
+Avec une clé SSH enregistrée sur le robot, rien n'est demandé.
+
 ## Ce que fait le robot quand il n'a plus de Wi-Fi
 
 Le service `poppy-wifi-secours` tourne en permanence sur le robot.
@@ -56,6 +61,27 @@ c'est toujours `10.42.0.1`.
 
 Si la notification n'arrive pas, `ssh poppy@poppy.local` marche sur la plupart des
 partages de connexion et des Wi-Fi de maison. Il ne marche pas sur eduroam.
+
+### ntfy gratuit : ce qu'il faut savoir
+
+On utilise le serveur public ntfy.sh, sans compte. Limites relevées le 20 novembre 2026
+(`curl https://ntfy.sh/v1/account`) :
+
+| Limite | Valeur | Notre usage |
+|---|---|---|
+| Messages par jour, par réseau (adresse IP) | 250 | 1 ou 2 par connexion du robot |
+| Durée de conservation sur ntfy.sh | 12 h | voir ci-dessous |
+| Réserver le nom du sujet | non, option payante | voir ci-dessous |
+
+- **Passé 12 h**, la notification n'est plus sur le site. Elle reste dans l'historique
+  de l'**appli** si celle-ci l'a reçue : préférer l'appli au site.
+- **Le sujet n'est pas réservé.** Quelqu'un qui le devinerait pourrait lire les
+  messages ou en envoyer de faux. Le nom est tiré au hasard, c'est donc improbable ; au
+  pire, une notification donnerait une fausse adresse.
+- **Rien ne garantit que ntfy.sh reste gratuit.** Le logiciel est libre : on peut
+  l'héberger ailleurs, par exemple sur le serveur Hetzner, puis changer `NTFY_SERVEUR`
+  dans `/etc/poppy/ntfy.conf` sur le robot.
+- **Si ntfy ne répond pas**, il reste `ssh poppy@poppy.local` et le Wi-Fi « Poppy ».
 
 ## Se connecter au Wi-Fi « Poppy »
 
@@ -150,7 +176,7 @@ journalctl -t poppy-wifi-secours -t poppy-eduroam --since "-1h" --no-pager
 | `/etc/systemd/system/poppy-wifi-secours.service` | la lance au démarrage et la relance si elle s'arrête |
 | connexion NetworkManager `poppy-ap` | le Wi-Fi « Poppy » (SSID `Poppy`, `10.42.0.1/24`, WPA2) |
 | `/etc/NetworkManager/dispatcher.d/90-poppy-ntfy` | envoie la notification à chaque connexion |
-| `/etc/poppy/ntfy.conf` | le sujet ntfy |
+| `/etc/poppy/ntfy.conf` | le sujet ntfy (`NTFY_SUJET`) et le serveur (`NTFY_SERVEUR`) |
 | `/usr/local/bin/poppy-eduroam` | `pause` / `remettre` pour les tests |
 
 Rien de tout cela n'est dans `/tmp` : tout survit au redémarrage.
