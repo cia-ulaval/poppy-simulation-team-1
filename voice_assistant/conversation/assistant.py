@@ -59,11 +59,13 @@ DETECTION_PAROLE = {
 }
 
 
-def configuration_session(voice, micro_ouvert=False):
+def configuration_session(voice, micro_ouvert=False, interrompre=False):
+    """interrompre : on peut couper la parole à Poppy, avec un micro qui ne l'entend pas."""
     entree = {"format": {"type": "audio/pcm", "rate": GPT_SAMPLE_RATE}}
     if micro_ouvert:
-        entree["turn_detection"] = DETECTION_PAROLE
-        entree["noise_reduction"] = {"type": "far_field"}  # micro loin de la bouche
+        entree["turn_detection"] = {**DETECTION_PAROLE, "interrupt_response": interrompre}
+        # Un micro qui n'entend pas Poppy est un casque, ou un micro près de la bouche.
+        entree["noise_reduction"] = {"type": "near_field" if interrompre else "far_field"}
         # Pour afficher ce que Poppy a compris ; ne change rien à sa réponse.
         entree["transcription"] = {"model": "gpt-4o-mini-transcribe"}
     else:
@@ -88,10 +90,13 @@ def configuration_session(voice, micro_ouvert=False):
 class Poppy:
     """Une session Realtime ouverte, reliée au haut-parleur et au visage."""
 
-    def __init__(self, connexion, lecteur, visage):
+    def __init__(self, connexion, lecteur, visage, interrompre=False):
         self.connexion = connexion
         self.lecteur = lecteur
         self.visage = visage
+        self.interrompre = interrompre  # micro ouvert même pendant que Poppy parle
+        self._item_audio = None  # message de Poppy en train d'être joué
+        self._coupee = False  # réponse interrompue : ignorer la fin de sa voix
 
     async def poser_texte(self, texte):
         await self.connexion.conversation.item.create(item={
@@ -200,8 +205,10 @@ class Poppy:
         """Micro toujours ouvert : on parle quand on veut, Poppy répond à la fin de la phrase.
 
         Le micro est coupé pendant que Poppy parle, et MARGE_ECHO_S après : sinon il
-        s'entendrait dans son propre haut-parleur et se répondrait à lui-même. On ne
-        peut donc pas encore lui couper la parole. Taper une question marche aussi.
+        s'entendrait dans son propre haut-parleur et se répondrait à lui-même. Avec
+        interrompre (un casque, un micro qui ne l'entend pas), le micro reste ouvert :
+        parler pendant qu'il parle le fait taire, puis il répond à la nouvelle phrase.
+        Taper une question marche aussi.
         """
         boucle = asyncio.get_running_loop()
         frequence_micro = frequence(MICROPHONE_DEVICE, "input")
@@ -215,7 +222,7 @@ class Poppy:
             while True:
                 bloc = await blocs.get()
                 audio = reechantillonneur(bloc)  # toujours, pour garder son état
-                if self.lecteur.occupe(MARGE_ECHO_S):
+                if not self.interrompre and self.lecteur.occupe(MARGE_ECHO_S):
                     continue
                 pcm16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
                 await self.connexion.input_audio_buffer.append(
@@ -268,6 +275,9 @@ class Poppy:
             event = await self.connexion.recv()
 
             if event.type == "input_audio_buffer.speech_started":
+                if self.interrompre and self.lecteur.occupe():
+                    await self._se_taire()
+                    ligne_ouverte = False
                 print("  (j'écoute...)", flush=True)
 
             elif event.type == "input_audio_buffer.speech_stopped":
@@ -281,7 +291,9 @@ class Poppy:
 
             elif event.type == "response.created":
                 appel = audio_recu = False
+                self._coupee = False
                 if not en_tour:  # nouvelle question ; une relance continue le même tour
+                    self._item_audio = None  # ne pas tronquer la réponse précédente
                     en_tour, relance, emotion_choisie = True, False, False
                     self.lecteur.nouvelle_reponse()
                     if fin_parole is not None:
@@ -289,12 +301,17 @@ class Poppy:
                     ligne_ouverte, emotion_a_afficher = False, ""
 
             elif event.type == "response.output_audio.delta":
+                if self._coupee:  # la fin d'une réponse qu'on vient d'interrompre
+                    continue
                 if not audio_recu and not emotion_choisie and self.visage.emotion == "thinking":
                     self.visage.changer_emotion(emotion_avant)
                 audio_recu = True
+                self._item_audio = event.item_id
                 self.lecteur.ajouter(base64.b64decode(event.delta))
 
             elif event.type == "response.output_audio_transcript.delta":
+                if self._coupee:
+                    continue
                 if not ligne_ouverte:
                     print(f"Poppy{emotion_a_afficher} : ", end="", flush=True)
                     ligne_ouverte = True
@@ -310,7 +327,8 @@ class Poppy:
             elif event.type == "response.done":
                 if event.response.status != "completed":
                     print(f"\n  (réponse {event.response.status})", end="")
-                if appel and not audio_recu and not relance:
+                coupee = event.response.status == "cancelled"
+                if appel and not audio_recu and not relance and not coupee:
                     relance = True  # visage changé sans parler : on le fait parler
                     await self.connexion.response.create(response={"tool_choice": "none"})
                     continue
@@ -320,6 +338,21 @@ class Poppy:
 
             elif event.type == "error":
                 print(f"\n  Erreur de l'API : {event.error.message}", flush=True)
+
+    async def _se_taire(self):
+        """On lui coupe la parole : il se tait, et GPT oublie ce qu'il n'a pas dit.
+
+        L'API arrête d'elle-même la réponse en cours (interrupt_response). Mais elle
+        envoie la voix plus vite qu'on ne la joue : sans truncate, GPT croirait qu'on a
+        entendu toute sa phrase.
+        """
+        self._coupee = True
+        joue_ms = self.lecteur.interrompre()
+        print("\n  (coupé)", flush=True)
+        if self._item_audio is not None:
+            await self.connexion.conversation.item.truncate(
+                item_id=self._item_audio, content_index=0, audio_end_ms=joue_ms)
+            self._item_audio = None
 
     async def _annoncer_fin(self):
         await self.lecteur.attendre_fin()
@@ -367,8 +400,11 @@ async def hors_ligne(lecteur, visage):
     await lecteur.attendre_fin()
 
 
-async def discuter(micro=True, micro_ouvert=False):
-    """Conversation. Au clavier : on tape. Au micro : Entrée, ou micro toujours ouvert."""
+async def discuter(micro=True, micro_ouvert=False, interrompre=False):
+    """Conversation. Au clavier : on tape. Au micro : Entrée, ou micro toujours ouvert.
+
+    interrompre (avec micro_ouvert) : parler pendant que Poppy parle le fait taire.
+    """
     from openai import AsyncOpenAI
 
     from config.settings import REALTIME_MODEL, VOICE  # demande la clé
@@ -382,8 +418,8 @@ async def discuter(micro=True, micro_ouvert=False):
             async with AsyncOpenAI() as client, \
                     client.realtime.connect(model=REALTIME_MODEL) as connexion:
                 await connexion.session.update(
-                    session=configuration_session(VOICE, micro_ouvert))
-                poppy = Poppy(connexion, lecteur, visage)
+                    session=configuration_session(VOICE, micro_ouvert, interrompre))
+                poppy = Poppy(connexion, lecteur, visage, interrompre and micro_ouvert)
                 if micro_ouvert:
                     await poppy.ecouter_en_continu()
                 else:

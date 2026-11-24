@@ -7,6 +7,7 @@ Depuis voice_assistant/ :
     python main.py --sans-visage
     python main.py --sans-micro
     python main.py --micro-ouvert   micro toujours ouvert : on parle quand on veut
+    python main.py --interrompre    pareil, et parler lui coupe la parole (casque)
 
 Au micro : Entrée pour commencer à parler, Entrée pour envoyer. Micro ouvert : on parle,
 et Poppy répond quand on se tait (il n'écoute pas pendant qu'il parle). On peut aussi
@@ -39,7 +40,12 @@ def main():
     parser.add_argument("--sans-micro", action="store_true", help="clavier seulement")
     parser.add_argument("--micro-ouvert", action="store_true",
                         help="micro toujours ouvert : Poppy répond quand on se tait")
+    parser.add_argument("--interrompre", action="store_true",
+                        help="micro ouvert, et parler coupe la parole à Poppy ; seulement "
+                             "avec un casque ou un micro qui n'entend pas le haut-parleur")
     args = parser.parse_args()
+    if args.interrompre:
+        args.micro_ouvert = True
 
     visage = None
     if not args.sans_visage:
@@ -47,7 +53,8 @@ def main():
         visage = subprocess.Popen(commande)
 
     try:
-        asyncio.run(discuter(micro=not args.sans_micro, micro_ouvert=args.micro_ouvert))
+        asyncio.run(discuter(micro=not args.sans_micro, micro_ouvert=args.micro_ouvert,
+                             interrompre=args.interrompre))
     except KeyboardInterrupt:
         pass
     finally:

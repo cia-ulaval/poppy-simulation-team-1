@@ -37,6 +37,7 @@ class LecteurContinu:
         self._fini.set()
         self.debut = None  # instant où la question est partie
         self.premier_son = None  # instant où le premier son est sorti
+        self._joues = 0  # échantillons de la réponse en cours déjà sortis
         self._dernier_appel = time.monotonic()  # dernier passage dans le callback
         self._fin_instant = 0.0  # instant où la dernière réponse a fini de sortir
         self._flux = self._ouvrir()
@@ -71,6 +72,24 @@ class LecteurContinu:
         self._fini.clear()
         self.debut = time.monotonic()
         self.premier_son = None
+        self._joues = 0
+
+    def interrompre(self):
+        """On a coupé la parole à Poppy : il se tait tout de suite et ferme la bouche.
+
+        Renvoie la durée de voix réellement sortie du haut-parleur, en millisecondes :
+        GPT en a besoin pour savoir où sa phrase a été coupée.
+        """
+        with self._verrou:
+            self._file.clear()
+            joues = self._joues
+        self._fin_annoncee.set()
+        if self.visage is not None:
+            self.visage.bouche_ouverte(False)
+        if not self._fini.is_set():
+            self._fin_instant = time.monotonic()
+            self._fini.set()
+        return int(joues * 1000 / self.sample_rate)
 
     def ajouter(self, pcm16):
         """Ajoute un morceau PCM16 mono à 24 kHz, tel que l'envoie GPT."""
@@ -131,6 +150,7 @@ class LecteurContinu:
                 else:
                     self._file[0] = morceau[n:]
             vide = not self._file
+            self._joues += rempli
         sortie[rempli:] = 0.0
 
         if rempli:
